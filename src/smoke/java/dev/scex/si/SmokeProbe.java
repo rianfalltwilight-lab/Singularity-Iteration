@@ -31,12 +31,22 @@ public final class SmokeProbe {
         check(normal instanceof com.singularity_iteration.mio_icif.api.item.IBackSlotItem
             && advanced instanceof com.singularity_iteration.mio_icif.api.item.IBackSlotItem,"independent-back-slot-api");
         if(net.neoforged.fml.ModList.get().isLoaded("curios")) assertions+=CuriosProbe.run(server);
+        boolean loaded=net.neoforged.fml.ModList.get().isLoaded("curios");
+        for(String name:new String[]{"shaped_206_electric_fire_proof_necklace","shaped_207_energy_crystal_belt",
+                "shaped_208_lapotron_crystal_belt","shaped_209_electric_flight_ring","shaped_210_electric_life_support_ring"}) {
+            check(server.getRecipeManager().byKey(ResourceLocation.parse("mio_icif:"+name)).isPresent()==loaded,
+                "curios-recipe-follows-optional-mod-"+name);
+        }
     }
     private void started(ServerStartedEvent event) {
         boolean passed = false;
         try {
             if ("compat".equals(System.getProperty("scex.smoke.mode"))) {
                 checkOptionalCurios(event.getServer());
+                check(event.getServer().getRecipeManager().byKey(ResourceLocation.parse("mio_icif:dynamic_canning/food_canning")).isPresent(),
+                    "food-canning-loads-without-optional-mods");
+                check(new ItemStack(Items.APPLE).is(net.minecraft.tags.TagKey.create(net.minecraft.core.registries.Registries.ITEM,
+                    ResourceLocation.parse("mio_icif:cannable_foods"))),"vanilla-food-remains-accepted");
                 passed=true;
                 return;
             }

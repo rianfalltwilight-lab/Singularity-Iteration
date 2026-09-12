@@ -1,5 +1,8 @@
 {
   "values": [
-    "create:cinder_flour"
+    {
+      "id": "create:cinder_flour",
+      "required": false
+    }
   ]
 }
