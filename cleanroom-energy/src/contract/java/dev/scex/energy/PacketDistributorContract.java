@@ -152,7 +152,7 @@ public final class PacketDistributorContract {
         var random = new Random(0x534345587L);
         for (int sample = 0; sample < 20000; sample++) {
             long reserve = random.nextInt(100000);
-            long packet = 2 + random.nextInt(2048);
+            long packet = 1 + random.nextInt(2049);
             long[] room = {random.nextInt(500), random.nextInt(500), random.nextInt(500), random.nextInt(500)};
             long[] original = room.clone();
             int[] priority = {0, 1, 2, 3};
@@ -181,11 +181,36 @@ public final class PacketDistributorContract {
                 new int[]{1}, new long[]{1}, new int[]{0}));
         rejects(IllegalArgumentException.class, () -> PacketDistributor.allocate(32, 32, routes,
                 new int[]{5}, new long[]{1}, new int[]{0}));
-        rejects(IllegalArgumentException.class, () -> PacketDistributor.allocate(32, 1, routes,
-                new int[]{2}, new long[]{1}, new int[]{0}));
+        require(PacketDistributor.allocate(32, 1, routes, new int[]{2}, new long[]{1}, new int[]{0}).sourceDebit() == 0,
+                "Generator offer equal to path loss is retained without a debit");
+        var mixed = PacketDistributor.allocate(1, 1, routes, new int[]{2, 1}, new long[]{100, 100}, new int[]{0, 1});
+        require(mixed.credit(0) == 0 && mixed.credit(1) == 1 && mixed.sourceDebit() == 1 && mixed.dissipated() == 0,
+                "Exhausted path does not block another deliverable receiver");
+        var expensive = new TreeTopology(new long[]{5000}, new int[0][]).routesFrom(0);
+        require(PacketDistributor.allocate(1, 1, expensive, new int[]{0}, new long[]{100}, new int[]{0}).sourceDebit() == 0,
+                "Offer smaller than path loss cannot debit energy");
         rejects(IllegalArgumentException.class, () -> PacketDistributor.allocate(32, 32, routes,
                 new int[]{1}, new long[]{1}, new int[0]));
-        System.out.println("SCEX_DISTRIBUTOR_CONTRACT cases=" + labels.size() + " transitions=" + transitions
+        int generatorCases = 0;
+        var generatorRows = Files.readAllLines(Path.of(args[1]), StandardCharsets.UTF_8);
+        require(generatorRows.size() == 13 && generatorRows.getFirst().equals("case\treserve\tloss_milli\tfinal_source\tfinal_receiver"),
+                "Complete frozen generator fixture");
+        for (String row : generatorRows.subList(1, generatorRows.size())) {
+            String[] f = row.split("\t");
+            long reserve = Long.parseLong(f[1]);
+            var path = new TreeTopology(new long[]{Long.parseLong(f[2])}, new int[0][]).routesFrom(0);
+            long credited = 0;
+            for (int tick = 0; tick < 8 && reserve > 0; tick++) {
+                var result = MultiSourceDistributor.allocate(List.of(new MultiSourceDistributor.Offer(reserve, Math.min(32, reserve),
+                        path, new int[]{0}, new int[]{0})), new long[]{40000 - credited}, new int[]{0}).source(0);
+                require(result.sourceDebit() == result.credit(0) + result.dissipated(), "Generator packet receipt conservation");
+                reserve -= result.sourceDebit(); credited += result.credit(0);
+            }
+            require(reserve == Long.parseLong(f[3]) && credited == Long.parseLong(f[4]), "Observed generator residual offer: " + f[0]);
+            generatorCases++;
+        }
+        require(generatorCases == 12, "Nonempty frozen generator packet evidence");
+        System.out.println("SCEX_DISTRIBUTOR_CONTRACT cases=" + labels.size() + " generator_cases=" + generatorCases + " transitions=" + transitions
                 + " unique_outcome_transitions=" + uniqueTransitions + " order_dependent_transitions=" + (transitions - uniqueTransitions)
                 + " randomized_accounts=20000 assertions=" + assertions + " PASS order_selection_NOT_verified");
     }

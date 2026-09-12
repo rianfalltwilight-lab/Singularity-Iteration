@@ -60,7 +60,13 @@ public class mio_icif_Thermal_Generator extends mio_icif_Energy_Generator {
             return 0;
         }
 
+        if (energyStorage.scexNetworkControlled() && fuel.is(net.minecraft.world.item.Items.LAVA_BUCKET)) {
+            return 0;
+        }
         int burnTime = fuel.getBurnTime(null);
+        // R12 public game observations: coal/charcoal 400, stick 25, planks 75,
+        // carpet 16 and slab 37 ticks. New-platform/addon fuels remain extensions.
+        if (energyStorage.scexNetworkControlled()) burnTime /= 4;
         return burnTime > 0 ? burnTime : 0;
     }
     

@@ -237,6 +237,11 @@ protected static final int CHARGE_SLOT = 1;
         if (level.isClientSide()) {
             return;
         }
+
+        if (blockEntity.energyStorage.scexNetworkControlled()) {
+            blockEntity.tickIndependentThermal(level, pos);
+            return;
+        }
         
         // 记录之前的燃烧状态
     boolean wasBurning = blockEntity.isBurning();
@@ -295,6 +300,35 @@ protected static final int CHARGE_SLOT = 1;
     blockEntity.setChanged();
     }
     
+    /**
+     * Independent R12 thermal cycle from frozen public game observations.
+     * The separate independent network performs all wire transfers after world
+     * ticks; this branch never calls old grid or neighbour energy adapters.
+     */
+    private void tickIndependentThermal(Level world, BlockPos at) {
+        long previousEnergy = energyStorage.getAmount();
+        int previousBurn = burnTime;
+        chargeItems();
+        long room = Math.max(0, energyStorage.getCapacity() - energyStorage.getAmount());
+        if (burnTime <= 0 && room >= energyGenerationRate) consumeFuel();
+        boolean activeThisTick = burnTime > 0;
+        if (activeThisTick) {
+            energyStorage.generateEnergyInternal(energyGenerationRate, false);
+            burnTime--;
+        }
+        var property = com.singularity_iteration.mio_icif.Blocks.generator.mio_icif_Block_Thermal_Generator.ACTIVE;
+        var state = world.getBlockState(at);
+        if (state.getValue(property) != activeThisTick) world.setBlock(at, state.setValue(property, activeThisTick), 3);
+        if (previousBurn != burnTime || previousEnergy != energyStorage.getAmount()) {
+            // Save burn progress without comparator/world notifications on every
+            // active tick. Never load a chunk merely to dirty its saved state.
+            if (world instanceof net.minecraft.server.level.ServerLevel serverLevel) {
+                var chunk = serverLevel.getChunkSource().getChunkNow(at.getX() >> 4, at.getZ() >> 4);
+                if (chunk != null) chunk.setUnsaved(true);
+            }
+        }
+    }
+
     /**
      * 向相邻方块实体分配能量
  * 发电机从六面输出能量

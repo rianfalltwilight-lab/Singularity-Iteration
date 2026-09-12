@@ -65,8 +65,8 @@ public final class PacketDistributor {
             if (reachable && (routes.lossMilliTo(contacts[i]) < 0 || losses[i] < 0)) {
                 throw new IllegalArgumentException("Negative route loss");
             }
-            if (room[i] < 0 || losses[i] >= packet) {
-                throw new IllegalArgumentException("Negative room or path loss outside observed scope");
+            if (room[i] < 0) {
+                throw new IllegalArgumentException("Negative receiver room");
             }
         }
         long[] credits = new long[count];
@@ -77,6 +77,9 @@ public final class PacketDistributor {
         long dissipated = 0;
         for (int receiver : priority) {
             long loss = losses[receiver];
+            // R12's generator offers can be smaller than a nominal tier packet.
+            // A path consuming the entire offer simply cannot deliver; it must
+            // not abort independent transfers elsewhere in the same round.
             if (loss < 0 || room[receiver] == 0 || remaining <= loss) {
                 continue;
             }

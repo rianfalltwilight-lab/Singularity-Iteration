@@ -1,6 +1,6 @@
 param([Parameter(Mandatory)][string]$OutputDirectory)
 $ErrorActionPreference = 'Stop'
-$version = '0.4.0-r9-experimental'
+$version = '0.5.0-r12-experimental'
 $target = [IO.Path]::GetFullPath($OutputDirectory)
 if (Test-Path -LiteralPath $target) { throw 'Use a fresh output directory for a reproducible build' }
 $jdk = if ($env:JAVA_HOME) { Join-Path $env:JAVA_HOME 'bin' } else { Split-Path (Get-Command javac).Source }
@@ -23,7 +23,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Contract compilation failed' }
 if ($LASTEXITCODE -ne 0) { throw 'Contract verification failed' }
 & $java -Xms32m -Xmx128m -cp ($classes + [IO.Path]::PathSeparator + $contracts) dev.scex.energy.TreeTopologyContract
 if ($LASTEXITCODE -ne 0) { throw 'Tree contract verification failed' }
-& $java -Xms32m -Xmx128m -cp ($classes + [IO.Path]::PathSeparator + $contracts) dev.scex.energy.PacketDistributorContract (Join-Path $PSScriptRoot 'fixtures/observed-branches.tsv')
+& $java -Xms32m -Xmx128m -cp ($classes + [IO.Path]::PathSeparator + $contracts) dev.scex.energy.PacketDistributorContract (Join-Path $PSScriptRoot 'fixtures/observed-branches.tsv') (Join-Path $PSScriptRoot 'fixtures/observed-generator-packets.tsv')
 if ($LASTEXITCODE -ne 0) { throw 'Distributor contract verification failed' }
 & $java -Xms32m -Xmx128m -cp ($classes + [IO.Path]::PathSeparator + $contracts) dev.scex.energy.ConductorGraphContract
 if ($LASTEXITCODE -ne 0) { throw 'Graph contract verification failed' }

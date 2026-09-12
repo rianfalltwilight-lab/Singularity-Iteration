@@ -1,7 +1,7 @@
 plugins { id 'java-library' }
 
 group = 'dev.scex'
-version = '0.4.0-r9-experimental'
+version = '0.5.0-r12-experimental'
 base { archivesName = 'scex-independent-energy' }
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
@@ -48,6 +48,7 @@ tasks.register('distributorContractTest', JavaExec) {
     classpath = sourceSets.contract.runtimeClasspath
     mainClass = 'dev.scex.energy.PacketDistributorContract'
     args layout.projectDirectory.file('fixtures/observed-branches.tsv').asFile.absolutePath
+    args layout.projectDirectory.file('fixtures/observed-generator-packets.tsv').asFile.absolutePath
     jvmArgs '-Xms32m', '-Xmx128m'
 }
 

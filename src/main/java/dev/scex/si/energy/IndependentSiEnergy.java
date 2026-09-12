@@ -37,7 +37,8 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
  */
 public final class IndependentSiEnergy implements PlatformTopology.Observer {
     private static final ResourceLocation BATBOX = id("wiring/block_bat_box");
-    private static final Set<ResourceLocation> ENDPOINTS = Set.of(BATBOX, id("producer/block_furnace_elc"),
+    private static final ResourceLocation GENERATOR = id("generator/block_thermal_generator");
+    private static final Set<ResourceLocation> ENDPOINTS = Set.of(BATBOX, GENERATOR, id("producer/block_furnace_elc"),
         id("producer/block_powder_elc"), id("producer/block_extractor_elc"), id("producer/block_compressor_elc"));
     private static final Map<ResourceLocation, Long> CONDUCTORS = Map.of(
         id("wiring/cable/block_cable"), 200L, id("wiring/cable/block_cable_o"), 200L,
@@ -76,7 +77,7 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
                           int dimensions, int endpoints, boolean closed, String failure) { }
     private record Port(mio_icif_Energy_Block tile, BlockPos position, BlockState state,
                         CustomEUEnergyStorage storage, CustomEUEnergyStorage.NetworkQuote quote,
-                        long capacity, int inputs, int outputs) { }
+                        long capacity, int inputs, int outputs, long packet) { }
     private IndependentSiEnergy(MinecraftServer server) {
         this.server = server;
         topology = new PlatformTopology(server, CONDUCTORS, 100_000, 32, 65_536, 4096, this);
@@ -130,6 +131,8 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
             if (chunk == null || !level.shouldTickBlocksAt(ChunkPos.asLong(at)) || tile.isRemoved()
                 || chunk.getBlockEntity(at, LevelChunk.EntityCreationType.CHECK) != tile) continue;
             int inputs = 63, outputs = 0;
+            boolean generator = BuiltInRegistries.BLOCK.getKey(tile.getBlockState().getBlock()).equals(GENERATOR);
+            if (generator) { inputs = 0; outputs = 63; }
             if (tile instanceof mio_icif_Energy_Container storageBox && BuiltInRegistries.BLOCK.getKey(tile.getBlockState().getBlock()).equals(BATBOX)) {
                 inputs = 0;
                 for (var side : Direction.values()) {
@@ -139,10 +142,13 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
             }
             var storage = tile.getEnergyStorageInternal(); var quote = storage.scexNetworkQuote();
             if (!quote.outputEnabled()) outputs = 0;
-            ports.add(new Port(tile, at, tile.getBlockState(), storage, quote, tile.getEffectiveCapacity(), inputs, outputs));
+            // Original binary observations distinguish generator residual offers
+            // from the BatBox full-packet reserve rule, including a 1 EU offer.
+            long packet = generator ? Math.min(32, quote.amount()) : 32;
+            ports.add(new Port(tile, at, tile.getBlockState(), storage, quote, tile.getEffectiveCapacity(), inputs, outputs, packet));
         }
         ports.sort(Comparator.comparingInt((Port p) -> p.position.getX()).thenComparingInt(p -> p.position.getY()).thenComparingInt(p -> p.position.getZ()));
-        var sources = ports.stream().filter(p -> p.outputs != 0 && p.quote.amount() >= 32).toList();
+        var sources = ports.stream().filter(p -> p.outputs != 0 && p.packet > 0 && p.quote.amount() >= p.packet).toList();
         var sinks = ports.stream().filter(p -> p.inputs != 0).toList();
         if (sources.isEmpty() || sinks.isEmpty()) return;
         var snapshot = topology.snapshot(level); long[] room = new long[sinks.size()];
@@ -157,7 +163,7 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
             sourceOrder[i] = (int) ((i + ticks) % sources.size());
             var source = sources.get(i);
             var costs = routes(source, sinks, snapshot);
-            offers.add(new MultiSourceDistributor.Offer(source.quote.amount(), 32, costs, receivers, priorities));
+            offers.add(new MultiSourceDistributor.Offer(source.quote.amount(), source.packet, costs, receivers, priorities));
         }
         var round = MultiSourceDistributor.allocate(offers, room, sourceOrder);
         var deltas = new IdentityHashMap<CustomEUEnergyStorage, Long>();

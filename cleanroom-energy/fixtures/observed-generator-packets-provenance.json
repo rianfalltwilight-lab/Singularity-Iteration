@@ -1,0 +1,8 @@
+{
+  "cases": 12,
+  "source_run": "si-ic2-generator-r12-01-20260913",
+  "source_observations_sha256": "925460191a64415747c05b2803336101e8dfa129f57d1a75ade3aa38ae057a5d",
+  "analysis_sha256": "f8c3002e22a8a788435d5b7fe267d62f34da94119c18fede85e6f89000f9019d",
+  "fixture_sha256": "1134402008e9ad0d1cf4f86e1c485c693ca3ec0e107ac15c7f82246d9a4f9d63",
+  "scope": "Original binary public inventory/placement/save observations only; no target implementation or API included"
+}
