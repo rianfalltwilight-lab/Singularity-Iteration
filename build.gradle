@@ -311,6 +311,12 @@ sourceSets {
         runtimeClasspath += sourceSets.main.runtimeClasspath
     }
 }
+evaluationDependsOn(':cleanroom-energy')
+evaluationDependsOn(':cleanroom-minecraft')
+def platformOutput = project(':cleanroom-minecraft').sourceSets.main.output
+def energyOutput = project(':cleanroom-energy').sourceSets.main.output
+sourceSets.smoke.compileClasspath += platformOutput + energyOutput
+sourceSets.smoke.runtimeClasspath += platformOutput + energyOutput
 tasks.register('contractTest', JavaExec) {
     dependsOn tasks.named('contractClasses')
     if (!project.hasProperty('baselineArtifact')) dependsOn tasks.named('jar')
@@ -346,7 +352,11 @@ if (project.hasProperty('withSmoke')) {
             systemProperty 'scex.smoke.mode', project.findProperty('smokeMode') ?: 'inventory'
         }
       }
-      mods { scex_si_smoke { sourceSet sourceSets.smoke } }
+      mods { scex_si_smoke {
+          sourceSet sourceSets.smoke
+          sourceSet project(':cleanroom-minecraft').sourceSets.main
+          sourceSet project(':cleanroom-energy').sourceSets.main
+      } }
     }
     tasks.register('exportSmokeLaunch') {
         def runTask = tasks.named('runSmokeServer')

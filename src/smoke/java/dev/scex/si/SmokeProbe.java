@@ -18,7 +18,15 @@ import net.neoforged.neoforge.items.ItemStackHandler;
 @Mod("scex_si_smoke")
 public final class SmokeProbe {
     private int assertions;
-    public SmokeProbe() { NeoForge.EVENT_BUS.addListener(this::started); }
+    public SmokeProbe() {
+        NeoForge.EVENT_BUS.addListener(this::started);
+        if ("topology".equals(System.getProperty("scex.smoke.mode"))) {
+            NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.server.ServerAboutToStartEvent event) -> {
+                try { new TopologyScenarioProbe(event.getServer()); }
+                catch (Exception error) { throw new IllegalStateException("Topology fixture initialization failed", error); }
+            });
+        }
+    }
     private void check(boolean value, String label) {
         assertions++;
         if (!value) throw new AssertionError(label);
@@ -39,6 +47,7 @@ public final class SmokeProbe {
         }
     }
     private void started(ServerStartedEvent event) {
+        if ("topology".equals(System.getProperty("scex.smoke.mode"))) { return; }
         if ("scenario".equals(System.getProperty("scex.smoke.mode"))) {
             try { new WorldScenarioProbe(event.getServer()); }
             catch (Exception error) { error.printStackTrace(); event.getServer().halt(false); }

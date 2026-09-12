@@ -1,0 +1,29 @@
+plugins { id 'java-library' }
+
+group = 'dev.scex'
+version = '0.1.0-r10-experimental'
+base { archivesName = 'scex-independent-minecraft' }
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+dependencies { api project(':cleanroom-energy') }
+// Use the established mapped public platform classpath, never root SI outputs.
+sourceSets.main.compileClasspath += rootProject.sourceSets.main.compileClasspath
+tasks.named('compileJava') { dependsOn rootProject.tasks.named('createMinecraftArtifacts') }
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.compilerArgs += ['-Xlint:all', '-Werror']
+}
+tasks.withType(Jar).configureEach {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+    manifest.attributes('SCEX-Integration-Status': 'Experimental platform library; no mod entrypoint')
+    from(projectDir) { include 'LICENSE' }
+}
+
+tasks.register('writePlatformClasspath') {
+    dependsOn tasks.named('classes')
+    doLast {
+        layout.buildDirectory.file('platform-classpath.json').get().asFile.text = groovy.json.JsonOutput.toJson(
+            sourceSets.main.compileClasspath.files.collect { it.absolutePath })
+    }
+}
