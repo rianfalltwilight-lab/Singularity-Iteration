@@ -44,6 +44,31 @@ public final class WorldScenarioProbe {
         NeoForge.EVENT_BUS.addListener(this::onTick);
         NeoForge.EVENT_BUS.addListener(this::onChunkLoad);
         NeoForge.EVENT_BUS.addListener(this::onChunkUnload);
+        NeoForge.EVENT_BUS.addListener(this::onExplosionStart);
+        NeoForge.EVENT_BUS.addListener(this::onExplosionDetonate);
+    }
+    private void onExplosionStart(net.neoforged.neoforge.event.level.ExplosionEvent.Start event) {
+        recordExplosion("explosion-start",event);
+    }
+    private void onExplosionDetonate(net.neoforged.neoforge.event.level.ExplosionEvent.Detonate event) {
+        recordExplosion("explosion-detonate",event);
+    }
+    private void recordExplosion(String kind,net.neoforged.neoforge.event.level.ExplosionEvent event) {
+        if(finished || event.getLevel()!=server.overworld()) return;
+        var explosion=event.getExplosion();
+        var center=explosion.center();
+        Map<String,Object> row=new LinkedHashMap<>();
+        row.put("x",center.x);row.put("y",center.y);row.put("z",center.z);
+        row.put("radius",explosion.radius());
+        row.put("interaction",explosion.getBlockInteraction().name());
+        // Identify only our maintained wrapper; do not inspect other implementations.
+        row.put("via_custom_storage",StackWalker.getInstance().walk(frames->frames.anyMatch(frame->
+            frame.getClassName().equals("com.singularity_iteration.mio_icif.energy.CustomEUEnergyStorage")
+                && frame.getMethodName().equals("triggerOverloadExplosion"))));
+        row.put("affected_sample_positions",explosion.getToBlow().stream().filter(positions::contains)
+            .map(p->List.of(p.getX(),p.getY(),p.getZ())).toList());
+        try{record(kind,row);}
+        catch(Exception error){error.printStackTrace();finish(false);}
     }
     private void onChunkLoad(net.neoforged.neoforge.event.level.ChunkEvent.Load event) {
         recordChunkEvent("chunk-load-event",event);
