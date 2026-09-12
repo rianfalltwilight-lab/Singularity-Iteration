@@ -346,4 +346,18 @@ if (project.hasProperty('withSmoke')) {
       }
       mods { scex_si_smoke { sourceSet sourceSets.smoke } }
     }
+    tasks.register('exportSmokeLaunch') {
+        def runTask = tasks.named('runSmokeServer')
+        // A mapped TaskProvider also depends on its producer, which would start the game.
+        // Keep only dependency task paths so exporting never executes runSmokeServer.
+        dependsOn { runTask.get().taskDependencies.getDependencies(runTask.get()).collect { it.path } }
+        doLast {
+            def launch = runTask.get()
+            file('build/smoke-launch.json').text = groovy.json.JsonOutput.toJson([
+                mainClass: launch.mainClass.get(), jvmArgs: launch.allJvmArgs,
+                args: launch.args, classpath: (launch.classpath.files + launch.classpathProvider.files).collect { it.absolutePath }.unique(),
+                environment: launch.environmentProperty.get()
+            ])
+        }
+    }
 }

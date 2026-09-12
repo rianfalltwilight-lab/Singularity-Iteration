@@ -39,6 +39,11 @@ public final class SmokeProbe {
         }
     }
     private void started(ServerStartedEvent event) {
+        if ("scenario".equals(System.getProperty("scex.smoke.mode"))) {
+            try { new WorldScenarioProbe(event.getServer()); }
+            catch (Exception error) { error.printStackTrace(); event.getServer().halt(false); }
+            return;
+        }
         boolean passed = false;
         try {
             if ("compat".equals(System.getProperty("scex.smoke.mode"))) {
