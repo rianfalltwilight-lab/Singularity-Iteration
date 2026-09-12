@@ -5,6 +5,7 @@ import com.singularity_iteration.mio_icif.api.energy.tile.IExplosionPowerOverrid
 import com.singularity_iteration.mio_icif.energy.EnergyUnit.CableTier;
 import com.singularity_iteration.mio_icif.energy.EnergyUnit.IEUEnergyStorage;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 
@@ -156,22 +157,24 @@ public class CustomEUEnergyStorage implements IEUEnergyStorage, IEnergyStorageAc
 
     @Override
     public long receive(long maxReceive, boolean simulate) {
+        if (maxReceive <= 0) return 0;
         long energyReceived = Math.min(capacity - energy, Math.min(this.maxReceive, maxReceive));
         if (!simulate) {
-            energy += energyReceived;
+            setEnergy(energy + energyReceived);
         }
         return energyReceived;
     }
 
     @Override
     public long extract(long maxExtract, boolean simulate) {
+        if (maxExtract <= 0) return 0;
         // 如果输出被禁用（红石控制），则不允许提取能量
         if (!this.outputEnabled) {
             return 0;
         }
         long energyExtracted = Math.min(energy, Math.min(this.maxExtract, maxExtract));
         if (!simulate) {
-            energy -= energyExtracted;
+            setEnergy(energy - energyExtracted);
         }
         return energyExtracted;
     }
@@ -188,7 +191,7 @@ public class CustomEUEnergyStorage implements IEUEnergyStorage, IEnergyStorageAc
 
     @Override
     public void setStored(long amount) {
-        this.energy = Math.max(0, Math.min(amount, capacity));
+        setEnergy(amount);
     }
 
     @Override
@@ -202,7 +205,16 @@ public class CustomEUEnergyStorage implements IEUEnergyStorage, IEnergyStorageAc
     }
 
     public void setEnergy(long energy) {
-        this.energy = Math.max(0, Math.min(capacity, energy));
+        long updated = Math.max(0, Math.min(capacity, energy));
+        if (updated == this.energy) return;
+        this.energy = updated;
+        // Normal chunk saves skip clean chunks. Energy changes must persist even
+        // between completed operations, without serializing NBT or notifying all
+        // comparators every tick. Never load a chunk merely to mark it dirty.
+        if (level instanceof ServerLevel serverLevel && pos != null) {
+            var chunk = serverLevel.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4);
+            if (chunk != null) chunk.setUnsaved(true);
+        }
     }
 
     public long getMaxExtract() {
@@ -215,7 +227,7 @@ public class CustomEUEnergyStorage implements IEUEnergyStorage, IEnergyStorageAc
 
     public void setCapacity(long capacity) {
         this.capacity = Math.max(0, capacity);
-        this.energy = Math.min(this.energy, this.capacity);
+        setEnergy(this.energy);
     }
 
     public void setMaxReceive(long maxReceive) {
@@ -236,7 +248,7 @@ public class CustomEUEnergyStorage implements IEUEnergyStorage, IEnergyStorageAc
         }
         long energyConsumed = Math.min(this.energy, amount);
         if (!simulate) {
-            this.energy -= energyConsumed;
+            setEnergy(this.energy - energyConsumed);
         }
         return energyConsumed;
     }
@@ -247,7 +259,7 @@ public class CustomEUEnergyStorage implements IEUEnergyStorage, IEnergyStorageAc
         }
         long energyGenerated = Math.min(this.capacity - this.energy, amount);
         if (!simulate) {
-            this.energy += energyGenerated;
+            setEnergy(this.energy + energyGenerated);
         }
         return energyGenerated;
     }

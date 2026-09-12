@@ -5,6 +5,7 @@ package dev.scex.si;
 import com.singularity_iteration.mio_icif.Items.Upgrade.MachineUpgradeStats;
 import com.singularity_iteration.mio_icif.api.energy.ICableTier;
 import com.singularity_iteration.mio_icif.energy.EnergyUnit.CableTier;
+import com.singularity_iteration.mio_icif.energy.CustomEUEnergyStorage;
 import java.lang.management.ManagementFactory;
 import java.util.Arrays;
 import java.util.List;
@@ -89,8 +90,35 @@ public final class UpgradeContract {
         try { CableTier.addTier(custom("contract_voltage_duplicate", 16, 102)); check(false, "duplicate-voltage-rejected"); }
         catch (IllegalArgumentException expected) { check(true, "duplicate-voltage-rejected"); }
         check(CableTier.allTiers() == after, "rejected-registration-does-not-invalidate");
+        energyStorageRegression();
         System.out.printf(Locale.ROOT, "SI_CONTRACT assertions=%d failed=%d%n", assertions, failures);
         if (failures != 0) throw new AssertionError("SI contract failures: " + failures);
+    }
+
+    private static void energyStorageRegression() {
+        var storage = new CustomEUEnergyStorage(100, 32, 16, CableTier.LV);
+        storage.setEnergy(50);
+        for (long invalid : new long[]{0, -1, Long.MIN_VALUE}) {
+            for (boolean simulate : new boolean[]{true, false}) {
+                check(storage.receive(invalid, simulate)==0 && storage.getAmount()==50,"invalid-receive-"+invalid+"-"+simulate);
+                check(storage.extract(invalid, simulate)==0 && storage.getAmount()==50,"invalid-extract-"+invalid+"-"+simulate);
+                check(storage.consumeEnergyInternal(invalid, simulate)==0 && storage.getAmount()==50,"invalid-consume-"+invalid+"-"+simulate);
+                check(storage.generateEnergyInternal(invalid, simulate)==0 && storage.getAmount()==50,"invalid-generate-"+invalid+"-"+simulate);
+            }
+        }
+        check(storage.receive(Long.MAX_VALUE,true)==32 && storage.getAmount()==50,"receive-simulation");
+        check(storage.receive(Long.MAX_VALUE,false)==32 && storage.getAmount()==82,"receive-rate-bound");
+        check(storage.receive(Long.MAX_VALUE,false)==18 && storage.getAmount()==100,"receive-capacity-bound");
+        check(storage.extract(Long.MAX_VALUE,true)==16 && storage.getAmount()==100,"extract-simulation");
+        check(storage.extract(Long.MAX_VALUE,false)==16 && storage.getAmount()==84,"extract-rate-bound");
+        storage.setOutputEnabled(false);
+        check(storage.extract(16,false)==0 && storage.getAmount()==84,"disabled-output");
+        check(storage.consumeEnergyInternal(20,true)==20 && storage.getAmount()==84,"consume-simulation");
+        check(storage.consumeEnergyInternal(20,false)==20 && storage.getAmount()==64,"internal-consumption-ignores-output-switch");
+        storage.setCapacity(40);check(storage.getAmount()==40,"capacity-shrink-clamps");
+        storage.setStored(-1);check(storage.getAmount()==0,"negative-stored-clamps");
+        check(storage.generateEnergyInternal(Long.MAX_VALUE,true)==40 && storage.getAmount()==0,"generation-simulation");
+        check(storage.generateEnergyInternal(Long.MAX_VALUE,false)==40 && storage.getAmount()==40,"generation-capacity-bound");
     }
 
     private static long work(MachineUpgradeStats[] values, int loops) {

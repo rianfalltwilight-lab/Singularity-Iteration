@@ -44,11 +44,18 @@ public abstract class mio_icif_standard_producer extends mio_icif_producer {
         paidForThisTick = true;
         try { available = canWork(); } finally { paidForThisTick = false; }
         if (!available) {
+            boolean changed = progress != 0 || isWorking;
             progress = 0;
             stopWork();
+            if (changed) setChanged();
             return;
         }
-        if (!hasEnoughEnergy()) { stopWork(); return; }
+        if (!hasEnoughEnergy()) {
+            boolean changed = isWorking;
+            stopWork();
+            if (changed) setChanged();
+            return;
+        }
         if (!consumeEnergy()) { stopWork(); return; }
         isWorking = true;
         if (++progress < maxProgress) return;
