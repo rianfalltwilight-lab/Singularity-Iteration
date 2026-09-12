@@ -62,9 +62,9 @@ import net.minecraft.network.chat.MutableComponent;
  *   <li>{@link #conductorBreakdownEnergy} - 导体熔毁能量阈值（超过此值导体被摧毁）</li>
  *   <li>{@link #insulationBreakdownEnergy} - 绝缘层熔毁能量阈值（超过此值绝缘层被剥离）</li>
  *   <li>{@link #insulationEnergyAbsorption} - 裸线绝缘吸收阈值（低于此值绝缘层完全吸收能量）</li>
- *   <li>{@link #conductionLoss} - 裸线传导损耗比例</li>
+ *   <li>{@link #conductionLoss} - 每格裸线传导损耗（EU/能量包）</li>
  *   <li>{@link #insulatedInsulationEnergyAbsorption} - 绝缘电线绝缘吸收阈值</li>
- *   <li>{@link #insulatedConductionLoss} - 绝缘电线传导损耗比例</li>
+ *   <li>{@link #insulatedConductionLoss} - 每格绝缘电线传导损耗（EU/能量包）</li>
  * </ul>
  *
  * <p><b>修改电线参数只需修改此类的实例定义即可。</b></p>
@@ -73,6 +73,9 @@ import net.minecraft.network.chat.MutableComponent;
 public final class CableTier implements Comparable<CableTier>, ICableTier {
 
     // ============ 电压等级实例 ============
+    // SCEX clean-room: base cable losses calibrated against 2.8.222-ex112
+    // normal placement and saved-energy traces; see R3 grid fixtures/evidence.
+    // Insulation does not change the measured loss of the corresponding metal.
 
     /** LV 低压：32 EU/t，触电伤害 4 点 */
     public static CableTier LV = new CableTier(
@@ -81,9 +84,9 @@ public final class CableTier implements Comparable<CableTier>, ICableTier {
         33L,       // conductorBreakdownEnergy: 32 + 1
         9001L,     // insulationBreakdownEnergy
         8.0,       // insulationEnergyAbsorption (bare): 32 / 4
-        0.002,     // conductionLoss (bare)
+        0.2,       // conductionLoss (bare), EU per packet per block
         32.0,      // insulatedInsulationEnergyAbsorption: full voltage
-        0.0015     // insulatedConductionLoss
+        0.2        // insulatedConductionLoss
     );
 
     /** MV 中压：128 EU/t，触电伤害 8 点 */
@@ -93,9 +96,9 @@ public final class CableTier implements Comparable<CableTier>, ICableTier {
         129L,
         9001L,
         32.0,      // 128 / 4
-        0.003,
+        0.2,
         128.0,
-        0.002
+        0.2
     );
 
     /** HV 高压：512 EU/t，触电伤害 18 点 */
@@ -105,9 +108,9 @@ public final class CableTier implements Comparable<CableTier>, ICableTier {
         513L,
         9001L,
         128.0,     // 512 / 4
-        0.005,
+        0.4,
         512.0,
-        0.0045
+        0.4
     );
 
     /** EV 超高压：2048 EU/t，触电伤害 40 点 */
@@ -117,21 +120,21 @@ public final class CableTier implements Comparable<CableTier>, ICableTier {
         2049L,
         9001L,
         512.0,     // 2048 / 4
-        0.01,
+        0.8,
         2048.0,
-        0.0095
+        0.8
     );
 
-    /** IV 超高电压：8192 EU/t，无触电伤害（玻璃电缆，绝缘性好，电阻 0.02） */
+    /** IV 超高电压：8192 EU/t，无触电伤害（玻璃电缆，每格损耗 0.025 EU/能量包） */
     public static CableTier IV = new CableTier(
         "iv", "IV", "Insane Voltage",
         8192, 4, 0.0f,
         8193L,
         9001L,
         2048.0,
-        0.02,
+        0.025,
         8192.0,
-        0.02
+        0.025
     );
 
     /** LuV 剧差压：32768 EU/t，无触电伤害（超导合金，完全绝缘零损耗） */
