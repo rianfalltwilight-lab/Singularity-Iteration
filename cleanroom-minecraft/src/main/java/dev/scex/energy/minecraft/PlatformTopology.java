@@ -33,6 +33,14 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
  * The future energy adapter must use isCurrent again immediately before commit.
  */
 public final class PlatformTopology implements AutoCloseable {
+    /** Index-only callbacks on the server thread; they must not mutate the world. */
+    public interface Observer {
+        default void position(ServerLevel level, LevelChunk chunk, BlockPos at) { }
+        default void chunkRemoved(ServerLevel level, int chunkX, int chunkZ) { }
+        default void levelRemoved(ServerLevel level) { }
+        default void cleared() { }
+    }
+    private static final Observer NO_OBSERVER = new Observer() { };
     private enum Kind { SAMPLE, LOAD_CHUNK, UNLOAD_CHUNK, UNLOAD_LEVEL }
     private enum Scope { POSITION, CHUNK, LEVEL }
     private record Key(ServerLevel level, Scope scope, long coordinate) { }
@@ -42,6 +50,7 @@ public final class PlatformTopology implements AutoCloseable {
                           boolean closed, String failure) { }
 
     private final Map<ResourceLocation, Long> losses;
+    private Observer observer;
     private MinecraftServer server;
     private final int maximumNodes;
     private final int maximumSources;
@@ -55,7 +64,13 @@ public final class PlatformTopology implements AutoCloseable {
 
     public PlatformTopology(MinecraftServer server, Map<ResourceLocation, Long> losses, int maximumNodes,
                             int maximumSources, int maximumQueued, int workPerTick) {
+        this(server, losses, maximumNodes, maximumSources, maximumQueued, workPerTick, NO_OBSERVER);
+    }
+
+    public PlatformTopology(MinecraftServer server, Map<ResourceLocation, Long> losses, int maximumNodes,
+                            int maximumSources, int maximumQueued, int workPerTick, Observer observer) {
         this.server = Objects.requireNonNull(server, "server");
+        this.observer = Objects.requireNonNull(observer, "observer");
         if (!server.isSameThread()) { throw new IllegalStateException("Attach on the server thread"); }
         this.losses = Map.copyOf(losses);
         if (this.losses.isEmpty() || this.losses.values().stream().anyMatch(v -> v < 0)
@@ -166,11 +181,13 @@ public final class PlatformTopology implements AutoCloseable {
         ServerLevel level = change.key.level;
         if (!level.getServer().isSameThread()) { throw new IllegalStateException("World mutation outside server thread"); }
         if (change.kind == Kind.UNLOAD_LEVEL) {
-            var old = worlds.remove(level); if (old != null) { old.close(); } return;
+            var old = worlds.remove(level); if (old != null) { old.close(); }
+            observer.levelRemoved(level); return;
         }
         if (change.kind == Kind.UNLOAD_CHUNK) {
             var registry = worlds.get(level);
             if (registry != null) { registry.unloadChunk(ChunkPos.getX(change.key.coordinate), ChunkPos.getZ(change.key.coordinate)); }
+            observer.chunkRemoved(level, ChunkPos.getX(change.key.coordinate), ChunkPos.getZ(change.key.coordinate));
             return;
         }
         int cx = change.key.scope == Scope.CHUNK ? ChunkPos.getX(change.key.coordinate) : change.position.getX() >> 4;
@@ -181,12 +198,14 @@ public final class PlatformTopology implements AutoCloseable {
             else {
                 var registry = worlds.get(level);
                 if (registry != null) { registry.unloadChunk(cx, cz); }
+                observer.chunkRemoved(level, cx, cz);
             }
             return;
         }
         if (change.kind == Kind.LOAD_CHUNK) {
             var registry = worlds.get(level);
             if (registry != null) { registry.unloadChunk(cx, cz); }
+            observer.chunkRemoved(level, cx, cz);
             // This public set includes pending saved block-entity positions.
             // Sampling states does not instantiate a block entity or load a chunk.
             for (BlockPos at : chunk.getBlockEntitiesPos()) { sample(level, chunk, at); }
@@ -202,6 +221,7 @@ public final class PlatformTopology implements AutoCloseable {
             registry.put(new ConductorRegistry.Position(at.getX(), at.getY(), at.getZ()), loss);
         } else if (registry != null) { registry.remove(new ConductorRegistry.Position(at.getX(), at.getY(), at.getZ())); }
         sampledPositions++;
+        observer.position(level, chunk, at);
     }
 
     private synchronized boolean pendingFor(ServerLevel level) {
@@ -229,7 +249,10 @@ public final class PlatformTopology implements AutoCloseable {
                 sampledPositions, deferredLoads, accessibilityChanges, closed, failure);
     }
 
-    private void clearWorlds() { for (var registry : worlds.values()) { registry.close(); } worlds.clear(); }
+    private void clearWorlds() {
+        for (var registry : worlds.values()) { registry.close(); }
+        worlds.clear(); observer.cleared();
+    }
 
     @SubscribeEvent
     public void onStopped(ServerStoppedEvent event) { if (event.getServer() == server) { close(); } }
@@ -238,6 +261,6 @@ public final class PlatformTopology implements AutoCloseable {
     public synchronized void close() {
         if (closed) { return; }
         if (!server.isSameThread()) { throw new IllegalStateException("Close on the server thread"); }
-        clearWorlds(); pending.clear(); closed = true; server = null; NeoForge.EVENT_BUS.unregister(this);
+        clearWorlds(); pending.clear(); closed = true; server = null; observer = NO_OBSERVER; NeoForge.EVENT_BUS.unregister(this);
     }
 }

@@ -175,6 +175,7 @@ public class Singularity_Iteration {
 
         // 初始化电网系统（IC2 风格 Node/Grid 架构）
         GridEventHandler.init();
+        dev.scex.si.energy.IndependentSiEnergy.install();
 
         // 初始化 AE2 兼容层
         com.singularity_iteration.mio_icif.integration.ae2.Ae2Plugin.init();

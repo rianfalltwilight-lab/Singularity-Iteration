@@ -1098,6 +1098,7 @@ public abstract class mio_icif_producer extends mio_icif_Energy_Block implements
      */
     @Override
     public double getDemandedEnergy() {
+        if (energyStorage.scexNetworkControlled()) return 0.0D;
         if (isPowerSource) return 0.0D;
         long spaceAvailable = getEffectiveCapacity() - apiGetStoredEnergy();
         if (spaceAvailable <= 0) return 0.0D;

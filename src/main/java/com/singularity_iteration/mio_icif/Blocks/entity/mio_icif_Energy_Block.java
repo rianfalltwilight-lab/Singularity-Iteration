@@ -50,12 +50,14 @@ public abstract class mio_icif_Energy_Block extends BlockEntity implements MenuP
                                  long capacity, long maxReceive, long maxExtract, CableTier cableTier) {
         super(type, pos, state);
         this.energyStorage = new CustomEUEnergyStorage(capacity, maxReceive, maxExtract, cableTier);
+        this.energyStorage.scexSetNetworkControlled(dev.scex.si.energy.IndependentSiEnergy.controls(state));
     }
 
     public mio_icif_Energy_Block(BlockPos pos, BlockState state, BlockEntityType<?> type,
                                  long capacity, long maxReceive, long maxExtract, ICableTier cableTier) {
         super(type, pos, state);
         this.energyStorage = new CustomEUEnergyStorage(capacity, maxReceive, maxExtract, CableTier.fromICableTier(cableTier));
+        this.energyStorage.scexSetNetworkControlled(dev.scex.si.energy.IndependentSiEnergy.controls(state));
     }
     
     @Override
@@ -71,7 +73,7 @@ public abstract class mio_icif_Energy_Block extends BlockEntity implements MenuP
         super.onLoad();
         boolean isClient = level != null && level.isClientSide;
         if (level != null && !isClient) {
-            if (!registered) {
+            if (!registered && !energyStorage.scexNetworkControlled()) {
                 NeoForge.EVENT_BUS.post(new EnergyTileLoadEvent(this, level));
                 registered = true;
             }
@@ -93,13 +95,14 @@ public abstract class mio_icif_Energy_Block extends BlockEntity implements MenuP
         boolean isClient = level != null && level.isClientSide;
         if (level == null) {
             System.out.println("[EnergyNet] WARNING: level is null in clearRemoved!");
-        } else if (!isClient && !registered) {
+        } else if (!isClient && !registered && !energyStorage.scexNetworkControlled()) {
             NeoForge.EVENT_BUS.post(new EnergyTileLoadEvent(this, level));
             registered = true;
         }
     }
 
     public void refreshRegistration() {
+        if (energyStorage.scexNetworkControlled()) { dev.scex.si.energy.IndependentSiEnergy.changed(this); return; }
         if (level != null && !level.isClientSide && registered) {
             NeoForge.EVENT_BUS.post(new EnergyTileUnloadEvent(this, level));
             NeoForge.EVENT_BUS.post(new EnergyTileLoadEvent(this, level));
@@ -356,7 +359,7 @@ public abstract class mio_icif_Energy_Block extends BlockEntity implements MenuP
 
     /** Query the platform's existing ticking state without loading a chunk. */
     protected final boolean canTransferGridEnergy() {
-        return !isRemoved() && level instanceof net.minecraft.server.level.ServerLevel serverLevel
+        return !energyStorage.scexNetworkControlled() && !isRemoved() && level instanceof net.minecraft.server.level.ServerLevel serverLevel
                 && serverLevel.shouldTickBlocksAt(net.minecraft.world.level.ChunkPos.asLong(worldPosition));
     }
 
@@ -414,12 +417,12 @@ public abstract class mio_icif_Energy_Block extends BlockEntity implements MenuP
 
     @Override
     public boolean acceptsEnergyFrom(IEnergyEmitter emitter, Direction direction) {
-        return !isPowerSource;
+        return !energyStorage.scexNetworkControlled() && !isPowerSource;
     }
 
     @Override
     public boolean emitsEnergyTo(IEnergyAcceptor acceptor, Direction direction) {
-        return isPowerSource;
+        return !energyStorage.scexNetworkControlled() && isPowerSource;
     }
 
     // ==================== IUpgradableBlock 接口实现 ====================

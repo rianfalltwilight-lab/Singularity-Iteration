@@ -25,6 +25,63 @@ public class CustomEUEnergyStorage implements IEUEnergyStorage, IEnergyStorageAc
     protected boolean isPowerSource = false;
     protected boolean outputEnabled = true; // 红石控制输出开关
 
+    // Independent-network ownership is explicit and fixed by the containing
+    // block's development policy before its saved balance is read.
+    private boolean scexNetworkControlled;
+    public final boolean scexNetworkControlled() { return scexNetworkControlled; }
+    public final void scexSetNetworkControlled(boolean controlled) { scexNetworkControlled = controlled; }
+
+    public record NetworkQuote(Level ownerLevel, BlockPos ownerPosition, long amount, long capacity, long maxReceive, long maxExtract,
+                               long output, boolean source, boolean outputEnabled) { }
+    public record NetworkWrite(CustomEUEnergyStorage storage, NetworkQuote expected, long nextAmount) { }
+
+    public final NetworkQuote scexNetworkQuote() {
+        return new NetworkQuote(level, pos == null ? null : pos.immutable(), energy, capacity, maxReceive, maxExtract, powerOutput, isPowerSource, outputEnabled);
+    }
+
+    /**
+     * An independently authored, all-or-nothing main-thread balance commit.
+     * Validation and conservation precede every write. The mutation loop only
+     * assigns primitive fields; dirty marking follows the complete commit.
+     * No old grid/API method is invoked and nominal capacity is not a clamp.
+     */
+    public static boolean scexCommitNetwork(java.util.List<NetworkWrite> requested,
+                                            long dissipated, java.util.function.BooleanSupplier current) {
+        var writes = java.util.List.copyOf(requested);
+        if (dissipated < 0) throw new IllegalArgumentException("Negative dissipation");
+        var identities = new java.util.IdentityHashMap<CustomEUEnergyStorage, Boolean>();
+        var balance = java.math.BigInteger.valueOf(dissipated);
+        for (var write : writes) {
+            var storage = java.util.Objects.requireNonNull(write.storage());
+            if (write.nextAmount() < 0 || identities.put(storage, Boolean.TRUE) != null)
+                throw new IllegalArgumentException("Negative balance or duplicate storage");
+            if (storage.pos == null || !(storage.level instanceof ServerLevel serverLevel) || !serverLevel.getServer().isSameThread())
+                throw new IllegalStateException("Network commit requires a server-owned storage");
+            balance = balance.add(java.math.BigInteger.valueOf(write.nextAmount()))
+                .subtract(java.math.BigInteger.valueOf(write.expected().amount()));
+        }
+        if (balance.signum() != 0) throw new IllegalArgumentException("Nonconserving network commit");
+        if (!current.getAsBoolean()) return false;
+        for (var write : writes) {
+            if (!write.storage().scexNetworkControlled || !write.storage().scexNetworkQuote().equals(write.expected())) return false;
+            var storage = write.storage(); var world = (ServerLevel) storage.level;
+            var chunk = world.getChunkSource().getChunkNow(storage.pos.getX() >> 4, storage.pos.getZ() >> 4);
+            if (chunk == null || !world.shouldTickBlocksAt(net.minecraft.world.level.ChunkPos.asLong(storage.pos))) return false;
+            var tile = chunk.getBlockEntity(storage.pos, net.minecraft.world.level.chunk.LevelChunk.EntityCreationType.CHECK);
+            if (!(tile instanceof com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_Energy_Block machine)
+                || tile.isRemoved() || machine.getEnergyStorageInternal() != storage) return false;
+        }
+        for (var write : writes) write.storage().energy = write.nextAmount();
+        for (var write : writes) {
+            var storage = write.storage();
+            if (storage.energy == write.expected().amount()) continue;
+            var serverLevel = (ServerLevel) storage.level;
+            var chunk = serverLevel.getChunkSource().getChunkNow(storage.pos.getX() >> 4, storage.pos.getZ() >> 4);
+            if (chunk != null) chunk.setUnsaved(true);
+        }
+        return true;
+    }
+
     public CustomEUEnergyStorage(long capacity, long maxReceive, long maxExtract, CableTier cableTier) {
         this.capacity = capacity;
         this.maxReceive = maxReceive;
@@ -158,7 +215,7 @@ public class CustomEUEnergyStorage implements IEUEnergyStorage, IEnergyStorageAc
     @Override
     public long receive(long maxReceive, boolean simulate) {
         if (maxReceive <= 0) return 0;
-        long energyReceived = Math.min(capacity - energy, Math.min(this.maxReceive, maxReceive));
+        long energyReceived = Math.min(Math.max(0, capacity - energy), Math.min(this.maxReceive, maxReceive));
         if (!simulate) {
             setEnergy(energy + energyReceived);
         }
@@ -205,7 +262,7 @@ public class CustomEUEnergyStorage implements IEUEnergyStorage, IEnergyStorageAc
     }
 
     public void setEnergy(long energy) {
-        long updated = Math.max(0, Math.min(capacity, energy));
+        long updated = Math.max(0, scexNetworkControlled ? energy : Math.min(capacity, energy));
         if (updated == this.energy) return;
         this.energy = updated;
         // Normal chunk saves skip clean chunks. Energy changes must persist even
@@ -257,7 +314,7 @@ public class CustomEUEnergyStorage implements IEUEnergyStorage, IEnergyStorageAc
         if (amount <= 0) {
             return 0;
         }
-        long energyGenerated = Math.min(this.capacity - this.energy, amount);
+        long energyGenerated = Math.min(Math.max(0, this.capacity - this.energy), amount);
         if (!simulate) {
             setEnergy(this.energy + energyGenerated);
         }

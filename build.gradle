@@ -315,6 +315,10 @@ evaluationDependsOn(':cleanroom-energy')
 evaluationDependsOn(':cleanroom-minecraft')
 def platformOutput = project(':cleanroom-minecraft').sourceSets.main.output
 def energyOutput = project(':cleanroom-energy').sourceSets.main.output
+// Capture of the external mapped platform classpath in the platform project
+// precedes this addition, so the platform never compiles against root SI output.
+sourceSets.main.compileClasspath += platformOutput + energyOutput
+sourceSets.main.runtimeClasspath += platformOutput + energyOutput
 sourceSets.smoke.compileClasspath += platformOutput + energyOutput
 sourceSets.smoke.runtimeClasspath += platformOutput + energyOutput
 tasks.register('contractTest', JavaExec) {

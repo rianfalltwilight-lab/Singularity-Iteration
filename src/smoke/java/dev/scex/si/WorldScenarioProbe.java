@@ -3,6 +3,7 @@
 package dev.scex.si;
 
 import com.google.gson.Gson;
+import dev.scex.si.energy.IndependentSiEnergy;
 import java.io.BufferedWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -41,11 +42,43 @@ public final class WorldScenarioProbe {
         record("fixture-runtime",Map.of("si_code_source",
             com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_Energy_Container.class
                 .getProtectionDomain().getCodeSource().getLocation().toString()));
+        if(Boolean.getBoolean("scex.independent.energy")) {
+            var manifest=com.google.gson.JsonParser.parseString(Files.readString(Path.of("runtime-overlay.json"))).getAsJsonObject();
+            var hashes=new ArrayList<Map<String,String>>();
+            for(var item:manifest.getAsJsonArray("classes")) {
+                var entry=item.getAsJsonObject();String name=entry.get("path").getAsString();
+                if(name.contains("/energy/grid/") || name.contains("/api/energy/") || name.contains("/energy/leg/"))
+                    throw new IllegalArgumentException("Unresolved implementation in runtime patch manifest");
+                try(var data=IndependentSiEnergy.class.getClassLoader().getResourceAsStream(name)) {
+                    if(data==null) throw new IllegalStateException("Missing runtime patch class: "+name);
+                    String actual=java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(data.readAllBytes()));
+                    if(!actual.equals(entry.get("sha256").getAsString())) throw new IllegalStateException("Runtime patch class hash mismatch: "+name
+                        +" expected="+entry.get("sha256").getAsString()+" actual="+actual
+                        +" resource="+IndependentSiEnergy.class.getClassLoader().getResource(name));
+                    hashes.add(Map.of("path",name,"sha256",actual));
+                }
+            }
+            record("runtime-patch-hashes",Map.of("passed",true,"classes",hashes));
+        }
         NeoForge.EVENT_BUS.addListener(this::onTick);
         NeoForge.EVENT_BUS.addListener(this::onChunkLoad);
         NeoForge.EVENT_BUS.addListener(this::onChunkUnload);
         NeoForge.EVENT_BUS.addListener(this::onExplosionStart);
         NeoForge.EVENT_BUS.addListener(this::onExplosionDetonate);
+        if(Boolean.getBoolean("scex.independent.energy")) {
+            var observed=IndependentSiEnergy.current(server);
+            if(observed==null) throw new IllegalStateException("Independent engine not attached before scenario");
+            NeoForge.EVENT_BUS.addListener(net.neoforged.bus.api.EventPriority.LOWEST,
+                (net.neoforged.neoforge.event.server.ServerStoppedEvent event)-> {
+                    if(event.getServer()!=server) return;
+                    try {
+                        var metrics=observed.metrics();
+                        Files.writeString(Path.of("independent-stop.json"),gson.toJson(Map.of("passed",
+                            metrics.closed() && metrics.endpoints()==0 && metrics.dimensions()==0
+                                && IndependentSiEnergy.current(server)==null,"metrics",metrics)));
+                    } catch(Exception error){error.printStackTrace();}
+                });
+        }
     }
     private void onExplosionStart(net.neoforged.neoforge.event.level.ExplosionEvent.Start event) {
         recordExplosion("explosion-start",event);
@@ -91,6 +124,13 @@ public final class WorldScenarioProbe {
         if(finished || event.getServer()!=server) return;
         try {
             var world=server.overworld();
+            if(Boolean.getBoolean("scex.independent.energy")) {
+                var engine=IndependentSiEnergy.current(server);
+                if(engine==null || !engine.metrics().failure().isEmpty()) throw new IllegalStateException("Independent engine missing or failed");
+                record("independent-energy",engine.metrics());
+                if(tick==18 && Boolean.getBoolean("scex.independent.commitTests"))
+                    record("commit-boundaries",NetworkCommitProbe.run(world));
+            }
             for(BlockPos at:positions) {
                 Map<String,Object> row=new LinkedHashMap<>();row.put("x",at.getX());row.put("y",at.getY());row.put("z",at.getZ());
                 row.put("block_ticking",world.shouldTickBlocksAt(net.minecraft.world.level.ChunkPos.asLong(at)));

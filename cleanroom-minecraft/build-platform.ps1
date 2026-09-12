@@ -19,7 +19,7 @@ $sources=@(Get-ChildItem -LiteralPath (Join-Path $PSScriptRoot 'src/main/java') 
 if($sources.Count -eq 0){throw 'Missing independent sources'}
 & $javac '-J-Duser.language=en' '-J-Duser.country=US' --release 21 -g -proc:none -encoding UTF-8 -Xlint:all -Werror -cp ($paths -join [IO.Path]::PathSeparator) -d $classes @sources
 if($LASTEXITCODE -ne 0){throw 'Independent platform compilation failed'}
-$version='0.1.0-r10-experimental'
+$version='0.2.0-r11-experimental'
 $manifest=Join-Path $target 'MANIFEST.MF'
 [IO.File]::WriteAllText($manifest,"Manifest-Version: 1.0`nImplementation-Version: $version`nSCEX-Integration-Status: Experimental platform library; no mod entrypoint`n`n",[Text.UTF8Encoding]::new($false))
 $artifact=Join-Path $target "scex-independent-minecraft-$version.jar"

@@ -1,7 +1,7 @@
 plugins { id 'java-library' }
 
 group = 'dev.scex'
-version = '0.1.0-r10-experimental'
+version = '0.2.0-r11-experimental'
 base { archivesName = 'scex-independent-minecraft' }
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 

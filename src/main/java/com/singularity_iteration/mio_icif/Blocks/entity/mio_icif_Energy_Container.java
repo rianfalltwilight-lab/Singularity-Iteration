@@ -252,11 +252,11 @@ public class mio_icif_Energy_Container extends mio_icif_Energy_Block implements 
 
         blockEntity.chargeItems();
 
-        if (blockEntity.shouldEmitEnergy()) {
+        if (!blockEntity.energyStorage.scexNetworkControlled() && blockEntity.shouldEmitEnergy()) {
             blockEntity.pushEnergyToCompatSinks();
         }
 
-        if ((blockEntity.tickCounter % FE_COMPAT_SCAN_INTERVAL) == 0) {
+        if (!blockEntity.energyStorage.scexNetworkControlled() && (blockEntity.tickCounter % FE_COMPAT_SCAN_INTERVAL) == 0) {
             blockEntity.updateFECompatTiles(level, pos);
         }
     }
@@ -492,12 +492,12 @@ private void pushEnergyToCompatSinks() {
 
     @Override
     public boolean emitsEnergyTo(IEnergyAcceptor acceptor, Direction direction) {
-        return direction == getOutputSide();
+        return !energyStorage.scexNetworkControlled() && direction == getOutputSide();
     }
 
     @Override
     public boolean acceptsEnergyFrom(IEnergyEmitter emitter, Direction direction) {
-        return direction != getOutputSide();
+        return !energyStorage.scexNetworkControlled() && direction != getOutputSide();
     }
 
     @Override
