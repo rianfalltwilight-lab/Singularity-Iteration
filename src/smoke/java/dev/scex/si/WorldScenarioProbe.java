@@ -42,6 +42,21 @@ public final class WorldScenarioProbe {
             com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_Energy_Container.class
                 .getProtectionDomain().getCodeSource().getLocation().toString()));
         NeoForge.EVENT_BUS.addListener(this::onTick);
+        NeoForge.EVENT_BUS.addListener(this::onChunkLoad);
+        NeoForge.EVENT_BUS.addListener(this::onChunkUnload);
+    }
+    private void onChunkLoad(net.neoforged.neoforge.event.level.ChunkEvent.Load event) {
+        recordChunkEvent("chunk-load-event",event);
+    }
+    private void onChunkUnload(net.neoforged.neoforge.event.level.ChunkEvent.Unload event) {
+        recordChunkEvent("chunk-unload-event",event);
+    }
+    private void recordChunkEvent(String kind,net.neoforged.neoforge.event.level.ChunkEvent event) {
+        if(finished || event.getLevel()!=server.overworld()) return;
+        var cp=event.getChunk().getPos();
+        if(positions.stream().noneMatch(p->(p.getX()>>4)==cp.x && (p.getZ()>>4)==cp.z)) return;
+        try{record(kind,Map.of("chunk_x",cp.x,"chunk_z",cp.z));}
+        catch(Exception error){error.printStackTrace();finish(false);}
     }
     private void record(String kind,Object value) throws Exception {
         Map<String,Object> row=new LinkedHashMap<>();row.put("tick",tick);row.put("kind",kind);row.put("value",value);
@@ -53,9 +68,13 @@ public final class WorldScenarioProbe {
             var world=server.overworld();
             for(BlockPos at:positions) {
                 Map<String,Object> row=new LinkedHashMap<>();row.put("x",at.getX());row.put("y",at.getY());row.put("z",at.getZ());
-                if(!world.hasChunkAt(at)){record("chunk-unloaded",row);continue;}
-                row.put("state",world.getBlockState(at).toString());record("block-state",row);
-                var tile=world.getBlockEntity(at);
+                row.put("block_ticking",world.shouldTickBlocksAt(net.minecraft.world.level.ChunkPos.asLong(at)));
+                var chunk=world.getChunkSource().getChunkNow(at.getX()>>4,at.getZ()>>4);
+                if(chunk==null){record("chunk-unloaded",row);continue;}
+                // World-level reads can renew a temporary chunk ticket. Observe
+                // the already-loaded chunk directly so this probe permits unload.
+                row.put("state",chunk.getBlockState(at).toString());record("block-state",row);
+                var tile=chunk.getBlockEntity(at,net.minecraft.world.level.chunk.LevelChunk.EntityCreationType.CHECK);
                 if(tile!=null) {
                     row=new LinkedHashMap<>(row);row.remove("state");
                     row.put("nbt",tile.saveWithFullMetadata(server.registryAccess()).toString());record("tile-save",row);
