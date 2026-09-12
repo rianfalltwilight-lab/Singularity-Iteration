@@ -1,0 +1,66 @@
+{
+  "rows": 188,
+  "r6_observation_checks": 5510,
+  "tsv_sha256": "aa2f35303f5c729c0a6090b2ce6d3af1035204baf4b58af4ae7b78cfac42e485",
+  "sources": [
+    {
+      "path": "evidence/r3/grid-fixtures-extended/reference/cases.json",
+      "sha256": "9057e790bcd048e74cf8e9a74c1bf1dd8a3a913c69e773514aee5459a5a13a34"
+    },
+    {
+      "path": "evidence/r3/grid-r3dev2-comparison.json",
+      "sha256": "5bd1b74e11dda1790561018feeec52ad5f7e833aae44900470ea0bcb36177e9c",
+      "used_side": "reference only"
+    },
+    {
+      "path": "evidence/r4/packet-fixtures/reference/cases.json",
+      "sha256": "5791b338ac67d89b4251e739ee4c65c0be4f85db383d937d070708c521bc0401"
+    },
+    {
+      "path": "evidence/r4/packets-r4dev3-comparison.json",
+      "sha256": "0477096f878e8734af9fe5dab477af1c7dc63437e51c0aa89ae3bc9f17327596",
+      "used_side": "reference only"
+    },
+    {
+      "path": "evidence\\r6\\partial-packets\\reference\\cases.json",
+      "sha256": "60522d24587dad3b3f2863590dd9f161efdd78bd4a97e18380e735355b9e505c"
+    },
+    {
+      "path": "evidence\\r6\\si-ic2-partial-r6-01-20260912\\retained\\002-observations.jsonl",
+      "sha256": "2c923ef9ee3a5e4c1c71a03f36e2ea106243f7b9af5700ea18f353f8d15f5b92"
+    },
+    {
+      "path": "evidence\\r6\\fuse-boundaries\\reference\\cases.json",
+      "sha256": "53c930d0398a065ff26973747c9193852e5bbc1b806b787f3713fa193b49c684"
+    },
+    {
+      "path": "evidence\\r6\\si-ic2-fuse-r6-01-20260912\\retained\\002-observations.jsonl",
+      "sha256": "c8712b3111e899987f38eaf385ed36e62ca858c8502f933ef6f4160e0af68d79"
+    }
+  ],
+  "excluded_cases": [
+    {
+      "case": "r3-normal/cesu-copper-1",
+      "reason": "Old overvoltage case; receiver damage is outside this component scope"
+    },
+    {
+      "case": "r3-normal/cesu-tin-1",
+      "reason": "Old overvoltage case; receiver damage is outside this component scope"
+    },
+    {
+      "case": "r3-normal/mfe-copper-1",
+      "reason": "Old overvoltage case; receiver damage is outside this component scope"
+    },
+    {
+      "case": "r3-normal/mfsu-glass-1",
+      "reason": "Old overvoltage case; receiver damage is outside this component scope"
+    }
+  ],
+  "reference_jar_sha256": "f96b1886b6d060b308fb811029d5c5cc76deb17b835aa368dcb6071f2de290d4",
+  "inputs": "Public placement, block-state and saved-energy observations only. No source/API/decompilation.",
+  "limitations": [
+    "No split/loop graphs or receiver overvoltage damage here.",
+    "Iron/glass limit inputs are tested-safe bounds, not measured ultimate fuse thresholds.",
+    "? mask positions were not observed."
+  ]
+}

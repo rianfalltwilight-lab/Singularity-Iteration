@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "full_source_review_complete": false,
+  "scope": "No IC2 source, API or decompiled implementation may be used in the delivered mod.",
+  "finding_limit": "Review boundaries are not findings of copying. No original IC2 implementation was inspected or compared.",
+  "unresolved_groups": [
+    {
+      "id": "grid",
+      "prefixes": ["src/main/java/com/singularity_iteration/mio_icif/energy/grid/"],
+      "paths": [],
+      "basis": "Existing author-feedback records an IC2 implementation adaptation notice in EnergyNetGlobal. Implementation bodies remain excluded."
+    },
+    {
+      "id": "legacy-grid",
+      "prefixes": ["src/main/java/com/singularity_iteration/mio_icif/energy/leg/"],
+      "paths": [],
+      "basis": "Legacy electrical implementation remains unreviewed and excluded from algorithm inspection."
+    },
+    {
+      "id": "flight-input",
+      "prefixes": [],
+      "paths": [
+        "src/main/java/com/singularity_iteration/mio_icif/Items/Armor/mio_icif_chestplate_jetpack_elc.java",
+        "src/main/java/com/singularity_iteration/mio_icif/Items/Armor/mio_icif_chestplate_advanced_jetpack.java",
+        "src/main/java/com/singularity_iteration/mio_icif/network/mio_icif_KeyboardManager.java",
+        "src/main/java/com/singularity_iteration/mio_icif/network/JetpackKeyStatePacket.java",
+        "src/main/java/com/singularity_iteration/mio_icif/network/JetpackModeSwitchPacket.java",
+        "src/main/java/com/singularity_iteration/mio_icif/util/JetpackKeyHandler.java",
+        "src/main/java/com/singularity_iteration/mio_icif/util/JetpackKeyHandlerClient.java",
+        "src/main/java/com/singularity_iteration/mio_icif/integration/curios/JetpackCuriosAdapter.java",
+        "src/main/java/com/singularity_iteration/mio_icif/api/item/IJetpackItem.java"
+      ],
+      "basis": "Existing audit records IC2 internal-class/method correspondence for flight and keyboard input. Supporting adapters are a conservative review boundary, not a copying finding."
+    },
+    {
+      "id": "energy-api",
+      "prefixes": ["src/main/java/com/singularity_iteration/mio_icif/api/energy/"],
+      "paths": [],
+      "basis": "Some SI-owned API comments identify counterpart IC2 methods. Own namespace/import absence alone cannot establish independent origin."
+    }
+  ]
+}

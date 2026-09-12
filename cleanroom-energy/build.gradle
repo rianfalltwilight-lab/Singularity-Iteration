@@ -1,0 +1,39 @@
+plugins { id 'java-library' }
+
+group = 'dev.scex'
+version = '0.1.0-r6-experimental'
+base { archivesName = 'scex-independent-energy' }
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+sourceSets {
+    contract {
+        compileClasspath = sourceSets.main.output
+        runtimeClasspath = output + compileClasspath
+    }
+}
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.compilerArgs += ['-Xlint:all', '-Werror']
+}
+tasks.withType(Jar).configureEach {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+    manifest.attributes('SCEX-Integration-Status': 'Standalone experimental component; not a Minecraft mod')
+}
+tasks.register('verifyDependencyBoundary') {
+    doLast {
+        if (!configurations.compileClasspath.files.empty || !configurations.runtimeClasspath.files.empty) {
+            throw new GradleException('Independent energy must have no external or legacy SI dependencies')
+        }
+        logger.lifecycle('SCEX_INDEPENDENT_BOUNDARY external_dependencies=0 legacy_dependencies=0')
+    }
+}
+tasks.named('compileJava') { dependsOn tasks.named('verifyDependencyBoundary') }
+tasks.register('contractTest', JavaExec) {
+    dependsOn tasks.named('contractClasses')
+    classpath = sourceSets.contract.runtimeClasspath
+    mainClass = 'dev.scex.energy.PacketLedgerContract'
+    args layout.projectDirectory.file('fixtures/observed-transfers.tsv').asFile.absolutePath
+    jvmArgs '-Xms32m', '-Xmx128m'
+}
+tasks.named('check') { dependsOn tasks.named('contractTest') }

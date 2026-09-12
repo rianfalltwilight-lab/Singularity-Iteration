@@ -1,0 +1,65 @@
+// SPDX-License-Identifier: Apache-2.0
+// Metadata inventory only: no target source search or implementation comparison.
+import groovy.json.JsonOutput
+import groovy.json.JsonSlurper
+import java.security.MessageDigest
+
+def policyFile = layout.projectDirectory.file('gradle/source-provenance-policy.json')
+def reportFile = layout.buildDirectory.file('reports/source-provenance.json')
+def mainInputs = fileTree('src/main') + fileTree('src/generated')
+
+tasks.register('sourceProvenanceReport') {
+    inputs.file(policyFile)
+    inputs.files(mainInputs)
+    outputs.file(reportFile)
+    doLast {
+        def policy = new JsonSlurper().parse(policyFile.asFile)
+        if (policy.schema_version != 1 || !(policy.full_source_review_complete instanceof Boolean)) {
+            throw new GradleException('Invalid source provenance policy')
+        }
+        def entries = mainInputs.files.findAll { it.isFile() }.collect { input ->
+            def path = relativePath(input).replace('\\', '/')
+            def groups = policy.unresolved_groups.findAll { group ->
+                group.paths.contains(path) || group.prefixes.any { path.startsWith(it) }
+            }.collect { it.id }
+            // Hash opaque bytes; never print source bodies or extract algorithms.
+            def digest = MessageDigest.getInstance('SHA-256')
+            input.withInputStream { stream ->
+                byte[] buffer = new byte[8192]
+                int count
+                while ((count = stream.read(buffer)) != -1) digest.update(buffer, 0, count)
+            }
+            [path: path, bytes: input.length(), sha256: digest.digest().encodeHex().toString(),
+             review_groups: groups, status: groups ? 'unresolved-boundary' : 'not-individually-cleared']
+        }.sort { it.path }
+        def counts = policy.unresolved_groups.collectEntries { group ->
+            [(group.id): entries.count { it.review_groups.contains(group.id) }]
+        }
+        def report = [schema_version: 1, full_source_review_complete: policy.full_source_review_complete,
+            distributable_as_ic2_code_free: false, finding_limit: policy.finding_limit,
+            unresolved_group_counts: counts, files: entries]
+        reportFile.get().asFile.parentFile.mkdirs()
+        reportFile.get().asFile.setText(JsonOutput.prettyPrint(JsonOutput.toJson(report)), 'UTF-8')
+        logger.lifecycle('SCEX_PROVENANCE unresolved_groups={} individually_cleared=false', counts)
+    }
+}
+
+tasks.register('verifyCleanroomRelease') {
+    dependsOn tasks.named('sourceProvenanceReport')
+    doLast {
+        def report = new JsonSlurper().parse(reportFile.get().asFile)
+        if (!report.full_source_review_complete || report.unresolved_group_counts.values().any { it > 0 }) {
+            throw new GradleException('SCEX_PROVENANCE_BLOCKED: original-source exclusion is not verified. '
+                + 'See build/reports/source-provenance.json. No full mod JAR may be packaged or published.')
+        }
+        // Reaching this line requires a separately reviewed policy implementation.
+        throw new GradleException('A reviewed release certification procedure is still required.')
+    }
+}
+
+// Existing frozen R5 artifacts remain historical comparison inputs. New root
+// archives and publications must not silently carry the unresolved old code.
+tasks.withType(Jar).configureEach { dependsOn tasks.named('verifyCleanroomRelease') }
+tasks.matching { it.name == 'jarJar' || it.name.startsWith('publish') }.configureEach {
+    dependsOn tasks.named('verifyCleanroomRelease')
+}

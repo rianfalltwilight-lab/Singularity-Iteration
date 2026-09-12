@@ -5,3 +5,4 @@ pluginManagement {
     }
 }
 rootProject.name = 'Singularity-Iteration'
+include 'cleanroom-energy'
