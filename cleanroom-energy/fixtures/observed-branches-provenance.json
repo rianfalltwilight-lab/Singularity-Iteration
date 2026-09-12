@@ -1,0 +1,46 @@
+{
+  "cases": 70,
+  "events": 88,
+  "scene_checks": 51340,
+  "tsv_sha256": "53a192b366e0be2499a1c2d30cd87e69af2435449f1952d102583cf6d88751c6",
+  "sources": [
+    {
+      "path": "evidence/r7/branches-02/reference/cases.json",
+      "sha256": "42d2bf234d6f1079529e4eec0cdea97afbfff61efa23bfae066bfacf14e5d9ab"
+    },
+    {
+      "path": "evidence/r7/branches-02-observations.json",
+      "sha256": "b3fbae188401165777ef29cc1c2847fa25810423df039e5b01b69a44be4f07fb"
+    },
+    {
+      "path": "evidence/r7/si-ic2-branches-r7-02-20260913/retained/002-observations.jsonl",
+      "sha256": "d442804b884c82fc1de893facd0019173c70bc1f10da96a2040dc51ec102a38f"
+    },
+    {
+      "path": "evidence/r7/si-ic2-branches-r7-02-20260913/completion.json",
+      "sha256": "2866f711fe2057244612bd21d95e5e63203a02aa006a9cb6f8ab12c4616056d3"
+    },
+    {
+      "path": "evidence/r7/branches-boundary/reference/cases.json",
+      "sha256": "ce958255864a504f1bd39de3e85a4c91b4200d43ae912d6ecc7000dd7e3800c3"
+    },
+    {
+      "path": "evidence/r7/branches-boundary-observations.json",
+      "sha256": "3fe12d9ea259406b3e21fee8c45560ebe71b0502dc8e49f30234ff91d52e2062"
+    },
+    {
+      "path": "evidence/r7/si-ic2-branches-r7-03-20260913/retained/002-observations.jsonl",
+      "sha256": "3f752f150d2ba3e406d9ef7d0d2233a1420f5041ac22b52e4c932b9f657eff1a"
+    },
+    {
+      "path": "evidence/r7/si-ic2-branches-r7-03-20260913/completion.json",
+      "sha256": "f839ec8095f5b008f5530f0bc4d36938c535bee4d46f1d03efa4ab75141f8bb5"
+    }
+  ],
+  "reference_jar_sha256": "f96b1886b6d060b308fb811029d5c5cc76deb17b835aa368dcb6071f2de290d4",
+  "evidence_type": "Ordinary public-game placement, block-state and saved-energy observations only; no target source/API/decompilation",
+  "excluded": [
+    "branches-01: horizontal cable fixture did not occupy intended positions; superseded by validated branches-02"
+  ],
+  "scope": "Per-packet accounting under all receiver permutations; order selection, its distribution and tick timing are NOT reproduced"
+}

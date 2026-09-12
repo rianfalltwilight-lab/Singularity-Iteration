@@ -1,7 +1,7 @@
 plugins { id 'java-library' }
 
 group = 'dev.scex'
-version = '0.1.0-r6-experimental'
+version = '0.2.0-r7-experimental'
 base { archivesName = 'scex-independent-energy' }
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
@@ -36,4 +36,21 @@ tasks.register('contractTest', JavaExec) {
     args layout.projectDirectory.file('fixtures/observed-transfers.tsv').asFile.absolutePath
     jvmArgs '-Xms32m', '-Xmx128m'
 }
-tasks.named('check') { dependsOn tasks.named('contractTest') }
+tasks.register('treeContractTest', JavaExec) {
+    dependsOn tasks.named('contractClasses')
+    classpath = sourceSets.contract.runtimeClasspath
+    mainClass = 'dev.scex.energy.TreeTopologyContract'
+    jvmArgs '-Xms32m', '-Xmx128m'
+}
+
+tasks.register('distributorContractTest', JavaExec) {
+    dependsOn tasks.named('contractClasses')
+    classpath = sourceSets.contract.runtimeClasspath
+    mainClass = 'dev.scex.energy.PacketDistributorContract'
+    args layout.projectDirectory.file('fixtures/observed-branches.tsv').asFile.absolutePath
+    jvmArgs '-Xms32m', '-Xmx128m'
+}
+
+tasks.named('check') {
+    dependsOn tasks.named('contractTest'), tasks.named('treeContractTest'), tasks.named('distributorContractTest')
+}

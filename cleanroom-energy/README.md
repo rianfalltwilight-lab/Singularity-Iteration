@@ -1,6 +1,6 @@
-# Independent energy accounting — R6 experimental
+# Independent energy accounting — R7 experimental
 
-This is a new, standalone Java 21 library, **not a Minecraft mod or a complete energy network replacement**. It has no SI, Minecraft, NeoForge, IC2 or other external dependency. No IC2 source, API or decompiled implementation was used to write it. Its two Java files were independently authored against ordinary game observations and accounting requirements. Existing upstream implementations with unresolved provenance were not used as templates.
+This is a new, standalone Java 21 library, **not a Minecraft mod or a complete energy network replacement**. It has no SI, Minecraft, NeoForge, IC2 or other external dependency. No IC2 source, API or decompiled implementation was used to write it. Its implementation and contracts were independently authored against ordinary game observations and accounting requirements. Existing upstream implementations with unresolved provenance were not used as templates.
 
 ## Observed scope
 
@@ -17,7 +17,17 @@ Examples from the new server experiments:
 
 The caller's tin/copper/gold safe-debit inputs 33/129/513 reflect measured boundaries for these integer-energy scenarios. Iron/glass fixture bounds of 2048 are only tested safe bounds, **not measured ultimate limits**. `?` cable positions were not sampled and are not asserted; `-` denotes an empty path.
 
-Not covered: multiple sources/receivers, branching/loops, mixed wires, fractional stored energy, receiver damage/explosions, world synchronization, persistence, chunk lifecycle, upgrades or flight. Loss at or above packet size is rejected because it is outside this observation set. A calculated plan needs fresh world-state validation before future integration.
+The R6 `PacketLedger` scope is unchanged. R7 adds the two components below for safe-conductor branching. Multiple sources, loops, mixed-wire behavior, fractional stored energy, receiver damage/explosions, world synchronization, persistence, chunk lifecycle, upgrades and flight remain uncovered. Loss at or above packet size is rejected because it is outside this observation set. A calculated plan needs fresh world-state validation before future integration.
+
+## R7 tree paths and shared packets
+
+`TreeTopology` owns an immutable copy of a connected acyclic conductor graph. Caller-assigned vertex IDs and per-conductor losses form the entire input. Compact adjacency and iterative traversal use O(V) time and storage; a source-contact index is built once and reused for allocation-free O(1) path-loss and length queries. The caller must rebuild snapshots/indexes when the network changes. There is no world reference, hidden global cache or automatic Minecraft lifecycle integration. Path enumeration is iterative O(path length).
+
+`PacketDistributor.allocate` shares **one** offered packet across receiver contacts in a caller-supplied permutation. The full-packet reserve requirement is checked once; receivers with smaller remaining capacity can leave budget for later contacts. Each positive receiver delivery pays its whole-path loss, including a shared trunk. Closed receivers cost nothing. When the remaining budget cannot cover a path loss plus positive delivery, that contact is skipped. Work and temporary storage are O(receiver count), using the reusable topology index. Conductors and receivers are assumed safe; this component does not implement overload effects.
+
+The new TSV freezes 70 valid black-box scenes and 88 nonzero transfer events with two or three receivers. For each observed preceding state, contracts enumerate all 2 or 6 receiver orders, then check the observed successor against the resulting set. **28 observed transitions have a unique result; 60 depend on order.** All 88 are compatible with this accounting model, but **receiver selection, fairness, random distribution and tick timing are not reproduced or verified**. This is not a claim of full behavior equivalence. The initial 40-scene fixture was excluded because some horizontal wires were not at the intended positions; a corrected fixture passed block identity checks before its data was used.
+
+Examples: a 32-unit offer can fill two 1-unit gaps in one transfer, debiting 2 with zero whole-path loss or 4 if each route loses 1. With 1 unit left in the packet and a remaining route loss of 1, no additional debit occurs. Empty large receivers do not necessarily receive equal shares; changing priority is deliberately the caller's responsibility.
 
 ## Build and verification
 
@@ -25,10 +35,10 @@ From this directory with JDK 21 and PowerShell, use a new output directory:
 
 ```powershell
 $env:JAVA_HOME = 'C:\Program Files\Eclipse Adoptium\jdk-21.0.12.8-hotspot'
-.\build-independent.ps1 -OutputDirectory C:\Temp\scex-energy-r6-build
+.\build-independent.ps1 -OutputDirectory C:\Temp\scex-energy-r7-build
 ```
 
-The script compiles the library and contract runner, runs all 188 frozen cases plus 20,000 deterministic randomized accounting checks and integer-overflow boundaries, then creates a reproducible standalone JAR. It needs no Gradle, Minecraft files, network or legacy repository. The JAR's timestamp is fixed. Its SHA differs from Gradle's container because packaging metadata differs.
+The script compiles the library and three contract runners, runs the 188 R6 cases, 70 R7 scenes, 20,000 randomized single-line and 20,000 randomized branching accounts, a 100,000-conductor chain with a million indexed queries, and invalid-input/overflow contracts, then creates a reproducible standalone JAR. It needs no Gradle, Minecraft files, network or legacy repository. The JAR's timestamp is fixed. Its SHA differs from Gradle's container because packaging metadata differs.
 
 Inside the development repository, the alternative is:
 
@@ -36,12 +46,12 @@ Inside the development repository, the alternative is:
 .\gradlew.bat --offline --no-daemon --max-workers=2 :cleanroom-energy:build
 ```
 
-The real verification task is `:cleanroom-energy:contractTest`; ordinary `test NO-SOURCE` is not the evidence. `verifyDependencyBoundary` rejects any external compile/runtime dependency.
+The real verification tasks are `:cleanroom-energy:contractTest`, `treeContractTest` and `distributorContractTest`; ordinary `test NO-SOURCE` is not the evidence. `verifyDependencyBoundary` rejects any external compile/runtime dependency.
 
 Bulk accounting uses constant time and space rather than allocating an object or iterating for every energy packet. The maximum-integer contract covers a 9,223,372,036,854,775,807-transfer direct connection. This establishes the component's calculation bound; **no integrated Minecraft TPS improvement has been measured**.
 
 ## Provenance and release boundary
 
-The existing full SI source still contains unresolved grid, legacy-grid, flight/input and energy API review boundaries. R6 blocks root JAR/publication tasks until a separately reviewed release procedure exists. Deleting a comment, changing a package name or changing a policy boolean does not clear this hold. This standalone component does not certify the remaining source or previously built R5 artifacts.
+The existing full SI source still contains unresolved grid, legacy-grid, flight/input and energy API review boundaries. The R6 hold on root JAR/publication tasks remains unchanged. Deleting a comment, changing a package name or changing a policy boolean does not clear this hold. This standalone component does not certify the remaining source or previously built R5 artifacts.
 
 License: Apache-2.0 for this new component; see LICENSE and file identifiers.
