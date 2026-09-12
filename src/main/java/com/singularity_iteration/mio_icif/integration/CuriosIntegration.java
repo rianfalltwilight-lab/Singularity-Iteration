@@ -63,6 +63,7 @@ public class CuriosIntegration {
     public static void register(IEventBus eventBus) {
         if (isCuriosLoaded()) {
             TRINKET_ITEMS.register(eventBus);
+            com.singularity_iteration.mio_icif.integration.curios.JetpackCuriosAdapter.register(eventBus);
         }
     }
 }

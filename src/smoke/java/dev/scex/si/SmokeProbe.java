@@ -23,13 +23,28 @@ public final class SmokeProbe {
         assertions++;
         if (!value) throw new AssertionError(label);
     }
+    private void checkOptionalCurios(net.minecraft.server.MinecraftServer server) {
+        var normal=BuiltInRegistries.ITEM.get(ResourceLocation.parse("mio_icif:armor/item_armor_jetpack_electric"));
+        var advanced=BuiltInRegistries.ITEM.get(ResourceLocation.parse("mio_icif:armor/item_armor_advanced_jetpack"));
+        check(normal!=Items.AIR,"normal-jetpack-always-registered");
+        check(advanced!=Items.AIR,"advanced-jetpack-always-registered");
+        check(normal instanceof com.singularity_iteration.mio_icif.api.item.IBackSlotItem
+            && advanced instanceof com.singularity_iteration.mio_icif.api.item.IBackSlotItem,"independent-back-slot-api");
+        if(net.neoforged.fml.ModList.get().isLoaded("curios")) assertions+=CuriosProbe.run(server);
+    }
     private void started(ServerStartedEvent event) {
         boolean passed = false;
         try {
+            if ("compat".equals(System.getProperty("scex.smoke.mode"))) {
+                checkOptionalCurios(event.getServer());
+                passed=true;
+                return;
+            }
             if ("boundaries".equals(System.getProperty("scex.smoke.mode"))) {
                 var result = new MachineBoundaryProbe().run(event.getServer());
                 assertions += result.assertions();
                 if (result.failures() != 0) throw new AssertionError("Machine boundary differences: " + result.failures());
+                checkOptionalCurios(event.getServer());
                 passed = true;
                 return;
             }
