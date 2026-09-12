@@ -1,4 +1,4 @@
-# Independent energy accounting — R8 experimental
+# Independent energy accounting — R9 experimental
 
 This is a new, standalone Java 21 library, **not a Minecraft mod or a complete energy network replacement**. It has no SI, Minecraft, NeoForge, IC2 or other external dependency. No IC2 source, API or decompiled implementation was used to write it. Its implementation and contracts were independently authored against ordinary game observations and accounting requirements. Existing upstream implementations with unresolved provenance were not used as templates.
 
@@ -39,16 +39,24 @@ The R8 fixtures freeze 54 valid scenes and 318 nonzero transitions: 12 loop/disc
 
 Four longer selection scenes yield 256 rounds with receiver-credit vectors `[32,32]` 161 times, `[0,64]` 45 times and `[64,0]` 50 times. These are descriptive counts only. **Scheduler order, probability distributions, fairness and tick timing remain unverified.** R8 does not establish full IC2 behavior equivalence. The initial loop fixture failed placement before charging and is excluded; an initial multi-source capsule was superseded before execution.
 
+## R9 registration lifecycle and uniform-path effects
+
+`ConductorRegistry` is a new, thread-confined six-neighbour lattice registry. Caller-supplied positions and losses are its only inputs. A chunk membership index removes only the registered positions in an unloaded chunk; no world/chunk lookup occurs. Mutations invalidate old snapshot leases and release their cached route indexes. Identical updates do not invalidate work. Repeated edits coalesce into one lazy topology rebuild, and source-route indexes use a caller-bounded LRU cache. Node capacity, negative coordinates, coordinate overflow, cross-thread access and close are explicit contracts. This is a platform-neutral design; actual Minecraft unload, event ordering and world-commit checks remain future integration work.
+
+`UniformPacketEffects` models one integer-energy packet on a uniform straight line. It returns source debit, path loss, whole-line fuse and receiver destruction. A destroyed receiver's retained energy is absent (`OptionalLong.empty()`), never represented as measured zero. The matching independent model keeps the receiver alive when the uniform line fuses. Otherwise it detects excessive receiver delivery and the measured conductor-boundary case. With five tin wires and a BatBox, a 33-unit source debit for a 32-unit gap destroys the receiver; a 34-unit debit for a 33-unit gap fuses the line and the receiver survives. Higher-tier receiver controls distinguish these effects. This is a model consistent with observations, not an inspected internal mechanism.
+
+The R9 fixture freezes 156 scenes in three normally stopped reference-server runs, with 126319 scene checks. The contracts compare source debit, receiver survival, and retained credit where observable. Cable survival is checked when the receiver survives; cable destruction near a destroyed receiver is excluded from the fuse oracle because it can be blast damage. Mixed paths, multi-source overload, shock damage, explosion strength/shape and timing remain unverified. The R6/R7/R8 accounting scopes are unchanged; R9 does not expand them automatically to arbitrary destructive networks.
+
 ## Build and verification
 
 From this directory with JDK 21 and PowerShell, use a new output directory:
 
 ```powershell
 $env:JAVA_HOME = 'C:\Program Files\Eclipse Adoptium\jdk-21.0.12.8-hotspot'
-.\build-independent.ps1 -OutputDirectory C:\Temp\scex-energy-r8-build
+.\build-independent.ps1 -OutputDirectory C:\Temp\scex-energy-r9-build
 ```
 
-The script compiles the library and five contract runners: 188 R6 cases, 70 R7 scenes, 54 R8 scenes, 20,000 randomized accounts each for single-line, branching and multi-source accounting, 120 random graphs against an independent all-pairs reference, a 100,000-conductor chain and a 100,000-conductor ring with one million indexed queries each, plus invalid-input/overflow contracts. It then creates a reproducible standalone JAR. It needs no Gradle, Minecraft files, network or legacy repository. The JAR's timestamp is fixed. Its SHA differs from Gradle's container because packaging metadata differs.
+The script compiles the library and seven contract runners: 188 R6 cases, 70 R7 scenes, 54 R8 scenes, 156 R9 scenes, 20,000 randomized accounts each for single-line, branching and multi-source accounting, 120 random graphs against an independent all-pairs reference, a 100,000-conductor chain and ring with one million indexed queries each, 2000 random registry edits checked against independent connectivity, a 100,000-node registry, and invalid-input/overflow contracts. It then creates a reproducible standalone JAR. It needs no Gradle, Minecraft files, network or legacy repository. The JAR's timestamp is fixed. Gradle includes extra debug metadata; signatures and instruction listings are compared separately from standalone archive reproducibility.
 
 Inside the development repository, the alternative is:
 
@@ -56,7 +64,7 @@ Inside the development repository, the alternative is:
 .\gradlew.bat --offline --no-daemon --max-workers=2 :cleanroom-energy:build
 ```
 
-The real verification tasks are `:cleanroom-energy:contractTest`, `treeContractTest`, `distributorContractTest`, `graphContractTest` and `multiSourceContractTest`; ordinary `test NO-SOURCE` is not the evidence. `verifyDependencyBoundary` rejects any external compile/runtime dependency.
+The real verification tasks are `:cleanroom-energy:contractTest`, `treeContractTest`, `distributorContractTest`, `graphContractTest`, `multiSourceContractTest`, `registryContractTest` and `effectsContractTest`; ordinary `test NO-SOURCE` is not the evidence. `verifyDependencyBoundary` rejects any external compile/runtime dependency.
 
 Bulk accounting uses constant time and space rather than allocating an object or iterating for every energy packet. The maximum-integer contract covers a 9,223,372,036,854,775,807-transfer direct connection. This establishes the component's calculation bound; **no integrated Minecraft TPS improvement has been measured**.
 

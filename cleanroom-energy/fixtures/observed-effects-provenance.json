@@ -1,0 +1,64 @@
+{
+  "cases": 156,
+  "scene_checks": 126319,
+  "receiver_destroyed": 59,
+  "tsv_sha256": "667bbf3147c388eb8eea23aec0867639f43e7df2dcca55a9a3b48dcf5fbbc338",
+  "sources": [
+    {
+      "path": "evidence/r9/effects-01/reference/cases.json",
+      "sha256": "71e06a9b88af4095046618c2955075d819911bc73c9d2877efe6c7361f9b005f"
+    },
+    {
+      "path": "evidence/r9/effects-01-observations.json",
+      "sha256": "86d98575b5820a5427e2a2c9d8628a279c874b8d9c2aadcf3b86069e11c952f1"
+    },
+    {
+      "path": "evidence/r9/si-ic2-effects-r9-01-20260913/retained/002-observations.jsonl",
+      "sha256": "4c579dd3b670384d40bc3df5399440609e171953baa26e7ec7b68f0d6b7626f4"
+    },
+    {
+      "path": "evidence/r9/si-ic2-effects-r9-01-20260913/completion.json",
+      "sha256": "81b2b07da32bd47e9b6ec67a40f2b21569579860b1c448820dacb78d9c22a44f"
+    },
+    {
+      "path": "evidence/r9/effects-thresholds/reference/cases.json",
+      "sha256": "08955fadfd024149e4adbe63dd68a19e13414898520841b2de2e43c0e04c5dcf"
+    },
+    {
+      "path": "evidence/r9/effects-thresholds-observations.json",
+      "sha256": "53b9b295ad73c4c619ba521c33aa5151b1d4c218e2723748c433dd70a45c001a"
+    },
+    {
+      "path": "evidence/r9/si-ic2-effects-r9-02-20260913/retained/002-observations.jsonl",
+      "sha256": "01c83129dd2ea1f13608a2ab36bfd267be524444367dfdb9873cfc29c2d5315d"
+    },
+    {
+      "path": "evidence/r9/si-ic2-effects-r9-02-20260913/completion.json",
+      "sha256": "38a00ca946ad24e5ac8ab4a1d8800c99d5dfdb9dbc0b6aa8d5d8e38140184217"
+    },
+    {
+      "path": "evidence/r9/effects-controls/reference/cases.json",
+      "sha256": "7f0f314ddd9edf829dff349f4de4d3e8cffc8c8109a5321fc92111bd2e547085"
+    },
+    {
+      "path": "evidence/r9/effects-controls-observations.json",
+      "sha256": "097149c814d41c55445f7e471a09572f3824d597f0067b3be78ced98c6796803"
+    },
+    {
+      "path": "evidence/r9/si-ic2-effects-r9-03-20260913/retained/002-observations.jsonl",
+      "sha256": "3b41ef5ff11ea6951ecc5537f63600c8a5998a6bc0f0d541aaf3d38463d78dee"
+    },
+    {
+      "path": "evidence/r9/si-ic2-effects-r9-03-20260913/completion.json",
+      "sha256": "b0f8cb0fb54dc50cbf0e7e4a42bafcac6a986a78dd3dc223e4062b10790ebd9a"
+    }
+  ],
+  "reference_jar_sha256": "f96b1886b6d060b308fb811029d5c5cc76deb17b835aa368dcb6071f2de290d4",
+  "method": "Ordinary placement, public commands, block state and saved energy only; no target source/API/decompilation",
+  "model_input_note": "Loss and safe limits are independent model inputs, not observed target internals.",
+  "limits": [
+    "Integer, single-source, single-packet uniform straight-line scenes only.",
+    "Destroyed receiver credit is unknown, not zero. No hidden damage callback order was observed.",
+    "Wire destruction when a receiver explodes can include blast effects; no explosion shape/strength model is certified."
+  ]
+}
