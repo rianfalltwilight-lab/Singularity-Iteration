@@ -1,3 +1,4 @@
+// SCEX 2026-09-12: invalidate the immutable sorted snapshot after registration.
 /*
  * MIT License
  *
@@ -454,6 +455,7 @@ public final class CableTier implements Comparable<CableTier>, ICableTier {
             }
         }
         tiers.put(tier.name, tier);
+        cachedAllTiers = null;
     }
 
     /**

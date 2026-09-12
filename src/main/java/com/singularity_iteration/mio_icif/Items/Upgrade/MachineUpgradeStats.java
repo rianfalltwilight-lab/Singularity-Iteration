@@ -1,3 +1,4 @@
+// SCEX 2026-09-12: cache immutable numeric statistics and fix registered-tier selection.
 package com.singularity_iteration.mio_icif.Items.Upgrade;
 
 import com.singularity_iteration.mio_icif.api.MioIcifAPI;
@@ -20,6 +21,21 @@ public class MachineUpgradeStats implements IMachineUpgradeStats {
     public static final double OVERCLOCKER_ENERGY_MULTIPLIER = 1.3;
     public static final long ENERGY_STORAGE_BONUS = 10000L;
     public static final long OVERCLOCKER_ENERGY_BONUS = 1000L;
+
+    private static final MachineUpgradeStats EMPTY = new MachineUpgradeStats(
+        0, 0, 0, 0, 0, 0, 0, false,
+        Collections.emptyList(), Collections.emptyList(), Collections.emptyList(), Collections.emptyList());
+
+    // Bounded shared tables avoid both repeated pow() calls and per-machine cache fields.
+    // Unusual counts retain the original calculation without growing a global cache.
+    private static final double[] PROCESS_MULTIPLIERS = multiplierTable(OVERCLOCKER_SPEED_MULTIPLIER);
+    private static final double[] ENERGY_MULTIPLIERS = multiplierTable(OVERCLOCKER_ENERGY_MULTIPLIER);
+
+    private static double[] multiplierTable(double base) {
+        double[] values = new double[257];
+        for (int count = 0; count < values.length; count++) values[count] = Math.pow(base, count);
+        return values;
+    }
 
     public final int overclockerCount;
     public final int energyStorageCount;
@@ -70,12 +86,12 @@ public class MachineUpgradeStats implements IMachineUpgradeStats {
         int fluidPulling = 0;
         boolean redstoneInverted = false;
 
-        List<DirectionalUpgrade> ejectorDirs = new ArrayList<>();
-        List<DirectionalUpgrade> pullingDirs = new ArrayList<>();
-        List<DirectionalUpgrade> fluidEjectorDirs = new ArrayList<>();
-        List<DirectionalUpgrade> fluidPullingDirs = new ArrayList<>();
+        List<DirectionalUpgrade> ejectorDirs = Collections.emptyList();
+        List<DirectionalUpgrade> pullingDirs = Collections.emptyList();
+        List<DirectionalUpgrade> fluidEjectorDirs = Collections.emptyList();
+        List<DirectionalUpgrade> fluidPullingDirs = Collections.emptyList();
 
-        int endSlot = Math.min(startSlot + count, itemHandler.getSlots());
+        int endSlot = (int) Math.min((long) startSlot + count, itemHandler.getSlots());
         for (int i = startSlot; i < endSlot; i++) {
             ItemStack stack = itemHandler.getStackInSlot(i);
             if (stack.isEmpty()) continue;
@@ -92,18 +108,22 @@ public class MachineUpgradeStats implements IMachineUpgradeStats {
                     case "transformer" -> transformer += amount;
                     case "ejector" -> {
                         ejector += amount;
+                        if (ejectorDirs.isEmpty()) ejectorDirs = new ArrayList<>();
                         ejectorDirs.add(new DirectionalUpgrade(dir, amount));
                     }
                     case "pulling" -> {
                         pulling += amount;
+                        if (pullingDirs.isEmpty()) pullingDirs = new ArrayList<>();
                         pullingDirs.add(new DirectionalUpgrade(dir, amount));
                     }
                     case "fluid_ejector" -> {
                         fluidEjector += amount;
+                        if (fluidEjectorDirs.isEmpty()) fluidEjectorDirs = new ArrayList<>();
                         fluidEjectorDirs.add(new DirectionalUpgrade(dir, amount));
                     }
                     case "fluid_pulling" -> {
                         fluidPulling += amount;
+                        if (fluidPullingDirs.isEmpty()) fluidPullingDirs = new ArrayList<>();
                         fluidPullingDirs.add(new DirectionalUpgrade(dir, amount));
                     }
                     case "redstone_inverter" -> redstoneInverted = true;
@@ -113,25 +133,27 @@ public class MachineUpgradeStats implements IMachineUpgradeStats {
             }
         }
 
+        if (overclocker == 0 && energyStorage == 0 && transformer == 0 && ejector == 0 && pulling == 0
+                && fluidEjector == 0 && fluidPulling == 0 && !redstoneInverted) return EMPTY;
         return new MachineUpgradeStats(overclocker, energyStorage, transformer, ejector,
             pulling, fluidEjector, fluidPulling, redstoneInverted,
             ejectorDirs, pullingDirs, fluidEjectorDirs, fluidPullingDirs);
     }
 
     public static MachineUpgradeStats empty() {
-        return new MachineUpgradeStats(0, 0, 0, 0, 0, 0, 0, false,
-            Collections.emptyList(), Collections.emptyList(),
-            Collections.emptyList(), Collections.emptyList());
+        return EMPTY;
     }
 
     @Override
     public double getProcessTimeMultiplier() {
-        return Math.pow(OVERCLOCKER_SPEED_MULTIPLIER, overclockerCount);
+        return overclockerCount >= 0 && overclockerCount < PROCESS_MULTIPLIERS.length
+            ? PROCESS_MULTIPLIERS[overclockerCount] : Math.pow(OVERCLOCKER_SPEED_MULTIPLIER, overclockerCount);
     }
 
     @Override
     public double getEnergyUsageMultiplier() {
-        return Math.pow(OVERCLOCKER_ENERGY_MULTIPLIER, overclockerCount);
+        return overclockerCount >= 0 && overclockerCount < ENERGY_MULTIPLIERS.length
+            ? ENERGY_MULTIPLIERS[overclockerCount] : Math.pow(OVERCLOCKER_ENERGY_MULTIPLIER, overclockerCount);
     }
 
     @Override
@@ -156,12 +178,21 @@ public class MachineUpgradeStats implements IMachineUpgradeStats {
 
     @Override
     public ICableTier getEffectiveCableTier(ICableTier baseTier) {
+        if (transformerCount <= 0) return baseTier;
         var allTiers = CableTier.allTiers();
-        int maxTierIndex = allTiers.size() - 1;
-        int targetIndex = Math.min(baseTier.getTier() + transformerCount, maxTierIndex);
-        if (targetIndex < 0 || targetIndex >= allTiers.size()) {
-            return allTiers.get(allTiers.size() - 1);
+        // Find the first registered voltage above the actual base voltage.
+        // An addon's ordinal is not an index into the sorted registry snapshot.
+        int low = 0;
+        int high = allTiers.size();
+        while (low < high) {
+            int middle = (low + high) >>> 1;
+            if (allTiers.get(middle).powerRating <= baseTier.getPowerRating()) {
+                low = middle + 1;
+            } else {
+                high = middle;
+            }
         }
+        int targetIndex = (int) Math.min((long) low + transformerCount - 1, allTiers.size() - 1L);
         return allTiers.get(targetIndex);
     }
 
