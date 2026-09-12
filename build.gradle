@@ -322,6 +322,7 @@ if (project.hasProperty('withSmoke')) {
             programArguments.addAll '--nogui', '--port', '0'
             jvmArguments.set(['-Xms256m', '-Xmx2G', '-XX:ActiveProcessorCount=2'])
             systemProperty 'scex.smoke.result', file(project.findProperty('smokeResult') ?: '../runs/r1-smoke/probe-result.json').absolutePath
+            systemProperty 'scex.smoke.mode', project.findProperty('smokeMode') ?: 'inventory'
         }
       }
       mods { scex_si_smoke { sourceSet sourceSets.smoke } }

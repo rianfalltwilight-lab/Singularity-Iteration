@@ -26,6 +26,20 @@ public final class SmokeProbe {
     private void started(ServerStartedEvent event) {
         boolean passed = false;
         try {
+            if ("boundaries".equals(System.getProperty("scex.smoke.mode"))) {
+                var result = new MachineBoundaryProbe().run(event.getServer());
+                assertions += result.assertions();
+                if (result.failures() != 0) throw new AssertionError("Machine boundary differences: " + result.failures());
+                passed = true;
+                return;
+            }
+            if ("machine".equals(System.getProperty("scex.smoke.mode"))) {
+                var result = new MachineReferenceProbe().run(event.getServer());
+                assertions += result.assertions();
+                if (result.failures() != 0) throw new AssertionError("Machine reference differences: " + result.failures());
+                passed = true;
+                return;
+            }
             var overclocker = BuiltInRegistries.ITEM.get(ResourceLocation.parse("mio_icif:upgrade/overclocker_upgrade"));
             var transformer = BuiltInRegistries.ITEM.get(ResourceLocation.parse("mio_icif:upgrade/transformer_upgrade"));
             check(overclocker != Items.AIR && transformer != Items.AIR, "registered-upgrade-items");
@@ -37,7 +51,7 @@ public final class SmokeProbe {
             check(stats.getTransformerCount() == 1, "real-item-transformer-detection");
             check(stats.getEffectiveCableTier(CableTier.LV) == CableTier.MV, "real-item-transformer-result");
             check(stats.getProcessTicks(200) == 98, "si-current-processing-result");
-            check(stats.getEnergyPerTick(32) == (long) Math.ceil(32 * Math.pow(1.3, 2)), "si-current-energy-result");
+            check(stats.getEnergyPerTick(32) == Math.round(32 * Math.pow(1.6, 2)), "experimental-energy-result");
             var copy = new ItemStackHandler(4);
             copy.deserializeNBT(event.getServer().registryAccess(), inventory.serializeNBT(event.getServer().registryAccess()));
             var restored = MachineUpgradeStats.fromInventory(copy, 0, 4);

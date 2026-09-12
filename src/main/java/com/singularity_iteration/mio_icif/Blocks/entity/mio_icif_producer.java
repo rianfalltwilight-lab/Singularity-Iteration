@@ -58,6 +58,7 @@ public abstract class mio_icif_producer extends mio_icif_Energy_Block implements
     protected int progress;
     protected int maxProgress;
     protected final int baseMaxProgress;
+    protected final long baseMaxReceive;
 
     protected final long baseCapacity;
 
@@ -244,6 +245,7 @@ public abstract class mio_icif_producer extends mio_icif_Energy_Block implements
                               int maxProgress, SlotLayout slotLayout, long energyPerTick, CableTier cableTier) {
         super(pos, state, type, capacity, maxReceive, maxExtract, cableTier);
         this.baseMaxProgress = maxProgress;
+        this.baseMaxReceive = maxReceive;
         this.maxProgress = maxProgress;
         this.baseCapacity = capacity;
         this.energyPerTick = energyPerTick;
@@ -389,19 +391,7 @@ public abstract class mio_icif_producer extends mio_icif_Energy_Block implements
         if (!blockEntity.canWorkRedstone()) {
             blockEntity.stopWork();
         } else {
-            // 执行生产逻辑
-            if (blockEntity.canWork()) {
-                blockEntity.doWork();
-            } else {
-                // 检查是否需要重置进度（解决"一格通病"）
-                if (blockEntity.shouldResetProgress()) {
-                    blockEntity.progress = 0;
-                }
-                blockEntity.stopWork();
-            }
-
-            // 更新工作进度（在doWork之后，确保isWorking状态正确）
-            blockEntity.updateProgress();
+            blockEntity.tickProduction();
         }
 
         // 处理电池槽放电（仅从电池获取能量，不给电池充电）
@@ -424,6 +414,18 @@ public abstract class mio_icif_producer extends mio_icif_Energy_Block implements
         }
     }
 
+    // SCEX: extension point for machines with a measured, discrete operation cycle.
+    // Keep the existing scheduler for machines with their own heat/fluid/continuous logic.
+    protected void tickProduction() {
+        if (canWork()) {
+            doWork();
+        } else {
+            if (shouldResetProgress()) progress = 0;
+            stopWork();
+        }
+        updateProgress();
+    }
+
     /**
      * 刷新升级插件统计信息
      * 超频升级：每 tick 处理更多进度，消耗更多EU，电压等级不变
@@ -432,6 +434,24 @@ public abstract class mio_icif_producer extends mio_icif_Energy_Block implements
         int upgradeStart = slotLayout.getStart(SlotType.UPGRADE);
         int upgradeCount = slotLayout.getCount(SlotType.UPGRADE);
         this.upgradeStats = MachineUpgradeStats.fromInventory(itemHandler, upgradeStart, upgradeCount);
+        updateProcessingParameters();
+        long newCapacity = getProcessingCapacity();
+        IEnergyTileAccess api = getEnergyAPI();
+        if (newCapacity != api.getMaxEnergy()) {
+            api.setCapacity(newCapacity);
+        }
+
+        long effectiveMaxReceive = getEffectiveMaxReceive();
+        if (effectiveMaxReceive != api.getMaxReceive()) {
+            energyStorage.setMaxReceive(effectiveMaxReceive);
+        }
+    }
+
+    protected long getProcessingCapacity() {
+        return baseCapacity + upgradeStats.getEnergyCapacityBonus();
+    }
+
+    protected void updateProcessingParameters() {
         // 超频升级改为1tick 增加更多进度，而不是减少最大进度
         // 因此这里只需要把旧存档可能被改过的maxProgress 恢复成基础值
         if (this.maxProgress != this.baseMaxProgress) {
@@ -439,18 +459,6 @@ public abstract class mio_icif_producer extends mio_icif_Energy_Block implements
             if (this.progress > this.maxProgress) {
                 this.progress = this.maxProgress;
             }
-        }
-        // 应用能量储存升级对容量的影响（基于基础容量计算，避免重复叠加）
-        long newCapacity = baseCapacity + upgradeStats.getEnergyCapacityBonus();
-        IEnergyTileAccess api = getEnergyAPI();
-        if (newCapacity != api.getMaxEnergy()) {
-            api.setCapacity(newCapacity);
-        }
-
-        // 应用变压器升级对最大接收速率的影响
-        long effectiveMaxReceive = getEffectiveMaxReceive();
-        if (effectiveMaxReceive != api.getMaxReceive()) {
-            energyStorage.setMaxReceive(effectiveMaxReceive);
         }
     }
 
@@ -1078,9 +1086,8 @@ public abstract class mio_icif_producer extends mio_icif_Energy_Block implements
 
     @Override
     public long getEffectiveMaxReceive() {
-        long base = energyStorage.getMaxReceive();
         // 变压器升级提升最大接收速率到有效等级的电压等级
-        return Math.max(base, getEffectiveCableTier().getPowerRating());
+        return Math.max(baseMaxReceive, getEffectiveCableTier().getPowerRating());
     }
 
     /**
@@ -1262,6 +1269,9 @@ public abstract class mio_icif_producer extends mio_icif_Energy_Block implements
         lastInputStacks = null;
 
         recalculateUpgradeStats();
+        // The energy base class loads before the upgrade inventory. Restore against
+        // the final capacity so a reload does not truncate an upgraded machine's EU.
+        if (tag.contains("energy", net.minecraft.nbt.Tag.TAG_ANY_NUMERIC)) apiSetEnergy(tag.getLong("energy"));
     }
 
     @Override

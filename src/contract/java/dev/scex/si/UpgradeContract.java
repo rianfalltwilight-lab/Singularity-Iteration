@@ -48,14 +48,17 @@ public final class UpgradeContract {
         for (int count : new int[] {0, 1, 2, 8, 32, 128, 1024, Integer.MAX_VALUE}) {
             var stats = stats(count, 0);
             double speed = Math.pow(0.7, count);
-            double cost = Math.pow(1.3, count);
+            // Deliberate r2 behavior change; r1 froze the author's 1.3/ceil design.
+            double cost = Math.pow(1.6, count);
             check(Double.doubleToLongBits(stats.getProcessTimeMultiplier()) == Double.doubleToLongBits(speed), "speed-bits-" + count);
             check(Double.doubleToLongBits(stats.getEnergyUsageMultiplier()) == Double.doubleToLongBits(cost), "cost-bits-" + count);
             for (int ticks : new int[] {1, 20, 200, Integer.MAX_VALUE}) {
-                check(stats.getProcessTicks(ticks) == Math.max(1, (int) Math.ceil(ticks * speed)), "ticks-" + count + "-" + ticks);
+                double duration = Math.max(1, ticks) * speed;
+                int batch = Math.max(1, Math.min(64, (int) Math.ceil(1.0 / duration)));
+                check(stats.getProcessTicks(ticks) == Math.max(1, Math.round(duration * batch)), "ticks-" + count + "-" + ticks);
             }
             for (long eu : new long[] {1, 32, 2048, Long.MAX_VALUE}) {
-                check(stats.getEnergyPerTick(eu) == Math.max(1, (long) Math.ceil(eu * cost)), "energy-" + count + "-" + eu);
+                check(stats.getEnergyPerTick(eu) == Math.max(1, Math.round(eu * cost)), "energy-" + count + "-" + eu);
             }
         }
         var empty = MachineUpgradeStats.empty();

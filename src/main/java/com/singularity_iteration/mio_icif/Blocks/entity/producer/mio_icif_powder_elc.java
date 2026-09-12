@@ -2,6 +2,7 @@ package com.singularity_iteration.mio_icif.Blocks.entity.producer;
 
 import com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_block_entities;
 import com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_producer;
+import com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_standard_producer;
 import com.singularity_iteration.mio_icif.Blocks.entity.slot.SlotLayout;
 import com.singularity_iteration.mio_icif.energy.EnergyUnit.CableTier;
 import com.singularity_iteration.mio_icif.recipe.mio_icif_ModRecipes;
@@ -27,7 +28,7 @@ import java.util.Optional;
  * 使用电力将物品粉碎成粉末
  */
 @SuppressWarnings("null")
-public class mio_icif_powder_elc extends mio_icif_producer {
+public class mio_icif_powder_elc extends mio_icif_standard_producer {
 
     private static final SlotLayout LAYOUT = SlotLayout.builder()
         .input(1)

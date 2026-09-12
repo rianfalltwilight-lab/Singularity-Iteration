@@ -18,7 +18,8 @@ import java.util.List;
 public class MachineUpgradeStats implements IMachineUpgradeStats {
 
     public static final double OVERCLOCKER_SPEED_MULTIPLIER = 0.7;
-    public static final double OVERCLOCKER_ENERGY_MULTIPLIER = 1.3;
+    // SCEX alignment: user selected original Experimental behavior over the author's 1.3 design.
+    public static final double OVERCLOCKER_ENERGY_MULTIPLIER = 1.6;
     public static final long ENERGY_STORAGE_BONUS = 10000L;
     public static final long OVERCLOCKER_ENERGY_BONUS = 1000L;
 
@@ -158,7 +159,7 @@ public class MachineUpgradeStats implements IMachineUpgradeStats {
 
     @Override
     public int getProcessTicks(int baseTicks) {
-        return Math.max(1, (int) Math.ceil(baseTicks * getProcessTimeMultiplier()));
+        return StandardProcessingTiming.cycleTicks(baseTicks, getProcessTimeMultiplier());
     }
 
     @Override
@@ -168,7 +169,7 @@ public class MachineUpgradeStats implements IMachineUpgradeStats {
 
     @Override
     public long getEnergyPerTick(long baseEnergyPerTick) {
-        return Math.max(1, (long) Math.ceil(baseEnergyPerTick * getEnergyUsageMultiplier()));
+        return Math.max(1, Math.round(baseEnergyPerTick * getEnergyUsageMultiplier()));
     }
 
     @Override
