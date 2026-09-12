@@ -1,6 +1,6 @@
 param([Parameter(Mandatory)][string]$OutputDirectory)
 $ErrorActionPreference = 'Stop'
-$version = '0.2.0-r7-experimental'
+$version = '0.3.0-r8-experimental'
 $target = [IO.Path]::GetFullPath($OutputDirectory)
 if (Test-Path -LiteralPath $target) { throw 'Use a fresh output directory for a reproducible build' }
 $jdk = if ($env:JAVA_HOME) { Join-Path $env:JAVA_HOME 'bin' } else { Split-Path (Get-Command javac).Source }
@@ -25,6 +25,10 @@ if ($LASTEXITCODE -ne 0) { throw 'Contract verification failed' }
 if ($LASTEXITCODE -ne 0) { throw 'Tree contract verification failed' }
 & $java -Xms32m -Xmx128m -cp ($classes + [IO.Path]::PathSeparator + $contracts) dev.scex.energy.PacketDistributorContract (Join-Path $PSScriptRoot 'fixtures/observed-branches.tsv')
 if ($LASTEXITCODE -ne 0) { throw 'Distributor contract verification failed' }
+& $java -Xms32m -Xmx128m -cp ($classes + [IO.Path]::PathSeparator + $contracts) dev.scex.energy.ConductorGraphContract
+if ($LASTEXITCODE -ne 0) { throw 'Graph contract verification failed' }
+& $java -Xms32m -Xmx128m -cp ($classes + [IO.Path]::PathSeparator + $contracts) dev.scex.energy.MultiSourceContract (Join-Path $PSScriptRoot 'fixtures/observed-graphs.tsv')
+if ($LASTEXITCODE -ne 0) { throw 'Multi-source contract verification failed' }
 $manifest = Join-Path $target 'MANIFEST.MF'
 [IO.File]::WriteAllText($manifest, "Manifest-Version: 1.0`nImplementation-Version: $version`nSCEX-Integration-Status: Standalone experimental component; not a Minecraft mod`n`n", [Text.UTF8Encoding]::new($false))
 $artifact = Join-Path $target "scex-independent-energy-$version.jar"

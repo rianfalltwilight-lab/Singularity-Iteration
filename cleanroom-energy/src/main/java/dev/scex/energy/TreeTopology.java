@@ -116,7 +116,7 @@ public final class TreeTopology {
     }
 
     /** Path queries allocate nothing and retain no world or block entity. */
-    public static final class Routes {
+    public static final class Routes implements RouteCosts {
         private final int[] parents;
         private final int[] counts;
         private final long[] totals;
@@ -125,6 +125,12 @@ public final class TreeTopology {
             this.parents = parents;
             this.counts = counts;
             this.totals = totals;
+        }
+
+        @Override
+        public boolean reaches(int receiverContact) {
+            checkVertex(receiverContact, parents.length);
+            return true;
         }
 
         public long lossMilliTo(int receiverContact) {

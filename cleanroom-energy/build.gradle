@@ -1,7 +1,7 @@
 plugins { id 'java-library' }
 
 group = 'dev.scex'
-version = '0.2.0-r7-experimental'
+version = '0.3.0-r8-experimental'
 base { archivesName = 'scex-independent-energy' }
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
@@ -54,3 +54,20 @@ tasks.register('distributorContractTest', JavaExec) {
 tasks.named('check') {
     dependsOn tasks.named('contractTest'), tasks.named('treeContractTest'), tasks.named('distributorContractTest')
 }
+
+tasks.register('graphContractTest', JavaExec) {
+    dependsOn tasks.named('contractClasses')
+    classpath = sourceSets.contract.runtimeClasspath
+    mainClass = 'dev.scex.energy.ConductorGraphContract'
+    jvmArgs '-Xms32m', '-Xmx128m'
+}
+tasks.named('check') { dependsOn tasks.named('graphContractTest') }
+
+tasks.register('multiSourceContractTest', JavaExec) {
+    dependsOn tasks.named('contractClasses')
+    classpath = sourceSets.contract.runtimeClasspath
+    mainClass = 'dev.scex.energy.MultiSourceContract'
+    args layout.projectDirectory.file('fixtures/observed-graphs.tsv').asFile.absolutePath
+    jvmArgs '-Xms32m', '-Xmx128m'
+}
+tasks.named('check') { dependsOn tasks.named('multiSourceContractTest') }

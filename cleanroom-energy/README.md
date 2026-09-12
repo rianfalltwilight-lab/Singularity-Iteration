@@ -1,4 +1,4 @@
-# Independent energy accounting — R7 experimental
+# Independent energy accounting — R8 experimental
 
 This is a new, standalone Java 21 library, **not a Minecraft mod or a complete energy network replacement**. It has no SI, Minecraft, NeoForge, IC2 or other external dependency. No IC2 source, API or decompiled implementation was used to write it. Its implementation and contracts were independently authored against ordinary game observations and accounting requirements. Existing upstream implementations with unresolved provenance were not used as templates.
 
@@ -17,7 +17,7 @@ Examples from the new server experiments:
 
 The caller's tin/copper/gold safe-debit inputs 33/129/513 reflect measured boundaries for these integer-energy scenarios. Iron/glass fixture bounds of 2048 are only tested safe bounds, **not measured ultimate limits**. `?` cable positions were not sampled and are not asserted; `-` denotes an empty path.
 
-The R6 `PacketLedger` scope is unchanged. R7 adds the two components below for safe-conductor branching. Multiple sources, loops, mixed-wire behavior, fractional stored energy, receiver damage/explosions, world synchronization, persistence, chunk lifecycle, upgrades and flight remain uncovered. Loss at or above packet size is rejected because it is outside this observation set. A calculated plan needs fresh world-state validation before future integration.
+The R6 `PacketLedger` scope is unchanged. R7 adds the two components below for safe-conductor branching; R8 extends accounting to selected multi-source, loop and mixed copper/glass scenes. Fractional stored energy, receiver damage/explosions, world synchronization, persistence, chunk lifecycle, upgrades and flight remain uncovered. Loss at or above packet size is rejected because it is outside this observation set. A calculated plan needs fresh world-state validation before future integration.
 
 ## R7 tree paths and shared packets
 
@@ -29,16 +29,26 @@ The new TSV freezes 70 valid black-box scenes and 88 nonzero transfer events wit
 
 Examples: a 32-unit offer can fill two 1-unit gaps in one transfer, debiting 2 with zero whole-path loss or 4 if each route loses 1. With 1 unit left in the packet and a remaining route loss of 1, no additional debit occurs. Empty large receivers do not necessarily receive equal shares; changing priority is deliberately the caller's responsibility.
 
+## R8 general graphs and multi-source rounds
+
+`ConductorGraph` accepts immutable undirected conductor snapshots with cycles and disconnected parts. An indexed binary heap constructs a minimum-loss source index in O((V+E) log V) time with at most V active heap entries, followed by allocation-free O(1) reachability/loss queries. Unreachable contacts receive no energy. Path enumeration is iterative. This is an independently chosen algorithm consistent with the observed loop balances; it does not establish the target's algorithm or physical path choice at equal cost. Snapshots must be replaced when topology changes.
+
+`MultiSourceDistributor` settles one offered packet per source, in caller-supplied source and per-source receiver orders. Still-active receivers retain the round's original demand quote; receivers already filled are skipped. **Remaining room can become negative:** this intentionally models observed multi-source capacity overshoot. It does not silently clamp receipt energy or assume every source sees an updated capacity. Input demand is nonnegative; callers start the next round with `max(0, actual remaining room)`.
+
+The R8 fixtures freeze 54 valid scenes and 318 nonzero transitions: 12 loop/disconnection scenes, 26 source-contention/selection scenes and 16 dedicated overshoot/control scenes. Contracts enumerate all permitted order combinations before comparing observable per-source debits and aggregate receiver credits. Of the transitions, 23 have a unique outcome and 295 depend on order; 12 transitions overshoot capacity, across 9 scenes, by at most 31 EU in this sample. Repeated two-source overshoot and single-active-source controls confirm that strict shared live-capacity accounting would reject actual observations. This does not prove the internal mechanism or the general maximum overshoot.
+
+Four longer selection scenes yield 256 rounds with receiver-credit vectors `[32,32]` 161 times, `[0,64]` 45 times and `[64,0]` 50 times. These are descriptive counts only. **Scheduler order, probability distributions, fairness and tick timing remain unverified.** R8 does not establish full IC2 behavior equivalence. The initial loop fixture failed placement before charging and is excluded; an initial multi-source capsule was superseded before execution.
+
 ## Build and verification
 
 From this directory with JDK 21 and PowerShell, use a new output directory:
 
 ```powershell
 $env:JAVA_HOME = 'C:\Program Files\Eclipse Adoptium\jdk-21.0.12.8-hotspot'
-.\build-independent.ps1 -OutputDirectory C:\Temp\scex-energy-r7-build
+.\build-independent.ps1 -OutputDirectory C:\Temp\scex-energy-r8-build
 ```
 
-The script compiles the library and three contract runners, runs the 188 R6 cases, 70 R7 scenes, 20,000 randomized single-line and 20,000 randomized branching accounts, a 100,000-conductor chain with a million indexed queries, and invalid-input/overflow contracts, then creates a reproducible standalone JAR. It needs no Gradle, Minecraft files, network or legacy repository. The JAR's timestamp is fixed. Its SHA differs from Gradle's container because packaging metadata differs.
+The script compiles the library and five contract runners: 188 R6 cases, 70 R7 scenes, 54 R8 scenes, 20,000 randomized accounts each for single-line, branching and multi-source accounting, 120 random graphs against an independent all-pairs reference, a 100,000-conductor chain and a 100,000-conductor ring with one million indexed queries each, plus invalid-input/overflow contracts. It then creates a reproducible standalone JAR. It needs no Gradle, Minecraft files, network or legacy repository. The JAR's timestamp is fixed. Its SHA differs from Gradle's container because packaging metadata differs.
 
 Inside the development repository, the alternative is:
 
@@ -46,7 +56,7 @@ Inside the development repository, the alternative is:
 .\gradlew.bat --offline --no-daemon --max-workers=2 :cleanroom-energy:build
 ```
 
-The real verification tasks are `:cleanroom-energy:contractTest`, `treeContractTest` and `distributorContractTest`; ordinary `test NO-SOURCE` is not the evidence. `verifyDependencyBoundary` rejects any external compile/runtime dependency.
+The real verification tasks are `:cleanroom-energy:contractTest`, `treeContractTest`, `distributorContractTest`, `graphContractTest` and `multiSourceContractTest`; ordinary `test NO-SOURCE` is not the evidence. `verifyDependencyBoundary` rejects any external compile/runtime dependency.
 
 Bulk accounting uses constant time and space rather than allocating an object or iterating for every energy packet. The maximum-integer contract covers a 9,223,372,036,854,775,807-transfer direct connection. This establishes the component's calculation bound; **no integrated Minecraft TPS improvement has been measured**.
 

@@ -4,7 +4,7 @@ package dev.scex.energy;
 import java.util.Objects;
 
 /**
- * One packet shared by receiver contacts on an indexed tree. The caller supplies
+ * One packet shared by receiver contacts on an indexed network. The caller supplies
  * receiver priority; this class does not reproduce a game's selection or random
  * distribution. Only safe conductors and accepting receivers are in scope.
  */
@@ -38,6 +38,12 @@ public final class PacketDistributor {
      */
     public static Allocation allocate(long reserve, long packet, TreeTopology.Routes routes,
                                       int[] contacts, long[] room, int[] priority) {
+        return allocate(reserve, packet, (RouteCosts) routes, contacts, room, priority);
+    }
+
+    /** General-index entry; disconnected contacts are skipped without a debit. */
+    public static Allocation allocate(long reserve, long packet, RouteCosts routes,
+                                      int[] contacts, long[] room, int[] priority) {
         Objects.requireNonNull(routes, "routes");
         Objects.requireNonNull(contacts, "contacts");
         Objects.requireNonNull(room, "room");
@@ -54,7 +60,11 @@ public final class PacketDistributor {
                 throw new IllegalArgumentException("Priority must be a complete receiver permutation");
             }
             seen[receiver] = true;
-            losses[i] = routes.wholeLossTo(contacts[i]);
+            boolean reachable = routes.reaches(contacts[i]);
+            losses[i] = reachable ? routes.wholeLossTo(contacts[i]) : -1;
+            if (reachable && (routes.lossMilliTo(contacts[i]) < 0 || losses[i] < 0)) {
+                throw new IllegalArgumentException("Negative route loss");
+            }
             if (room[i] < 0 || losses[i] >= packet) {
                 throw new IllegalArgumentException("Negative room or path loss outside observed scope");
             }
@@ -67,7 +77,7 @@ public final class PacketDistributor {
         long dissipated = 0;
         for (int receiver : priority) {
             long loss = losses[receiver];
-            if (room[receiver] == 0 || remaining <= loss) {
+            if (loss < 0 || room[receiver] == 0 || remaining <= loss) {
                 continue;
             }
             long delivered = Math.min(room[receiver], remaining - loss);

@@ -1,0 +1,68 @@
+{
+  "cases": 54,
+  "events": 318,
+  "scene_checks": 45781,
+  "overshoot_cases": 9,
+  "tsv_sha256": "7fc6e9ef92547d1d2b772a00d84f5aa84c8f4a31b1558de68994fbdb61e18390",
+  "sources": [
+    {
+      "path": "evidence/r8/loops-02/reference/cases.json",
+      "sha256": "8d2d74d0dfc406f62c56cb9a30ba4511e4fdce5e7655c16020a5fca7a0b35f92"
+    },
+    {
+      "path": "evidence/r8/loops-02-observations.json",
+      "sha256": "19bca9a7e4a500702ee630c8f07d49c2196c21d81dfd6443036f05ce44b88c0c"
+    },
+    {
+      "path": "evidence/r8/si-ic2-loops-r8-02-20260913/retained/002-observations.jsonl",
+      "sha256": "a3faabdb46657f5dd25612c050f7d4d432c4a5e37246f76953ace717f684064e"
+    },
+    {
+      "path": "evidence/r8/si-ic2-loops-r8-02-20260913/completion.json",
+      "sha256": "b24c4d7aadb250789a47143aac005eafed978b9af5948ee93ff39d7679bd3017"
+    },
+    {
+      "path": "evidence/r8/sources-02/reference/cases.json",
+      "sha256": "9a202cd9187deca856d204dfc500126345fa46a03d1ecc70814966ecab9a0ad3"
+    },
+    {
+      "path": "evidence/r8/sources-02-observations.json",
+      "sha256": "44db50a15c8f48fb13c8e25c556e9909c9b9ca06883f16694f01d03fc090a11b"
+    },
+    {
+      "path": "evidence/r8/si-ic2-multisource-r8-02-20260913/retained/002-observations.jsonl",
+      "sha256": "e30601a8c9103fcdaf9250b51d166b7571a740a2e17cdb53a750aec45b14d737"
+    },
+    {
+      "path": "evidence/r8/si-ic2-multisource-r8-02-20260913/completion.json",
+      "sha256": "a014532913e317874f664a9716ba7e939791a7f22de9b5d06527a0f8dd0e9280"
+    },
+    {
+      "path": "evidence/r8/overshoot-confirm/reference/cases.json",
+      "sha256": "fbb0d5405f4c6382b023e4933c4a463864d39b153ab03c6708ce467902133dcc"
+    },
+    {
+      "path": "evidence/r8/overshoot-confirm-observations.json",
+      "sha256": "6a7cbca063776e68693f33c3a0f14fb90182180e353acee3b606d3f3087139b2"
+    },
+    {
+      "path": "evidence/r8/si-ic2-overshoot-r8-01-20260913/retained/002-observations.jsonl",
+      "sha256": "78d1b3659ca79af5ef7a88c08f700175bda590ef1865f67c72c0f5d39adf6c0a"
+    },
+    {
+      "path": "evidence/r8/si-ic2-overshoot-r8-01-20260913/completion.json",
+      "sha256": "f0c3288d09db3c3cb8b1e65377025ebe9449ba42bdd201b8c56fb875fbd02f0b"
+    }
+  ],
+  "reference_jar_sha256": "f96b1886b6d060b308fb811029d5c5cc76deb17b835aa368dcb6071f2de290d4",
+  "method": "Ordinary public-game placement, state and saved-energy observations; no target source/API/decompilation",
+  "model_input_note": "Wire loss parameters are independently modelled input values; no internal target path or algorithm was observed.",
+  "limitations": [
+    "Exhaustive source/receiver orders establish permitted accounting transitions, not scheduler probabilities or fairness.",
+    "Capacity overshoot is an explicit observed result. Round quotes are a matching independent model, not an inspected internal algorithm."
+  ],
+  "excluded": [
+    "loops initial fixture failed at cable placement and is not a behavior oracle",
+    "sources initial capsule was superseded before running"
+  ]
+}
