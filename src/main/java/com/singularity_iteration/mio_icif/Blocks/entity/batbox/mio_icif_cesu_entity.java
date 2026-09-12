@@ -18,6 +18,11 @@ import net.minecraft.world.level.block.state.BlockState;
 public class mio_icif_cesu_entity extends mio_icif_Energy_Container {
 
     @Override
+    protected boolean usesClassicRedstoneThresholds() {
+        return getType() == mio_icif_block_entities.CESU.get();
+    }
+
+    @Override
     protected boolean requiresFullOutputPacket() {
         return true;
     }

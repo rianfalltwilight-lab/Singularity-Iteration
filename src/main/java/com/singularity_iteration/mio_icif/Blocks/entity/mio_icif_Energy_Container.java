@@ -289,6 +289,11 @@ public class mio_icif_Energy_Container extends mio_icif_Energy_Block implements 
         boolean shouldEmit = shouldEmitEnergy();
         this.energyStorage.setOutputEnabled(shouldEmit);
     }
+
+    /** Only the four measured classic storage blocks opt into these thresholds. */
+    protected boolean usesClassicRedstoneThresholds() {
+        return false;
+    }
     
     /**
      * 检查是否应该输出能量（根据红石模式）
@@ -297,8 +302,12 @@ public class mio_icif_Energy_Container extends mio_icif_Energy_Block implements 
         switch (this.redstoneMode) {
             case 5: // 接收到红石信号时停止输出
                 return !this.hasRedstoneInput;
-            case 6: // 接收到红石信号时停止输出，或严格满电时继续输出
+            case 6: // 有红石输入时，仅释放接近满电的余量
                 if (this.hasRedstoneInput) {
+                    if (usesClassicRedstoneThresholds()) {
+                        return this.energyStorage.getAmount() > this.energyStorage.getCapacity()
+                                - 20L * this.energyStorage.getMaxExtract();
+                    }
                     return this.energyStorage.getAmount() >= this.energyStorage.getCapacity();
                 }
                 return true;
@@ -314,14 +323,25 @@ public class mio_icif_Energy_Container extends mio_icif_Energy_Block implements 
      */
     public boolean shouldEmitRedstone() {
         switch (this.redstoneMode) {
-            case 1: // 严格满电时发出信号 (100%)
+            case 1: // 原版范围储电箱在剩余空间不超过 20 包时发出信号
+                if (usesClassicRedstoneThresholds()) {
+                    return this.energyStorage.getAmount() >= this.energyStorage.getCapacity()
+                            - 20L * this.energyStorage.getMaxExtract();
+                }
                 return this.energyStorage.getAmount() >= this.energyStorage.getCapacity();
             case 2: // 能量在中间范围时发出信号
                 return this.energyStorage.getAmount() > this.energyStorage.getMaxExtract() && 
                        this.energyStorage.getAmount() < this.energyStorage.getCapacity() - this.energyStorage.getMaxExtract();
             case 3: // 能量未满时发出信号
+                if (usesClassicRedstoneThresholds()) {
+                    return this.energyStorage.getAmount() < this.energyStorage.getCapacity()
+                            - this.energyStorage.getMaxExtract();
+                }
                 return this.energyStorage.getAmount() < this.energyStorage.getCapacity();
-            case 4: // 严格空电时发出信号 (0%)
+            case 4: // 原版范围储电箱不足一包时发出信号
+                if (usesClassicRedstoneThresholds()) {
+                    return this.energyStorage.getAmount() < this.energyStorage.getMaxExtract();
+                }
                 return this.energyStorage.getAmount() <= 0;
             default:
                 return false;
