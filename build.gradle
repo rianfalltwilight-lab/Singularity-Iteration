@@ -1,4 +1,6 @@
 // SCEX 2026-09-12: reproducible packaging and isolated contract tests.
+import org.apache.tools.ant.filters.FixCrLfFilter
+
 plugins {
     id 'java-library'
     id 'maven-publish'
@@ -33,7 +35,14 @@ sourceSets.main.resources {
 }
 
 processResources {
+    inputs.property('scex.textResourceEol', 'lf-v1')
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    filteringCharset = 'UTF-8'
+    // Git autocrlf and ZIP checkouts must produce the same text resource bytes.
+    filesMatching(['**/*.json', '**/*.mcmeta', '**/*.toml']) {
+        filter(FixCrLfFilter, eol: FixCrLfFilter.CrLf.newInstance('lf'),
+            eof: FixCrLfFilter.AddAsisRemove.newInstance('asis'), fixlast: false)
+    }
 }
 
 repositories {
@@ -220,8 +229,14 @@ dependencies {
 }
 
 tasks.named('jar').configure {
+    inputs.property('scex.licenseEol', 'lf-v1')
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     from(projectDir) { include 'LICENSE', 'NOTICE' }
+    filteringCharset = 'UTF-8'
+    filesMatching(['LICENSE', 'NOTICE']) {
+        filter(FixCrLfFilter, eol: FixCrLfFilter.CrLf.newInstance('lf'),
+            eof: FixCrLfFilter.AddAsisRemove.newInstance('asis'), fixlast: false)
+    }
 }
 
 tasks.withType(Jar).configureEach {
@@ -268,7 +283,11 @@ publishing {
 }
 
 tasks.withType(JavaCompile).configureEach {
+    inputs.property('scex.fullCompilation', true)
     options.encoding = 'UTF-8'
+    // Incremental javac can emit arg0 instead of the source constructor parameter
+    // names in anonymous classes, changing the final JAR after an otherwise equal build.
+    options.incremental = false
     options.compilerArgs += ['-Xlint:all', '-Xlint:-this-escape', '-encoding', 'UTF-8']
 }
 
