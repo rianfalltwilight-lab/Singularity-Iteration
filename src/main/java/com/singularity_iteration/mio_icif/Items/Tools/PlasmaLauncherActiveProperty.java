@@ -1,3 +1,4 @@
+// SCEX 2026-09-12: repaired malformed UTF-8 bytes in comments only.
 package com.singularity_iteration.mio_icif.Items.Tools;
 
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -6,8 +7,8 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 
 /**
- * 等离子射线枪激活状态属性函�?
- * 返回0=关闭（静态第一帧）�?=开启（循环播放动画�?
+ * 等离子射线枪激活状态属性函???
+ * 返回0=关闭（静态第一帧）???=开启（循环播放动画???
  * 用于模型override切换纹理
  */
 @SuppressWarnings({"null", "deprecation"})

@@ -1039,8 +1039,6 @@
   "container.mio_icif.matron": "作物监管机",
   "container.mio_icif.terra_elc": "地形转换机",
   "container.mio_icif.recycler": "回收机",
-  "container.mio_icif.batch_crafter": "批量工作台",
-  "container.mio_icif.chunk_loader": "区块加载器",
   "container.mio_icif.metal_former": "金属成型机",
   "container.mio_icif.magnetizer": "磁化机",
   "container.mio_icif.induction_elc": "感应炉",

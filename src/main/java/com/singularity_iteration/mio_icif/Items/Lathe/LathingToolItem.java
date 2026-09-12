@@ -1,3 +1,4 @@
+// SCEX 2026-09-12: repaired malformed UTF-8 bytes in comments only.
 package com.singularity_iteration.mio_icif.Items.Lathe;
 
 import com.singularity_iteration.mio_icif.api.item.ILatheItem;
@@ -14,7 +15,7 @@ import java.util.List;
 
 /**
  * 车床车刀物品
- * 对应 IC2 �?ItemLathingTool
+ * 对应 IC2 ???ItemLathingTool
  * 
  * 用于车床加工，有耐久度，需要硬度大于加工件才能加工
  */
@@ -103,8 +104,8 @@ public class LathingToolItem extends Item implements ILatheItem.ILatheTool {
      */
     @SuppressWarnings("null")
 public enum ToolMaterial {
-        IRON(2, 32),    // 铁车刀：硬�?，耐久32
-        DIAMOND(4, 64); // 钻石车刀：硬�?，耐久64
+        IRON(2, 32),    // 铁车刀：硬???，耐久32
+        DIAMOND(4, 64); // 钻石车刀：硬???，耐久64
 
         public final int hardness;
         public final int maxDamage;

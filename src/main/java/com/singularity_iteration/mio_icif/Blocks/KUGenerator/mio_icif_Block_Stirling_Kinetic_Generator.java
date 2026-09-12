@@ -1,3 +1,4 @@
+// SCEX 2026-09-12: repaired malformed UTF-8 bytes in comments only.
 package com.singularity_iteration.mio_icif.Blocks.KUGenerator;
 
 import com.singularity_iteration.mio_icif.Blocks.entity.KUEntity.KUGenerator.mio_icif_Stirling_Kinetic_Generator;
@@ -39,7 +40,7 @@ public class mio_icif_Block_Stirling_Kinetic_Generator extends mio_icif_entity_b
 
     @Override
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-        // FACING 由父类添加，只需要添�?ACTIVE
+        // FACING 由父类添加，只需要添???ACTIVE
         builder.add(ACTIVE);
         super.createBlockStateDefinition(builder);
     }
@@ -57,7 +58,7 @@ public class mio_icif_Block_Stirling_Kinetic_Generator extends mio_icif_entity_b
     }
 
     /**
-     * 设置渲染形状为模型渲染（方块形式�?     */
+     * 设置渲染形状为模型渲染（方块形式???     */
     @Override
     protected RenderShape getRenderShape(BlockState state) {
         return RenderShape.MODEL;

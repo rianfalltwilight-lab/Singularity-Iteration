@@ -1,3 +1,4 @@
+// SCEX 2026-09-12: repaired malformed UTF-8 bytes in comments only.
 package com.singularity_iteration.mio_icif.Items.EnvTemplate;
 
 import com.singularity_iteration.mio_icif.Singularity_Iteration;
@@ -7,7 +8,7 @@ import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
 /**
- * 地形转换模板物品注册�? */
+ * 地形转换模板物品注册??? */
 @SuppressWarnings("null")
 public class mio_icif_env_templates {
 

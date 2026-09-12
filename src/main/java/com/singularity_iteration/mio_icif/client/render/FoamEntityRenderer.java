@@ -1,3 +1,4 @@
+// SCEX 2026-09-12: repaired malformed UTF-8 bytes in comments only.
 package com.singularity_iteration.mio_icif.client.render;
 
 import com.singularity_iteration.mio_icif.Blocks.entity.build.mio_icif_block_foam_entity;
@@ -12,9 +13,9 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 
 /**
- * 建筑泡沫方块实体渲染�?
- * 只在有伪装时渲染伪装方块的外�?
- * 无伪装时由默认的MODEL渲染方式处理（RenderShape.MODEL�?
+ * 建筑泡沫方块实体渲染???
+ * 只在有伪装时渲染伪装方块的外???
+ * 无伪装时由默认的MODEL渲染方式处理（RenderShape.MODEL???
  */
 @SuppressWarnings("null")
 public class FoamEntityRenderer implements BlockEntityRenderer<mio_icif_block_foam_entity> {

@@ -1,3 +1,4 @@
+// SCEX 2026-09-12: repaired malformed UTF-8 bytes in comments only.
 package com.singularity_iteration.mio_icif.mixin;
 
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
@@ -22,7 +23,7 @@ public class DataComponentMaxStackMixin {
         )
     )
     private static Codec<Integer> replaceMaxStackCodec(Codec<Integer> original) {
-        // �?MAX_STACK_SIZE 数据组件的序列化范围�?0-64 改为 0-9999
+        // ???MAX_STACK_SIZE 数据组件的序列化范围???0-64 改为 0-9999
         return Codec.intRange(0, 9999);
     }
 }

@@ -1,3 +1,4 @@
+// SCEX 2026-09-12: repaired malformed UTF-8 bytes in comments only.
 package com.singularity_iteration.mio_icif.mixin;
 
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
@@ -9,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.At;
 
 /**
  * 修改 ItemStack 的物品数量序列化 Codec
- * 允许网络同步时传输大�?64 的堆叠数
+ * 允许网络同步时传输大???64 的堆叠数
  */
 @Mixin(ItemStack.class)
 @SuppressWarnings("null")

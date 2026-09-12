@@ -1,3 +1,4 @@
+// SCEX 2026-09-12: repaired malformed UTF-8 bytes in comments only.
 package com.singularity_iteration.mio_icif.Render;
 
 import com.singularity_iteration.mio_icif.Items.Tools.mio_icif_laser_bullet;
@@ -16,7 +17,7 @@ import org.joml.Matrix4f;
 /**
  * 镭射枪子弹渲染类 - 还原IC2原版LaserBulletEntityRenderer效果
  *
- * IC2原版渲染方式�? * - 使用laser.png纹理，白色着色（纹理本身提供颜色�? * - 旋转朝向飞行方向后，绕飞行轴(X�?旋转45�? * - 渲染一个头部方块（4x4双面方块，位于子弹尾部x=-7�? * - 渲染4个交叉的长方形片（每�?6x4，绕飞行轴每90度旋转一次，形成十字星形截面�? * - 缩放0.05625倍，X轴平�?4
+ * IC2原版渲染方式??? * - 使用laser.png纹理，白色着色（纹理本身提供颜色??? * - 旋转朝向飞行方向后，绕飞行轴(X???旋转45??? * - 渲染一个头部方块（4x4双面方块，位于子弹尾部x=-7??? * - 渲染4个交叉的长方形片（每???6x4，绕飞行轴每90度旋转一次，形成十字星形截面??? * - 缩放0.05625倍，X轴平???4
  */
 @SuppressWarnings("null")
 public class mio_icif_LaserBullet extends EntityRenderer<mio_icif_laser_bullet> {

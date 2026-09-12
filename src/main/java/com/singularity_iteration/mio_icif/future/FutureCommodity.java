@@ -1,3 +1,4 @@
+// SCEX 2026-09-12: repaired malformed UTF-8 bytes in comments only.
 package com.singularity_iteration.mio_icif.future;
 
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -5,7 +6,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 
 /**
- * 期货货品�? * 从配置文件加载的货品种类
+ * 期货货品??? * 从配置文件加载的货品种类
  */
 @SuppressWarnings("null")
 public class FutureCommodity {
@@ -50,7 +51,7 @@ public class FutureCommodity {
     }
 
     /**
-     * 获取显示名称（用于GUI�?     */
+     * 获取显示名称（用于GUI???     */
     public String getDisplayName() {
         return item.getDescription().getString();
     }

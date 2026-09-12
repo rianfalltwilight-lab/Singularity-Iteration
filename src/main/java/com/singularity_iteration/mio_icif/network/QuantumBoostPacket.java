@@ -1,3 +1,4 @@
+// SCEX 2026-09-12: repaired malformed UTF-8 bytes in comments only.
 package com.singularity_iteration.mio_icif.network;
 
 import com.singularity_iteration.mio_icif.Singularity_Iteration;
@@ -9,8 +10,8 @@ import net.minecraft.world.entity.player.Player;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 /**
- * 量子靴突进速度同步�?
- * 服务端计算速度后发送给客户端应�?
+ * 量子靴突进速度同步???
+ * 服务端计算速度后发送给客户端应???
  */
 @SuppressWarnings("null") public record QuantumBoostPacket(double motionX, double motionY, double motionZ) implements CustomPacketPayload {
 

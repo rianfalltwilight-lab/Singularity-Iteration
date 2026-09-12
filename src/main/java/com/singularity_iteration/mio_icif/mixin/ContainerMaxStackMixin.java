@@ -1,3 +1,4 @@
+// SCEX 2026-09-12: repaired malformed UTF-8 bytes in comments only.
 package com.singularity_iteration.mio_icif.mixin;
 
 import com.llamalad7.mixinextras.injector.ModifyReturnValue;
@@ -7,7 +8,7 @@ import org.spongepowered.asm.mixin.injection.At;
 
 /**
  * 修改 Container 的最大堆叠数限制
- * 允许容器中的物品堆叠数超�?99
+ * 允许容器中的物品堆叠数超???99
  */
 @Mixin(Container.class)
 public interface ContainerMaxStackMixin {

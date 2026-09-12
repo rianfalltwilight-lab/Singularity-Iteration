@@ -1,3 +1,4 @@
+// SCEX 2026-09-12: reproducible packaging and isolated contract tests.
 plugins {
     id 'java-library'
     id 'maven-publish'
@@ -220,6 +221,12 @@ dependencies {
 
 tasks.named('jar').configure {
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from(projectDir) { include 'LICENSE', 'NOTICE' }
+}
+
+tasks.withType(Jar).configureEach {
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
 }
 
 // This block of code expands all declared replace properties in the specified resource targets.
@@ -270,5 +277,53 @@ idea {
     module {
         downloadSources = true
         downloadJavadoc = true
+    }
+}
+
+// Tests use real SI and platform classes; they are never packaged into the mod.
+sourceSets {
+    contract {
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+    }
+    smoke {
+        compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath
+        runtimeClasspath += sourceSets.main.runtimeClasspath
+    }
+}
+tasks.register('contractTest', JavaExec) {
+    dependsOn tasks.named('contractClasses')
+    if (!project.hasProperty('baselineArtifact')) dependsOn tasks.named('jar')
+    def targetJar = project.findProperty('baselineArtifact') ?: tasks.named('jar').get().archiveFile.get().asFile
+    classpath = files(targetJar) + sourceSets.contract.output + sourceSets.main.compileClasspath
+    mainClass = 'dev.scex.si.UpgradeContract'
+    args(project.findProperty('contractMode') ?: 'regression')
+    jvmArgs '-XX:ActiveProcessorCount=2', '-Xms256m', '-Xmx512m'
+}
+
+dependencyLocking { lockAllConfigurations() }
+tasks.register('writeContractClasspath') {
+    dependsOn tasks.named('contractClasses')
+    doLast {
+        file('build/contract-classpath.json').text = groovy.json.JsonOutput.toJson(
+            (sourceSets.contract.output.files + sourceSets.main.compileClasspath.files).collect { it.absolutePath })
+    }
+}
+
+if (project.hasProperty('withSmoke')) {
+    if (project.hasProperty('withCurios')) {
+        dependencies { smokeRuntimeOnly "top.theillusivec4.curios:curios-neoforge:${curios_version}" }
+    }
+    neoForge {
+      runs {
+        smokeServer {
+            server()
+            sourceSet = sourceSets.smoke
+            gameDirectory = file(project.findProperty('smokeDirectory') ?: '../runs/r1-smoke')
+            programArguments.addAll '--nogui', '--port', '0'
+            jvmArguments.set(['-Xms256m', '-Xmx2G', '-XX:ActiveProcessorCount=2'])
+            systemProperty 'scex.smoke.result', file(project.findProperty('smokeResult') ?: '../runs/r1-smoke/probe-result.json').absolutePath
+        }
+      }
+      mods { scex_si_smoke { sourceSet sourceSets.smoke } }
     }
 }

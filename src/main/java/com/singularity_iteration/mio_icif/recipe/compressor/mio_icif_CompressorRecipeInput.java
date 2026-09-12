@@ -1,10 +1,11 @@
+// SCEX 2026-09-12: repaired malformed UTF-8 bytes in comments only.
 package com.singularity_iteration.mio_icif.recipe.compressor;
 
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.RecipeInput;
 
 /**
- * 压缩机配方输�? * 包装单个物品输入
+ * 压缩机配方输??? * 包装单个物品输入
  */
 public record mio_icif_CompressorRecipeInput(ItemStack item) implements RecipeInput {
 

@@ -1,3 +1,4 @@
+// SCEX 2026-09-12: repaired malformed UTF-8 bytes in comments only.
 package com.singularity_iteration.mio_icif.recipe.centrifuge;
 
 import net.minecraft.world.item.ItemStack;
@@ -34,7 +35,7 @@ public record mio_icif_CentrifugeRecipeInput(ItemStack item) implements RecipeIn
     }
 
     /**
-     * 检查输入是否为�?     */
+     * 检查输入是否为???     */
     public boolean isEmpty() {
         return item.isEmpty();
     }

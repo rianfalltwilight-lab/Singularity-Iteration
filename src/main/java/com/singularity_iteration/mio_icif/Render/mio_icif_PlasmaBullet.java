@@ -1,3 +1,4 @@
+// SCEX 2026-09-12: repaired malformed UTF-8 bytes in comments only.
 package com.singularity_iteration.mio_icif.Render;
 
 import com.singularity_iteration.mio_icif.Items.Tools.mio_icif_plasma_bullet;
@@ -14,11 +15,11 @@ import org.joml.Matrix4f;
 /**
  * 等离子子弹渲染类 - 还原IC2原版RenderBillboardEntity效果
  *
- * IC2原版渲染方式�?
- * - Billboard广告牌渲染（始终面向玩家�?
+ * IC2原版渲染方式???
+ * - Billboard广告牌渲染（始终面向玩家???
  * - 使用beam.png纹理
  * - 加法混合(Additive Blending)实现发光效果
- * - 半径0.4的发光球�?
+ * - 半径0.4的发光球???
  */
 @SuppressWarnings("null")
 public class mio_icif_PlasmaBullet extends EntityRenderer<mio_icif_plasma_bullet> {

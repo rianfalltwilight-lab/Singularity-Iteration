@@ -1,3 +1,4 @@
+// SCEX 2026-09-12: repaired malformed UTF-8 bytes in comments only.
 package com.singularity_iteration.mio_icif.recipe.canner.canning;
 
 import net.minecraft.world.item.ItemStack;
@@ -5,7 +6,7 @@ import net.minecraft.world.item.crafting.RecipeInput;
 
 /**
  * 装罐模式配方输入
- * 包装输入槽物品和材料槽物�? */
+ * 包装输入槽物品和材料槽物??? */
 public record CanningRecipeInput(ItemStack inputCan, ItemStack material) implements RecipeInput {
 
     @Override

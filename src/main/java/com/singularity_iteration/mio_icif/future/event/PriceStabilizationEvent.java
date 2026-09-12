@@ -1,3 +1,4 @@
+// SCEX 2026-09-12: repaired malformed UTF-8 bytes in comments only.
 package com.singularity_iteration.mio_icif.future.event;
 
 import java.util.Random;
@@ -24,7 +25,7 @@ public class PriceStabilizationEvent extends FuturePriceEvent {
 
     @Override
     public int applyEffect(int currentPrice, int basePrice, int dayOffset) {
-        // 计算与基础价格的偏�?
+        // 计算与基础价格的偏???
         double deviation = (double) (currentPrice - basePrice) / basePrice;
 
         // 回归力度随天数和强度增加
@@ -35,10 +36,10 @@ public class PriceStabilizationEvent extends FuturePriceEvent {
         // 添加微小随机波动 (-2% to +2%)
         double randomFactor = 0.98 + (RANDOM.nextDouble() * 0.04);
 
-        // 计算新价�?
+        // 计算新价???
         int newPrice = (int) (currentPrice * (1.0 - totalRegression) * randomFactor);
 
-        // 确保价格不会偏离基础价格太远（基础价格�?0%-150%�?
+        // 确保价格不会偏离基础价格太远（基础价格???0%-150%???
         int minPrice = (int) (basePrice * 0.5);
         int maxPrice = (int) (basePrice * 1.5);
 

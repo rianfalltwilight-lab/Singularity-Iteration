@@ -1,3 +1,4 @@
+// SCEX 2026-09-12: repaired malformed UTF-8 bytes in comments only.
 package com.singularity_iteration.mio_icif.Blocks.Transformer;
 
 import com.singularity_iteration.mio_icif.Blocks.mio_icif_entity_block;
@@ -44,15 +45,15 @@ public abstract class mio_icif_block_transformer extends mio_icif_entity_block {
 
     @Override
     public BlockState getStateForPlacement(BlockPlaceContext context) {
-        // 支持六面放置�?
-        // 非潜行时：方块正面朝向玩家（像原版发射器那样�?
+        // 支持六面放置???
+        // 非潜行时：方块正面朝向玩家（像原版发射器那样???
         // 潜行时：根据点击的面放置
         Direction direction;
         // if (context.isSecondaryUseActive()) {
         //     // 潜行时：根据点击的面放置
         //     direction = context.getClickedFace();
         // } else {
-            // 非潜行时：方块正面朝向玩�?
+            // 非潜行时：方块正面朝向玩???
             direction = context.getNearestLookingDirection().getOpposite();
         // }
         return this.defaultBlockState().setValue(FACING, direction);

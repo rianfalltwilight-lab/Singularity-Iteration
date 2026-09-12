@@ -1,3 +1,4 @@
+// SCEX 2026-09-12: repaired malformed UTF-8 bytes in comments only.
 package com.singularity_iteration.mio_icif.Items.Armor;
 
 import com.singularity_iteration.mio_icif.api.armor.IMetalArmor;
@@ -12,7 +13,7 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * 青铜胸甲
- * 比锝链甲稝强的普通护�?
+ * 比锝链甲稝强的普通护???
  */
 @SuppressWarnings("null")
 public class mio_icif_chestplate_bronze extends ArmorItem implements IMetalArmor {

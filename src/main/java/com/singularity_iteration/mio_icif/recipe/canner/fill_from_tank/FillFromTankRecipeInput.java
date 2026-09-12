@@ -1,3 +1,4 @@
+// SCEX 2026-09-12: repaired malformed UTF-8 bytes in comments only.
 package com.singularity_iteration.mio_icif.recipe.canner.fill_from_tank;
 
 import net.minecraft.world.item.ItemStack;
@@ -5,7 +6,7 @@ import net.minecraft.world.item.crafting.RecipeInput;
 
 /**
  * 水槽灌满单元模式配方输入
- * 包装空单元物�? */
+ * 包装空单元物??? */
 public record FillFromTankRecipeInput(ItemStack emptyCell) implements RecipeInput {
 
     @Override

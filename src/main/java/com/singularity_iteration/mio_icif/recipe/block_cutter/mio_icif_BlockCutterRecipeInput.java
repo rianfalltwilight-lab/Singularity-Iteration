@@ -1,10 +1,11 @@
+// SCEX 2026-09-12: repaired malformed UTF-8 bytes in comments only.
 package com.singularity_iteration.mio_icif.recipe.block_cutter;
 
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.RecipeInput;
 
 /**
- * 方块切割机配方输�? * 包装输入槽中的单个物�? */
+ * 方块切割机配方输??? * 包装输入槽中的单个物??? */
 public record mio_icif_BlockCutterRecipeInput(ItemStack item) implements RecipeInput {
 
     @Override

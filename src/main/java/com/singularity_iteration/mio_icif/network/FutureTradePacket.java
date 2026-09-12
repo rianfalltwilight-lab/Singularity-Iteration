@@ -1,3 +1,4 @@
+// SCEX 2026-09-12: repaired malformed UTF-8 bytes in comments only.
 package com.singularity_iteration.mio_icif.network;
 
 import com.singularity_iteration.mio_icif.Blocks.entity.producer.mio_icif_future_elc;
@@ -13,7 +14,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 /**
- * 期货交易数据�? * 处理客户端到服务端的交易请求
+ * 期货交易数据??? * 处理客户端到服务端的交易请求
  */
 @SuppressWarnings("null")
 public record FutureTradePacket(BlockPos pos, int action, int commodityIndex, int quantity) implements CustomPacketPayload {
@@ -50,7 +51,7 @@ public record FutureTradePacket(BlockPos pos, int action, int commodityIndex, in
     }
 
     /**
-     * 处理数据�?     */
+     * 处理数据???     */
     public static void handle(FutureTradePacket packet, IPayloadContext context) {
         context.enqueueWork(() -> {
             if (context.player() instanceof ServerPlayer serverPlayer) {

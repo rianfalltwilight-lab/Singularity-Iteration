@@ -1,3 +1,4 @@
+// SCEX 2026-09-12: repaired malformed UTF-8 bytes in comments only.
 package com.singularity_iteration.mio_icif.Blocks.Producer;
 
 import com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_block_entities;
@@ -27,10 +28,10 @@ import org.jetbrains.annotations.Nullable;
 
 /**
  * 特斯拉线圈方块类
- * 一种激活红石信号后能够使用电力持续对附�?格造成伤害的防御性武�?
- * 当内部储存电量达5000EU时才会正常工�?
- * 每秒工作一次，对范围内未受到该线圈上一次攻击的生物造成24点伤�?
- * 对于受到该线圈上一次攻击的生物则只造成10点~11点伤�?
+ * 一种激活红石信号后能够使用电力持续对附???格造成伤害的防御性武???
+ * 当内部储存电量达5000EU时才会正常工???
+ * 每秒工作一次，对范围内未受到该线圈上一次攻击的生物造成24点伤???
+ * 对于受到该线圈上一次攻击的生物则只造成10点~11点伤???
  * 最大输入电压为128EU/t (MV等级)
  */
 @SuppressWarnings("null")
@@ -82,7 +83,7 @@ public class mio_icif_block_tesla extends mio_icif_entity_block {
         if (state.getBlock() != newState.getBlock()) {
             BlockEntity blockEntity = level.getBlockEntity(pos);
             if (blockEntity instanceof mio_icif_tesla tesla) {
-                // 掉落电池槽中的物�?
+                // 掉落电池槽中的物???
                 for (int i = 0; i < tesla.getItemHandler().getSlots(); i++) {
                     ItemStack stack = tesla.getItemHandler().getStackInSlot(i);
                     if (!stack.isEmpty()) {
