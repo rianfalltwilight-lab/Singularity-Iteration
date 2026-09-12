@@ -18,6 +18,11 @@ import net.minecraft.world.level.block.state.BlockState;
 @SuppressWarnings("null")
 public class mio_icif_mfsu_entity extends mio_icif_Energy_Container {
 
+    @Override
+    protected boolean requiresFullOutputPacket() {
+        return true;
+    }
+
     private static final long EV_IO_RATE = CableTier.EV.powerRating;
 
     /**

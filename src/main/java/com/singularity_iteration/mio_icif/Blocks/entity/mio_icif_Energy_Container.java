@@ -482,13 +482,23 @@ private void pushEnergyToCompatSinks() {
 
     @Override
     public double getOfferedEnergy() {
+        if (!canTransferGridEnergy()) return 0.0D;
         if (!energyStorage.isOutputEnabled()) return 0.0D;
-        if (energyStorage.getAmount() <= 0) return 0.0D;
-        return Math.min(energyStorage.getAmount(), energyStorage.getMaxExtract());
+        long available = energyStorage.getAmount();
+        long packet = energyStorage.getMaxExtract();
+        if (available <= 0 || packet <= 0) return 0.0D;
+        if (requiresFullOutputPacket() && available < packet) return 0.0D;
+        return Math.min(available, packet);
+    }
+
+    /** Storage variants opt in after their packet threshold has been measured. */
+    protected boolean requiresFullOutputPacket() {
+        return false;
     }
 
     @Override
     public void drawEnergy(double amount) {
+        if (!canTransferGridEnergy()) return;
         if (!energyStorage.isOutputEnabled()) return;
         if (amount > 0.0D) {
             energyStorage.extract((long) amount, false);

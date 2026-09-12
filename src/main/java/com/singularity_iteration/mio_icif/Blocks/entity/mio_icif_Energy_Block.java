@@ -354,16 +354,24 @@ public abstract class mio_icif_Energy_Block extends BlockEntity implements MenuP
         return energyStorage;
     }
 
+    /** Query the platform's existing ticking state without loading a chunk. */
+    protected final boolean canTransferGridEnergy() {
+        return !isRemoved() && level instanceof net.minecraft.server.level.ServerLevel serverLevel
+                && serverLevel.shouldTickBlocksAt(net.minecraft.world.level.ChunkPos.asLong(worldPosition));
+    }
+
     // ==================== grid.IEnergySource 接口实现 ====================
 
     @Override
     public double getOfferedEnergy() {
+        if (!canTransferGridEnergy()) return 0.0D;
         if (!isPowerSource) return 0.0D;
         return energyStorage.getAmount();
     }
 
     @Override
     public void drawEnergy(double amount) {
+        if (!canTransferGridEnergy()) return;
         if (isPowerSource && amount > 0.0D) {
             energyStorage.extract((long) amount, false);
         }
@@ -379,6 +387,7 @@ public abstract class mio_icif_Energy_Block extends BlockEntity implements MenuP
 
     @Override
     public double getDemandedEnergy() {
+        if (!canTransferGridEnergy()) return 0.0D;
         if (isPowerSource) return 0.0D;
         long spaceAvailable = getEffectiveCapacity() - energyStorage.getAmount();
         if (spaceAvailable <= 0) return 0.0D;
@@ -392,6 +401,7 @@ public abstract class mio_icif_Energy_Block extends BlockEntity implements MenuP
 
     @Override
     public double injectEnergy(Direction direction, double amount, double voltage) {
+        if (!canTransferGridEnergy()) return amount;
         if (isPowerSource) return amount;
         long toAdd = (long) amount;
         long spaceAvailable = getEffectiveCapacity() - energyStorage.getAmount();
