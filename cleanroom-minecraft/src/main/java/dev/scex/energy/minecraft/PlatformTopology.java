@@ -25,6 +25,7 @@ import net.neoforged.neoforge.event.level.ChunkTicketLevelUpdatedEvent;
 import net.neoforged.neoforge.event.level.LevelEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
+import net.neoforged.neoforge.event.tick.LevelTickEvent;
 
 /**
  * Public-platform lifecycle adapter for registered block-entity conductors.
@@ -61,6 +62,7 @@ public final class PlatformTopology implements AutoCloseable {
     private volatile boolean closed;
     private volatile String failure = "";
     private long chunkLoads, chunkUnloads, blockSignals, sampledPositions, deferredLoads, accessibilityChanges;
+    private int budgetTick = Integer.MIN_VALUE, remainingWork;
 
     public PlatformTopology(MinecraftServer server, Map<ResourceLocation, Long> losses, int maximumNodes,
                             int maximumSources, int maximumQueued, int workPerTick) {
@@ -159,14 +161,27 @@ public final class PlatformTopology implements AutoCloseable {
     @SubscribeEvent
     public void onTick(ServerTickEvent.Post event) {
         if (event.getServer() != server) { return; }
+        drain(null);
+    }
+
+    @SubscribeEvent
+    public void onLevelTick(LevelTickEvent.Post event) {
+        if (event.getLevel() instanceof ServerLevel level && level.getServer() == server) drain(level);
+    }
+
+    private void drain(ServerLevel onlyLevel) {
         ArrayList<Change> batch = new ArrayList<>();
         synchronized (this) {
             if (closed) { return; }
             if (!failure.isEmpty()) { clearWorlds(); return; }
+            int now = server.getTickCount();
+            if (now != budgetTick) { budgetTick = now; remainingWork = workPerTick; }
             var iterator = pending.values().iterator();
-            while (iterator.hasNext() && batch.size() < workPerTick) {
+            while (iterator.hasNext() && remainingWork > 0) {
                 Change change = iterator.next();
-                if (change.key.level.getServer() == event.getServer()) { batch.add(change); iterator.remove(); }
+                if (change.key.level.getServer() == server && (onlyLevel == null || change.key.level == onlyLevel)) {
+                    batch.add(change); iterator.remove(); remainingWork--;
+                }
             }
         }
         try {

@@ -25,6 +25,7 @@ public final class WorldScenarioProbe {
     private BufferedWriter output;
     private int tick,observations,executed;
     private boolean finished;
+    private int phaseFrame=-1,phaseFrom=-1,phaseTo=-1;
     public WorldScenarioProbe(MinecraftServer server) throws Exception {
         this.server=server;
         for(String line:Files.readAllLines(Path.of("positions.tsv"))) {
@@ -79,6 +80,34 @@ public final class WorldScenarioProbe {
                     } catch(Exception error){error.printStackTrace();}
                 });
         }
+        if(Files.exists(Path.of("phase-observation.json"))) {
+            var window=com.google.gson.JsonParser.parseString(Files.readString(Path.of("phase-observation.json"))).getAsJsonObject();
+            phaseFrom=window.get("from").getAsInt();phaseTo=window.get("to").getAsInt();
+            if(phaseFrom<0 || phaseTo<phaseFrom || phaseTo-phaseFrom>80) throw new IllegalArgumentException("Bounded phase window required");
+            var first=net.neoforged.bus.api.EventPriority.HIGHEST;var last=net.neoforged.bus.api.EventPriority.LOWEST;
+            NeoForge.EVENT_BUS.addListener(first,(ServerTickEvent.Pre event)->{if(event.getServer()==server && !finished){phaseFrame++;phaseSample("server-START-first");}});
+            NeoForge.EVENT_BUS.addListener(last,(ServerTickEvent.Pre event)->{if(event.getServer()==server)phaseSample("server-START-last");});
+            NeoForge.EVENT_BUS.addListener(first,(ServerTickEvent.Post event)->{if(event.getServer()==server)phaseSample("server-END-first");});
+            NeoForge.EVENT_BUS.addListener(last,(ServerTickEvent.Post event)->{if(event.getServer()==server)phaseSample("server-END-last");});
+            NeoForge.EVENT_BUS.addListener(first,(net.neoforged.neoforge.event.tick.LevelTickEvent.Pre event)->{if(event.getLevel()==server.overworld())phaseSample("world-START-first");});
+            NeoForge.EVENT_BUS.addListener(last,(net.neoforged.neoforge.event.tick.LevelTickEvent.Pre event)->{if(event.getLevel()==server.overworld())phaseSample("world-START-last");});
+            NeoForge.EVENT_BUS.addListener(first,(net.neoforged.neoforge.event.tick.LevelTickEvent.Post event)->{if(event.getLevel()==server.overworld())phaseSample("world-END-first");});
+            NeoForge.EVENT_BUS.addListener(last,(net.neoforged.neoforge.event.tick.LevelTickEvent.Post event)->{if(event.getLevel()==server.overworld())phaseSample("world-END-last");});
+        }
+    }
+    private void phaseSample(String phase) {
+        if(finished || phaseFrame<phaseFrom || phaseFrame>phaseTo) return;
+        try {
+            var level=server.overworld();
+            for(var at:positions) {
+                var chunk=level.getChunkSource().getChunkNow(at.getX()>>4,at.getZ()>>4);
+                if(chunk==null) continue;
+                var tile=chunk.getBlockEntity(at,net.minecraft.world.level.chunk.LevelChunk.EntityCreationType.CHECK);
+                if(tile==null) continue;
+                record("phase-tile-save",Map.of("frame",phaseFrame,"phase",phase,"x",at.getX(),"y",at.getY(),"z",at.getZ(),
+                    "nbt",tile.saveWithFullMetadata(server.registryAccess()).toString()));
+            }
+        }catch(Throwable error){error.printStackTrace();finish(false);}
     }
     private void onExplosionStart(net.neoforged.neoforge.event.level.ExplosionEvent.Start event) {
         recordExplosion("explosion-start",event);

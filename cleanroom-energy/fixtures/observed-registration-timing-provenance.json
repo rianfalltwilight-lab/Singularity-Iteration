@@ -1,0 +1,22 @@
+{
+  "source": "Public item placement/block edits and ordinary tile saves at public tick boundaries",
+  "target_version": "IC2 Experimental 2.8.222-ex112",
+  "no_target_source_api_or_implementation_inspection": true,
+  "frame_mapping": "Electrical state first sampled on the world tick after an END-phase command; observe command tick + 1",
+  "fixture_sha256": "70a07cfe095330f040f38093539d0cf776a0055d577fca410b44ec9d8101ec0a",
+  "rows": 128,
+  "inputs": [
+    {
+      "run": "si-ic2-scheduler-r13-03-20260913",
+      "observation_sha256": "bd57126ea9a23296ccb9cf27cd95dc4525bda929d9b69d7d011e41d2db46ca41",
+      "commands_sha256": "d020c9be4b75d818af9954658a3472d72218f9c326a3775bb072c36142c43964",
+      "equal_powered_networks": 3
+    },
+    {
+      "run": "si-ic2-scheduler-r13-04-20260913",
+      "observation_sha256": "97bc67bf162b75b0a5a6223638b9deb1b3c1bdb7f3d7f655d673b0d71eb206b9",
+      "commands_sha256": "77790df4809b9813325043d55415e7e7ba08f8972972696784ba2f389d778561",
+      "equal_powered_networks": 3
+    }
+  ]
+}

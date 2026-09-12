@@ -5,6 +5,7 @@ import com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_Energy_Block;
 import com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_Energy_Container;
 import com.singularity_iteration.mio_icif.energy.CustomEUEnergyStorage;
 import dev.scex.energy.ConductorRegistry;
+import dev.scex.energy.DeferredEntries;
 import dev.scex.energy.MultiSourceDistributor;
 import dev.scex.energy.RouteCosts;
 import dev.scex.energy.minecraft.PlatformTopology;
@@ -23,12 +24,15 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.bus.api.EventPriority;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.server.ServerAboutToStartEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
+import net.neoforged.neoforge.event.tick.LevelTickEvent;
 
 /**
  * Experimental SI-side bridge, independently written for numeric storage and
@@ -69,7 +73,7 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
     private MinecraftServer server;
     private final long ownerThread = Thread.currentThread().threadId();
     private final PlatformTopology topology;
-    private final Map<ServerLevel, Map<BlockPos, mio_icif_Energy_Block>> endpoints = new HashMap<>();
+    private final Map<ServerLevel, WorldGrid> worlds = new HashMap<>();
     private long ticks, commits, rejected, debited, credited, dissipated;
     private String failure = "";
     private boolean closed;
@@ -78,6 +82,41 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
     private record Port(mio_icif_Energy_Block tile, BlockPos position, BlockState state,
                         CustomEUEnergyStorage storage, CustomEUEnergyStorage.NetworkQuote quote,
                         long capacity, int inputs, int outputs, long packet) { }
+    private record Element(ResourceLocation type, long conductorLoss, BlockEntity tile) {
+        @Override public boolean equals(Object other) {
+            return other instanceof Element e && type.equals(e.type) && conductorLoss == e.conductorLoss && tile == e.tile;
+        }
+        @Override public int hashCode() { return 31 * type.hashCode() + Long.hashCode(conductorLoss) + System.identityHashCode(tile); }
+    }
+    private static final class WorldGrid implements AutoCloseable {
+        final DeferredEntries<BlockPos, Element> entries = new DeferredEntries<>(104_096, 65_536);
+        final ConductorRegistry conductors = new ConductorRegistry(100_000, 32);
+        final Map<BlockPos, mio_icif_Energy_Block> machines = new HashMap<>();
+        final Map<Long, Integer> conductorChunks = new HashMap<>();
+        boolean catchUp;
+        void apply(List<DeferredEntries.Change<BlockPos, Element>> changes) {
+            for (var change : changes) {
+                var at = change.key(); long chunk = ChunkPos.asLong(at);
+                if (change.before() != null && change.before().conductorLoss >= 0) {
+                    conductors.remove(point(at));
+                    conductorChunks.compute(chunk, (key, count) -> count == 1 ? null : count - 1);
+                }
+                machines.remove(at);
+                var after = change.after();
+                if (after == null) continue;
+                if (after.conductorLoss >= 0) {
+                    conductors.put(point(at), after.conductorLoss);
+                    conductorChunks.merge(chunk, 1, Integer::sum);
+                } else {
+                    if (machines.size() >= 4096) throw new IllegalStateException("Endpoint limit reached");
+                    machines.put(at, (mio_icif_Energy_Block) after.tile);
+                }
+            }
+        }
+        @Override public void close() {
+            entries.close(); conductors.close(); machines.clear(); conductorChunks.clear(); catchUp = false;
+        }
+    }
     private IndependentSiEnergy(MinecraftServer server) {
         this.server = server;
         topology = new PlatformTopology(server, CONDUCTORS, 100_000, 32, 65_536, 4096, this);
@@ -86,46 +125,85 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
     public Metrics metrics() {
         if (Thread.currentThread().threadId() != ownerThread) throw new IllegalStateException("Read engine metrics on server thread");
         return new Metrics(ticks, commits, rejected, debited, credited, dissipated,
-            endpoints.size(), endpoints.values().stream().mapToInt(Map::size).sum(), closed, failure);
+            worlds.size(), worlds.values().stream().mapToInt(grid -> grid.machines.size()).sum(), closed, failure);
     }
     @Override
     public void position(ServerLevel level, LevelChunk chunk, BlockPos at) {
-        var found = endpoints.get(level);
-        if (!controls(chunk.getBlockState(at))) {
-            if (found != null) found.remove(at); return;
-        }
+        var state = chunk.getBlockState(at); var type = BuiltInRegistries.BLOCK.getKey(state.getBlock());
+        var loss = CONDUCTORS.get(type); Element element = null;
+        var grid = worlds.get(level);
         // The chunk is already FULL. This can materialize its saved block entity,
         // without loading another chunk or renewing a world lookup ticket.
-        var tile = chunk.getBlockEntity(at, LevelChunk.EntityCreationType.IMMEDIATE);
-        if (!(tile instanceof mio_icif_Energy_Block machine) || !machine.getEnergyStorageInternal().scexNetworkControlled())
-            throw new IllegalStateException("Controlled endpoint lacks the new storage boundary at " + at);
-        if (found == null) { found = new HashMap<>(); endpoints.put(level, found); }
-        if (!found.containsKey(at) && found.size() >= 4096) throw new IllegalStateException("Endpoint limit reached");
-        found.put(at.immutable(), machine);
+        if (loss != null || controls(state)) {
+            var tile = chunk.getBlockEntity(at, LevelChunk.EntityCreationType.IMMEDIATE);
+            if (tile == null) throw new IllegalStateException("Electrical block entity missing at " + at);
+            if (loss == null && (!(tile instanceof mio_icif_Energy_Block machine) || !machine.getEnergyStorageInternal().scexNetworkControlled()))
+                throw new IllegalStateException("Controlled endpoint lacks the new storage boundary at " + at);
+            element = new Element(type, loss == null ? -1 : loss, tile);
+            if (grid == null) { grid = new WorldGrid(); worlds.put(level, grid); }
+        }
+        // A late server-post observation belongs to the next publication frame
+        // if the world's END decision has already been made.
+        if (grid != null) grid.entries.observe(Math.max(ticks + 1, grid.entries.metrics().advancedFrame() + 1), at.immutable(), element);
     }
     @Override
     public void chunkRemoved(ServerLevel level, int chunkX, int chunkZ) {
-        var entries = endpoints.get(level);
-        if (entries != null) entries.keySet().removeIf(at -> (at.getX() >> 4) == chunkX && (at.getZ() >> 4) == chunkZ);
+        var grid = worlds.get(level);
+        if (grid != null) {
+            grid.apply(grid.entries.forgetIf(at -> (at.getX() >> 4) == chunkX && (at.getZ() >> 4) == chunkZ));
+            grid.catchUp = false;
+        }
     }
-    @Override public void levelRemoved(ServerLevel level) { endpoints.remove(level); }
-    @Override public void cleared() { endpoints.clear(); }
+    @Override public void levelRemoved(ServerLevel level) { var grid = worlds.remove(level); if (grid != null) grid.close(); }
+    @Override public void cleared() { worlds.values().forEach(WorldGrid::close); worlds.clear(); }
+    @SubscribeEvent
+    public void beforeLevel(LevelTickEvent.Pre event) {
+        if (!(event.getLevel() instanceof ServerLevel level) || level.getServer() != server || closed || !failure.isEmpty()) return;
+        var grid = worlds.get(level);
+        if (grid == null || !grid.catchUp) return;
+        grid.catchUp = false;
+        try {
+            if (!topology.metrics().failure().isEmpty()) throw new IllegalStateException(topology.metrics().failure());
+            settle(level, grid);
+        } catch (RuntimeException error) { fail(error); }
+    }
     @SubscribeEvent
     public void tick(ServerTickEvent.Post event) {
         if (event.getServer() != server || closed || !failure.isEmpty()) return;
         ticks++;
+        if (!topology.metrics().failure().isEmpty()) fail(new IllegalStateException(topology.metrics().failure()));
+    }
+    @SubscribeEvent(priority = EventPriority.LOW)
+    public void afterLevel(LevelTickEvent.Post event) {
+        if (!(event.getLevel() instanceof ServerLevel level) || level.getServer() != server || closed || !failure.isEmpty()) return;
         try {
             if (!topology.metrics().failure().isEmpty()) throw new IllegalStateException(topology.metrics().failure());
-            for (var entry : endpoints.entrySet()) {
-                if (topology.ready(entry.getKey())) settle(entry.getKey(), entry.getValue());
+            var grid = worlds.get(level);
+            if (grid == null || !topology.ready(level)) return;
+            var changes = grid.entries.advance(ticks + 1);
+            if (changes.isEmpty()) settle(level, grid);
+            else {
+                grid.apply(changes);
+                // Public reference observations: a matured electrical edit
+                // pauses END once, followed by START and END packets next tick.
+                grid.catchUp = true;
             }
-        } catch (RuntimeException error) {
-            failure = error.toString(); error.printStackTrace(); topology.close();
-        }
+        } catch (RuntimeException error) { fail(error); }
     }
-    private void settle(ServerLevel level, Map<BlockPos, mio_icif_Energy_Block> known) {
+    private void fail(RuntimeException error) { failure = error.toString(); error.printStackTrace(); topology.close(); }
+    private boolean accessible(ServerLevel level, WorldGrid grid) {
+        if (worlds.get(level) != grid || server.getLevel(level.dimension()) != level) return false;
+        // Delayed wire edits never authorize transfer through inaccessible chunks.
+        for (long chunk : grid.conductorChunks.keySet()) {
+            if (level.getChunkSource().getChunkNow(ChunkPos.getX(chunk), ChunkPos.getZ(chunk)) == null
+                || !level.shouldTickBlocksAt(chunk)) return false;
+        }
+        return true;
+    }
+    private void settle(ServerLevel level, WorldGrid grid) {
+        if (!accessible(level, grid)) return;
         var ports = new ArrayList<Port>();
-        for (var entry : known.entrySet()) {
+        for (var entry : grid.machines.entrySet()) {
             BlockPos at = entry.getKey(); var tile = entry.getValue();
             var chunk = level.getChunkSource().getChunkNow(at.getX() >> 4, at.getZ() >> 4);
             if (chunk == null || !level.shouldTickBlocksAt(ChunkPos.asLong(at)) || tile.isRemoved()
@@ -151,7 +229,7 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
         var sources = ports.stream().filter(p -> p.outputs != 0 && p.packet > 0 && p.quote.amount() >= p.packet).toList();
         var sinks = ports.stream().filter(p -> p.inputs != 0).toList();
         if (sources.isEmpty() || sinks.isEmpty()) return;
-        var snapshot = topology.snapshot(level); long[] room = new long[sinks.size()];
+        var snapshot = grid.conductors.snapshot(); long[] room = new long[sinks.size()];
         int[] receivers = new int[sinks.size()]; int[] sourceOrder = new int[sources.size()];
         for (int i = 0; i < room.length; i++) { room[i] = Math.max(0, sinks.get(i).capacity - sinks.get(i).quote.amount()); receivers[i] = i; }
         // Explicit deterministic rotation for this integration checkpoint. Target
@@ -183,12 +261,15 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
             long delta = deltas.getOrDefault(port.storage, 0L);
             if (delta != 0) writes.add(new CustomEUEnergyStorage.NetworkWrite(port.storage, port.quote, Math.addExact(port.quote.amount(), delta)));
         }
-        if (CustomEUEnergyStorage.scexCommitNetwork(writes, loss, () -> valid(level, snapshot, ports))) {
+        if (CustomEUEnergyStorage.scexCommitNetwork(writes, loss, () -> valid(level, grid, snapshot, ports))) {
             commits++; debited = Math.addExact(debited, debit); credited = Math.addExact(credited, credit); dissipated = Math.addExact(dissipated, loss);
         } else rejected++;
     }
-    private boolean valid(ServerLevel level, ConductorRegistry.Snapshot snapshot, List<Port> ports) {
-        if (!topology.isCurrent(level, snapshot)) return false;
+    private boolean valid(ServerLevel level, WorldGrid grid, ConductorRegistry.Snapshot snapshot, List<Port> ports) {
+        // The independent published registry intentionally preserves one final
+        // packet after a wire edit, as measured. Its lease is still current;
+        // source/sink identity, all fresh quotes and chunk access remain mandatory.
+        if (!accessible(level, grid) || !grid.conductors.isCurrent(snapshot)) return false;
         for (var port : ports) {
             var chunk = level.getChunkSource().getChunkNow(port.position.getX() >> 4, port.position.getZ() >> 4);
             if (chunk == null || !level.shouldTickBlocksAt(ChunkPos.asLong(port.position)) || port.tile.isRemoved()
@@ -229,7 +310,7 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
     @SubscribeEvent
     public void stopped(ServerStoppedEvent event) {
         if (event.getServer() != server) return;
-        topology.close(); endpoints.clear(); closed = true;
+        topology.close(); cleared(); closed = true;
         synchronized (IndependentSiEnergy.class) { SERVERS.remove(server); }
         server = null;
         NeoForge.EVENT_BUS.unregister(this);
