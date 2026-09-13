@@ -106,3 +106,18 @@ Java 21 下执行 `gradlew.bat --offline --no-daemon --max-workers=2 --console=p
 以实际放置组作为 `transformer-reference-baseline.json`：48 场景中 10 个接收器最终有正余额，9 个变压器实际移除，1 个接收器实际移除。向上有红石时 CESU→MV 把累计输入转换为两次 512 EU 接收，MFE→HV 为两次 2,048 EU；MFSU→EV 在达到 8,192 EU 输出后移除 MFSU 接收器，之后有能量留存在变压器。向下无红石的 CESU→LV/MV/HV 全量送达，而 CESU→EV 留存 1,024 EU；这些是有限输入的结果，尚未确立一般缓冲容量和发送规则。混合世界中其他设备的损坏可能影响提交时序，下一步应以无过压的独立场景验证转换周期，再处理多面与运行中模式切换。
 
 两次均正常停止、存档、退出，收件逐项哈希通过。远端约 5.239 GiB、Monarch 约 35.467 GiB，继续已授权本地隔离回退。没有修改 SI 实现或解除来源门禁；变压器尚未独立接入，阶段 2 未退出。
+
+## 变压器无损坏时序与冻结预测
+
+`si-ic2-transformer-safe-r22-monarch-01-20260913` 仅保留实际放置组中方向有效、未损坏的 14 个路径，原坐标、预充八电包与操作时刻不变。560 笔状态与能量守恒检查有效；与混合损坏世界有 28 笔时序差异。单独世界中当前 tick 收到的能量在后续 tick 才参与输出。按已测输出单位编写的独立探索性缓冲模型与 560 笔旧数据一致；这是回看已知标签，不是盲测。
+
+在运行新输入之前冻结 `transformer-boundary-predictions.json`，SHA-256 `849b2d3a3f3a76cdacbde6aa27aa432a4ec09c5df467526ab8e46f78b3ce0c6d`。56 个场景覆盖 CESU→LV 降压、CESU→MV 升压、MFE→HV 升压与 MFE→EV 降压，每组 14 个零电量、整包及邻近电量输入；模型为从旧缓冲输出后再收取当前完整电包，不预设缓冲容量或阻塞处理。
+
+`si-ic2-transformer-boundary-r22-monarch-01-20260913` 的 2,240 笔轨迹全部符合冻结预测，模型/输入/预测哈希均核对。52 个新电量场景共 2,080 笔，四个旧八包电量复测共 160 笔，分开记账。原始数据 SHA-256 `6a26fe4a9730616763f57e76629fbeb7d61b1ad2562c3bb1d9dd2890cd85e04d`。该有限模型仍不证明缓冲容量、接收器压力、多面分配、运行中模式切换或 SI 接入；没有用无限缓冲模型替代完整实现。下一项独立观察移除接收器，测量停止收电时的实际缓冲。
+
+两次运行正常停止、存档、退出，收件哈希有效。远端约 5.209 GiB，Monarch 约 34.491 GiB，沿已授权本地隔离回退，资源门槛未降低。详见 `transformer-safe-assessment.json`、`transformer-safe-model-check.json` 和 `transformer-boundary-model-check.json`。
+
+
+无接收器试验 `si-ic2-transformer-capacity-r22-monarch-01-20260913` 完成 14 个场景/2,240 笔状态，源端预充 256 个完整电包，接收器位置全程为空。已测 LV/MV/HV/EV 的最终缓冲分别为 256/1,024/4,096/16,384 EU；达到后保持 33～159 个观测 tick 不再收电，源端均仍有能量，全部 2,240 笔源端加缓冲守恒。相同变压器在已测不同供电档或红石模式下的最终缓冲一致；没有推广为任意初始 NBT、满接收器或模式切换结论。
+
+另写有限容量模型 `transformer_bounded_model_r22.py`，原先无容量预测文件和源码保持冻结。新模型回看无损坏、预充边界和无接收器三组共 5,040 笔记录全部一致；这是读过容量标签后的回顾验证，不能冒充第二次盲测。模型 SHA-256 `3fc1fd316b7f66d26c9241f06739bb6fa596e5e71ad41c39bb969a1be30eea4d`，结果见 `transformer-capacity-assessment.json` 和 `transformer-bounded-model-check.json`。下一步检验接收端恢复、部分接收与运行中模式变化，之后才接入独立 SI 端点。
