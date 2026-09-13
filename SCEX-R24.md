@@ -112,3 +112,14 @@ CustomEUEnergyStorage 的独立钩子已开始使用 NetworkCell：首次服务�
 真实服务器环境中创建未安装到世界的独立实体，借用已有控制方块的注册类型作平台元数据，未将它当作变压器注册成功。四档共 80 项检查覆盖收发预算、数字提交、保存、模式变化后旧报价、移除/恢复身份及不支持数值保留。额外两次 JVM/850 tick 的原有煤炭加工保存回归 17,954 项和事务边界 28 项也通过；37 份回执收件哈希一致。原始观察 SHA：d0409baf72acf44cfe14f2f12737b47971e2d1a336b1984bbb23e83c79928c9e, ed1d7118b67eabb0998c967304e584ad0aff1813a97586af1c4880764d66c6a1。汇总 transformer-state-runtime-assessment.json。
 
 该记录更新平台模块仅编译时的 NOT_RUN，但实际世界工厂、旧 ticker 隔离、GUI、方向路由和变压器输电仍未实现/验收。下一步在独立 opt-in 集成中接入两条创建路径和 ticker 隔离，再按真实方块覆盖放置、保存加载和拆换。阶段 2 未退出，完整来源门禁不变。
+
+
+## 实际变压器创建与 ticker 隔离原型
+
+隔离 smoke 模组新增自有平台 Mixin，按冻结 transformer-factory.json 标记启用。基于已核对的平台调用位置，覆盖 LevelChunk 中放置、延迟创建、DUMMY 提升三处 EntityBlock.newBlockEntity 调用，以及 BlockEntityType.create 的正常存档路径。只对八个实际观察位置所属的四类变压器注册标识生效；其他方块保持原调用。独立实体在 updateBlockEntityTicker 前取消旧绑定，未调用旧变压器、电网或能量 API。此原型位于测试模组，尚未作为正式 SI 集成发布。
+
+首轮夹具同一区块重复 forceload，tick 0 返回 0 后被严格检查拒绝，尚未创建变压器；失败保留在 transformer-factory-duplicate-load-failure 及原运行副本。按区块去重四条加载命令后，用相同二进制和新世界重跑。
+
+有效运行 si-storage-generator-r22-monarch-06-20260913，四档各 north/east 两个方向，共 8 个实际方块。首轮计数 placed=8、loaded=0、suppressed_tickers=8；新 JVM 计数 placed=0、loaded=8、suppressed_tickers=8。两阶段共 48 帧确认实际类为 IndependentTransformerBlockEntity，注册 ID 对应正确，buffer 写入 73 后重启仍为 73，mode 为 1。原有煤炭加工保存回归 17,954 项通过。观察 SHA：ceda495a29d2dd5d3633b4a44d33490d1a3413751cbb9ac0d1671853a4dbeb1e, 1c640e7a16159b68c408e56ea5166e11d78b727465df80c3d5ca818f7a876a62。汇总 transformer-factory-runtime-assessment.json。
+
+探针和 Mixin 资源编译通过。运行包现递归收录自有 smoke 子目录源码，保留 Mixin 来源；未扩展八归属生产覆盖类或绕过完整模组来源门禁。仅验证该平台版本的实际放置/保存加载/ticker 隔离；DUMMY 路径虽设必需注入点，但未单独运行 DUMMY 数据实例，GUI、相邻红石、替换/拆除、其他模组冲突和变压器输电仍待验证。下一步让已创建的独立实体进入端点报价与统一提交，阶段 2 未退出。

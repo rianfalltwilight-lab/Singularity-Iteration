@@ -1,0 +1,8 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.scex.si.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": ["TransformerChunkProbeMixin", "TransformerTypeProbeMixin"],
+  "injectors": {"defaultRequire": 1}
+}

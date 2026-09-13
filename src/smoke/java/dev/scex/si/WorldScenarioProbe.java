@@ -176,6 +176,7 @@ public final class WorldScenarioProbe {
                 var engine=IndependentSiEnergy.current(server);
                 if(engine==null || !engine.metrics().failure().isEmpty()) throw new IllegalStateException("Independent engine missing or failed");
                 record("independent-energy",engine.metrics());
+                if(Files.exists(Path.of("transformer-factory.json"))) record("transformer-factory",TransformerFactoryProbe.metrics());
                 if(tick==18 && Boolean.getBoolean("scex.independent.commitTests"))
                     record("commit-boundaries",NetworkCommitProbe.run(world));
             }
