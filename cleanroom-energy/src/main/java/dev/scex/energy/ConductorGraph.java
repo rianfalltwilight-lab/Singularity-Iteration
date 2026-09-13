@@ -16,6 +16,9 @@ public final class ConductorGraph {
     private final int[] offsets;
     private final int[] neighbours;
     private final int[] components;
+    private final int[] componentOffsets;
+    private final int[] componentVertices;
+    private final int[] localVertices;
 
     public ConductorGraph(long[] conductorLossMilli, int[][] links) {
         Objects.requireNonNull(conductorLossMilli, "conductorLossMilli");
@@ -51,9 +54,10 @@ public final class ConductorGraph {
         // Label physical wire components once. Endpoint machines are not wire
         // vertices and therefore cannot accidentally merge distinct domains.
         components = new int[count]; Arrays.fill(components, -1);
-        int[] queue = new int[count];
+        int[] queue = new int[count]; int componentCount = 0;
         for (int seed = 0; seed < count; seed++) {
             if (components[seed] >= 0) continue;
+            componentCount++;
             int head = 0, tail = 0; queue[tail++] = seed; components[seed] = seed;
             while (head < tail) {
                 int vertex = queue[head++];
@@ -64,14 +68,84 @@ public final class ConductorGraph {
                 }
             }
         }
+        if (componentCount == 1) {
+            // A connected graph already has compact, ordered IDs. Preserve its
+            // existing working-set size without allocating another index.
+            componentOffsets = null; componentVertices = null; localVertices = null;
+        } else {
+            componentOffsets = new int[count + 1]; componentVertices = new int[count];
+            for (int component : components) componentOffsets[component + 1]++;
+            for (int i = 1; i <= count; i++) componentOffsets[i] += componentOffsets[i - 1];
+            // Reuse the finished traversal queue first as cursors, then as the
+            // global-to-local map. Ascending global IDs preserve heap tie order.
+            Arrays.fill(queue, 0);
+            for (int vertex = 0; vertex < count; vertex++) {
+                int component = components[vertex];
+                componentVertices[componentOffsets[component] + queue[component]++] = vertex;
+            }
+            for (int i = 0; i < count; i++) {
+                int vertex = componentVertices[i]; queue[vertex] = i - componentOffsets[components[vertex]];
+            }
+            localVertices = queue;
+        }
     }
 
     /** Stable snapshot-local ID of the physical conductor component. */
     public int componentOf(int vertex) { check(vertex, losses.length); return components[vertex]; }
 
-    /** O((V+E) log V) index construction; at most V active heap entries. */
+    /** Work and route arrays cover only the source's physical component. */
     public Routes routesFrom(int sourceContact) {
         check(sourceContact, losses.length);
+        if (localVertices == null) return connectedRoutesFrom(sourceContact);
+        int component = components[sourceContact];
+        int start = componentOffsets == null ? 0 : componentOffsets[component];
+        int count = componentOffsets == null ? losses.length : componentOffsets[component + 1] - start;
+        int source = localVertices == null ? sourceContact : localVertices[sourceContact];
+        long[] costs = new long[count];
+        int[] parents = new int[count];
+        Arrays.fill(parents, -2);
+        boolean[] known = new boolean[count];
+        boolean[] settled = new boolean[count];
+        boolean[] overflowFrontier = new boolean[count];
+        var heap = new VertexHeap(costs);
+        costs[source] = losses[sourceContact];
+        known[source] = true;
+        parents[source] = -1;
+        heap.update(source);
+        while (!heap.empty()) {
+            int vertex = heap.take();
+            settled[vertex] = true;
+            int globalVertex = componentVertices == null ? vertex : componentVertices[start + vertex];
+            for (int i = offsets[globalVertex]; i < offsets[globalVertex + 1]; i++) {
+                int globalNext = neighbours[i];
+                int next = localVertices == null ? globalNext : localVertices[globalNext];
+                if (settled[next]) { continue; }
+                if (losses[globalNext] > Long.MAX_VALUE - costs[vertex]) {
+                    overflowFrontier[next] = true;
+                    continue;
+                }
+                long proposed = costs[vertex] + losses[globalNext];
+                if (!known[next] || proposed < costs[next]) {
+                    costs[next] = proposed;
+                    parents[next] = vertex;
+                    known[next] = true;
+                    heap.update(next);
+                }
+            }
+        }
+        for (int i = 0; i < count; i++) {
+            if (overflowFrontier[i] && !settled[i]) {
+                throw new ArithmeticException("A reachable route cost cannot fit in long");
+            }
+        }
+        return new Routes(costs, parents, settled, losses.length, component,
+            localVertices == null ? null : components, localVertices, componentVertices, start);
+    }
+
+    // Preserve the existing connected-graph hot loop without per-edge ID
+    // translation. Both searches retain the same checked relaxation and heap
+    // ordering; the route contracts cover their public costs and global paths.
+    private Routes connectedRoutesFrom(int sourceContact) {
         long[] costs = new long[losses.length];
         int[] parents = new int[losses.length];
         Arrays.fill(parents, -2);
@@ -88,7 +162,7 @@ public final class ConductorGraph {
             settled[vertex] = true;
             for (int i = offsets[vertex]; i < offsets[vertex + 1]; i++) {
                 int next = neighbours[i];
-                if (settled[next]) { continue; }
+                if (settled[next]) continue;
                 if (losses[next] > Long.MAX_VALUE - costs[vertex]) {
                     overflowFrontier[next] = true;
                     continue;
@@ -107,7 +181,7 @@ public final class ConductorGraph {
                 throw new ArithmeticException("A reachable route cost cannot fit in long");
             }
         }
-        return new Routes(costs, parents, settled);
+        return new Routes(costs, parents, settled, losses.length, 0, null, null, null, 0);
     }
 
     private static void check(int vertex, int count) {
@@ -119,27 +193,40 @@ public final class ConductorGraph {
         private final long[] costs;
         private final int[] parents;
         private final boolean[] reached;
+        private final int vertexCount, component, start;
+        private final int[] components, localVertices, componentVertices;
 
-        private Routes(long[] costs, int[] parents, boolean[] reached) {
+        private Routes(long[] costs, int[] parents, boolean[] reached, int vertexCount, int component,
+                       int[] components, int[] localVertices, int[] componentVertices, int start) {
             this.costs = costs; this.parents = parents; this.reached = reached;
+            this.vertexCount = vertexCount; this.component = component; this.components = components;
+            this.localVertices = localVertices; this.componentVertices = componentVertices; this.start = start;
         }
+
+        private int local(int vertex) { return localVertices == null ? vertex : localVertices[vertex]; }
 
         @Override
         public boolean reaches(int receiverContact) {
-            check(receiverContact, costs.length);
-            return reached[receiverContact];
+            check(receiverContact, vertexCount);
+            return (components == null || components[receiverContact] == component) && reached[local(receiverContact)];
         }
 
         @Override
         public long lossMilliTo(int receiverContact) {
             if (!reaches(receiverContact)) { throw new IllegalStateException("Unreachable contact"); }
-            return costs[receiverContact];
+            return costs[local(receiverContact)];
         }
 
         public void visitPath(int receiverContact, IntConsumer visitor) {
             Objects.requireNonNull(visitor, "visitor");
             if (!reaches(receiverContact)) { throw new IllegalStateException("Unreachable contact"); }
-            for (int vertex = receiverContact; vertex != -1; vertex = parents[vertex]) { visitor.accept(vertex); }
+            if (componentVertices == null) {
+                for (int vertex = receiverContact; vertex != -1; vertex = parents[vertex]) visitor.accept(vertex);
+                return;
+            }
+            for (int vertex = local(receiverContact); vertex != -1; vertex = parents[vertex]) {
+                visitor.accept(componentVertices[start + vertex]);
+            }
         }
     }
 

@@ -1,10 +1,16 @@
-# Independent energy accounting — R18 experimental
+# Independent energy accounting — R19 experimental
 
 This is a new, standalone Java 21 library, **not a Minecraft mod or a complete energy network replacement**. It has no SI, Minecraft, NeoForge, IC2 or other external dependency. No IC2 source, API or decompiled implementation was used to write it. Its implementation and contracts were independently authored against ordinary game observations and accounting requirements. Existing upstream implementations with unresolved provenance were not used as templates.
 
+## R19 component-scoped route allocation
+
+Current version: `0.12.0-r19-experimental`. Fourteen contract runners pass 1,462,935 assertions. Disconnected route queries allocate working arrays for the source's connected component, while preserving global vertex IDs, path ties, overflow checks and unreachable behavior. A dedicated connected-graph path avoids per-edge coordinate translation. Multiple components require approximately 12 bytes per graph vertex in additional shared indices; connected graphs do not allocate these indices.
+
+A fixed local 50,000-vertex benchmark with 1,000 components and 128 queries reduced measured thread allocation from 147,223,552 to 180,224 bytes. In the connected control, eight queries used 9,201,728 versus 9,201,920 bytes. These measurements exclude graph construction and do not establish Minecraft tick, GC, full-pack or long-run performance. Actual SI regression passes 640 selected first-tick vectors, 1,280 stability checks, 98 finite distribution checks and the 17,954-assertion coal/restart workflow with 22 commit-boundary checks. Construction-history and post-reload receiver-priority differences remain open; no exploratory history model was promoted into the library. See `../SCEX-R19.md`.
+
 ## R18 explicit shared contact entries
 
-Current version: `0.11.0-r18-experimental`. Thirteen contract runners pass 1,462,915 assertions. Explicit contact entries can refer to one physical source, spending its remaining packet budget immediately after each entry. Ordinary domains continue to reject duplicate source IDs.
+R18 checkpoint version: `0.11.0-r18-experimental`. Thirteen contract runners pass 1,462,915 assertions. Explicit contact entries can refer to one physical source, spending its remaining packet budget immediately after each entry. Ordinary domains continue to reject duplicate source IDs.
 
 The finite two-contact model uses 3,840 public first-tick observations. Actual SI acceptance covers 640 first-tick vectors, 1,280 subsequent stability checks and 98 finite distribution checks; a pooled loss check rejects the frozen R17 baseline. The bridge records two conductor contacts present when a generator is published. Three-contact behavior, source-before-wire ordering, contact reload semantics, arbitrary geometry and integrated performance remain unverified. See `../SCEX-R18.md` for preserved setup failures and the exact boundary.
 

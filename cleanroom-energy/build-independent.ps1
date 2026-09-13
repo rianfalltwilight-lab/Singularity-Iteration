@@ -1,6 +1,6 @@
 param([Parameter(Mandatory)][string]$OutputDirectory)
 $ErrorActionPreference = 'Stop'
-$version = '0.11.0-r18-experimental'
+$version = '0.12.0-r19-experimental'
 $target = [IO.Path]::GetFullPath($OutputDirectory)
 if (Test-Path -LiteralPath $target) { throw 'Use a fresh output directory for a reproducible build' }
 $jdk = if ($env:JAVA_HOME) { Join-Path $env:JAVA_HOME 'bin' } else { Split-Path (Get-Command javac).Source }
@@ -45,6 +45,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Priority domain contract verification failed' 
 if ($LASTEXITCODE -ne 0) { throw 'Shared source contract verification failed' }
 & $java -Xms32m -Xmx128m -cp ($classes + [IO.Path]::PathSeparator + $contracts) dev.scex.energy.ContactBudgetContract (Join-Path $PSScriptRoot 'fixtures/observed-two-contact.tsv')
 if ($LASTEXITCODE -ne 0) { throw 'Contact budget contract verification failed' }
+& $java -Xms32m -Xmx128m -cp ($classes + [IO.Path]::PathSeparator + $contracts) dev.scex.energy.ComponentRoutesContract
+if ($LASTEXITCODE -ne 0) { throw 'Component route contract verification failed' }
 $manifest = Join-Path $target 'MANIFEST.MF'
 [IO.File]::WriteAllText($manifest, "Manifest-Version: 1.0`nImplementation-Version: $version`nSCEX-Integration-Status: Standalone experimental component; not a Minecraft mod`n`n", [Text.UTF8Encoding]::new($false))
 $artifact = Join-Path $target "scex-independent-energy-$version.jar"
