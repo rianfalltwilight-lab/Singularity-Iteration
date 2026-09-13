@@ -19,10 +19,13 @@ public final class NetworkCellContract {
         var source = new NetworkCell(128);
         var transformer = new NetworkCell(32);
         var receiver = new NetworkCell(0);
+        check(source.quote() == source.quote());
+        var initialQuote = source.quote();
         var round = List.of(new NetworkCell.Write(source.quote(), 96),
             new NetworkCell.Write(transformer.quote(), 32),
             new NetworkCell.Write(receiver.quote(), 31));
         check(NetworkCell.commit(round, 1, () -> true));
+        check(source.quote() != initialQuote);
         check(source.quote().amount() == 96 && transformer.quote().amount() == 32 && receiver.quote().amount() == 31);
         check(!NetworkCell.commit(round, 1, () -> true));
         check(source.quote().amount() == 96 && receiver.quote().amount() == 31);

@@ -18,6 +18,7 @@ public final class NetworkCell {
     private long amount;
     private Object revision = new Object();
     private boolean retired;
+    private Quote currentQuote;
 
     /** Opaque identity-bound snapshot; callers cannot manufacture one. */
     public static final class Quote {
@@ -47,7 +48,8 @@ public final class NetworkCell {
     public Quote quote() {
         onOwner();
         if (retired) throw new IllegalStateException("Retired storage");
-        return new Quote(this);
+        if (currentQuote == null) currentQuote = new Quote(this);
+        return currentQuote;
     }
     /** Loading, local consumption and policy changes invalidate prior quotes. */
     public void replace(long nextAmount) {
@@ -55,7 +57,7 @@ public final class NetworkCell {
         if (retired) throw new IllegalStateException("Retired storage");
         if (nextAmount < 0) throw new IllegalArgumentException("Negative balance");
         Object nextRevision = new Object();
-        amount = nextAmount; revision = nextRevision;
+        amount = nextAmount; revision = nextRevision; currentQuote = null;
     }
     /** Unload/removal permanently revokes this identity; reload creates a new cell. */
     public void retire() { onOwner(); retired = true; }
@@ -93,6 +95,7 @@ public final class NetworkCell {
             var write = writes.get(i);
             write.expected.cell.amount = write.nextAmount;
             write.expected.cell.revision = revisions[i];
+            write.expected.cell.currentQuote = null;
         }
         return true;
     }
