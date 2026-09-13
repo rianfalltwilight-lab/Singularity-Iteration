@@ -68,3 +68,18 @@ gradlew.bat --offline --no-daemon --max-workers=2 --console=plain :cleanroom-ene
 1,280 笔实际相邻状态全部符合两个指定顺序之一：19 笔只符合 A→B，16 笔只符合 B→A，1,245 笔两者均符合。这是已知观测回顾验证，不是顺序预测；新时刻/更多接收端的前向验证仍待完成。新增契约 8,087 项，完整核心 17 组/1,578,882 项检查通过，外部和旧实现依赖均为 0。构建命令 `gradlew.bat --offline --no-daemon --max-workers=2 --console=plain :cleanroom-energy:check :cleanroom-energy:jar` 退出 0，日志 `evidence/r23/batch-core-check-build.log`。
 
 新独立 JAR `0.14.1-r23-experimental` 为 54,082 字节，SHA-256 `29647132e1e2686ea09cc99888addeb9a6967cbf58227728df9353c08f6fd59e`；旧冻结 0.14.0 不变。尚未接入 SI，损耗、过压、多个变压器、实际顺序与游戏内性能不在本组件验证内。归档重建本次尚未运行，完整模组来源门禁不变。下一步先用新布局前向验证批次余量，再接入统一收发规划。
+
+
+## 三输出面与非整包缓冲的前向验证
+
+冻结 `0.14.1-r23-experimental` 归档 JAR 后，新增 LV/MV/HV/EV 共 48 场景，分别使用三个物理输出面、六组接收空间以及 3.5/8 个输出单位的初始缓冲。输入、预测 Java、组件 JAR 与夹具共 11 个文件先冻结，再启动原版；48 组完整 40-tick 预测共 5,760 个状态，每个时刻最多 5 个，覆盖调用方显式指定的六种接收顺序，不预测其概率。
+
+`si-ic2-transformer-triple-r22-monarch-01-20260913` 的 1,920 笔状态全部符合冻结预测，源端保持 0，1,920 项守恒检查通过，第二/第三接收端的实际身份及初始余额均核对。归档 Java 再检查实际相邻状态，1,920 笔均可连贯转换。预测 SHA-256 `65f7bd90bd10e7097835b8bcfd30bc47252ae51cab9f0a6137f8bb3a64f4e89c`；原始记录 SHA-256 `b758ef2b1416822c9ec54f1b46247cbc5b828be3d584c1773ed236a62e090023`。见 `evidence/r23/triple-prediction-freeze.json`、`triple-assessment.json`、`triple-java-check.log`、`triple-proof.json`。
+
+本轮未修改组件，归档核心仍为 `18670923bacae6ffef3ab6b512518630dc67aaa4`，正常停止/存档/退出及收件哈希通过；登记世界与 incoming 副本已清理。实测 Vicerach 约 4.1 GiB，低于门槛，继续使用已授权 Monarch 隔离回退。
+
+### SI 接入前的具体边界
+
+当前自有 `IndependentSiEnergy` 已按储能对象合并源扣电与接收加电，统一验证报价后提交；该机制可以保留。现有 `DomainDistributor.Source` 仍只提供一个包的预算，不能通过将 nominal packet 直接放大四倍来表示变压器批次：这会丢失已测部分需求边界，也会让使用 delivery.sourceDebit 的现有损坏规则把批次总量误认为单包电压。
+
+接入需明确区分输出包大小、每轮包数和实际交付总额；同时把同一变压器源端已扣出的容量释放给后续接收阶段，而不允许本轮新收入反过来增加已经报价的输出预算。多轮恢复仍属于调度层。当前三输出面仅为无导线损耗、空上游电源的降压场景，不能替代损耗/过压或收发联动验证。尚未增加 SI 受控类型或更换任何冻结运行覆盖类；阶段 2 仍未退出。
