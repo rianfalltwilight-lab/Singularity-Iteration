@@ -1,6 +1,18 @@
-# Independent energy accounting — R9 experimental
+# Independent energy accounting — R16 experimental
 
 This is a new, standalone Java 21 library, **not a Minecraft mod or a complete energy network replacement**. It has no SI, Minecraft, NeoForge, IC2 or other external dependency. No IC2 source, API or decompiled implementation was used to write it. Its implementation and contracts were independently authored against ordinary game observations and accounting requirements. Existing upstream implementations with unresolved provenance were not used as templates.
+
+## R16 source domains and receiver offsets
+
+Current version: `0.9.0-r16-experimental`. Eleven contract runners pass 1,412,841 assertions. The older sections below describe the scopes at those checkpoints; this section supersedes R8's aggregate-room stop rule. R13–R15 timing and receiver-order details are in the repository's corresponding progress reports.
+
+R16 freezes 14,520 public source-debit vectors and 1,800 receiver-capacity-mask vectors. Full but connected receivers retain their position in `ReceiverOrder`'s offset population; accounting skips zero demand. Within a connected conductor domain, `SourceOrder` chooses a uniform starting offering source, then visits registration IDs forwards. Sources without an offer are excluded. This differs from the receiver's reverse cycle and every-fourth-world-tick fixed phase.
+
+`MultiSourceDistributor` retains each receiver's original quote within one domain. A source satisfying that entire quote closes the receiver for later sources in the domain. Partial credits from different sources do not accumulate towards that stop condition. For example, four 1 EU sources sharing copper can credit 4 EU into an initial 2 EU gap. The reported remaining room still accounts for all actual credits; checked arithmetic rejects unrepresentable totals before callers can commit.
+
+`DomainDistributor` separates physical conductor components and direct machine contacts. It shuffles domains independently, refreshes room between domains, and shares source reserves so total debit cannot exceed a source snapshot reserve. Direct contacts and separate wire arms therefore fill live room. An exact two-source BatBox control with 63 EU of room receives 63 EU through separate arms, leaving 1 EU at a source; joining those arms produces 64 EU of credit. Conductor component labels are computed once per immutable graph and exposed through the same invalidatable registry lease. Source and receiver orders are caller registration IDs, never inferred from coordinate sorting.
+
+These are independently chosen models consistent with finite observations, not an inspected implementation. The actual contract enters `DomainDistributor` and `PacketDistributor`, checks every frozen vector, and applies declared 6-sigma finite-distribution guards. It does not certify the original PRNG, serial independence, equal-cost physical path selection, complex shared-source domains or all lifecycle orderings. The integrated Minecraft implementation still needs stage-5 profiling; no speedup is asserted from these component checks.
 
 ## Observed scope
 

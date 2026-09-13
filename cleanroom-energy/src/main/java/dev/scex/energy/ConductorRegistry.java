@@ -166,6 +166,7 @@ public final class ConductorRegistry implements AutoCloseable {
             return result;
         }
         public int cachedSources() { active(); return routes.size(); }
+        public int componentOf(Position at) { return graph.componentOf(vertex(at)); }
         public ConductorGraph.Routes routesFrom(Position source) {
             int id = vertex(source);
             var result = routes.get(id);

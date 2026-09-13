@@ -1,0 +1,46 @@
+{
+  "scope": "14520 source and 1800 masked receiver vectors from ordinary binary game commands, tile saves and world time. The source TSV explicitly distinguishes separate settlement domains, including split copper arms, from joined conductor domains. No reference implementation included.",
+  "reference_jar_sha256": "f96b1886b6d060b308fb811029d5c5cc76deb17b835aa368dcb6071f2de290d4",
+  "source_inputs": [
+    {
+      "run": "si-ic2-source-order-r16-02-20260913",
+      "observations_sha256": "129814b36ad55da3645684496aee9df69649d7ccfaac62016fce08ffefc63234",
+      "fixture_sha256": "3a385e6b984a62fcc8fc5560df5c0bac5be7b188ec853269ea874f8201f2b8a5",
+      "trials": 3600
+    },
+    {
+      "run": "si-ic2-source-boundaries-r16-04-20260913",
+      "observations_sha256": "24532050c9510e90002f14d57a9abd3308afd86c31a84c61626dd315918a5ce6",
+      "fixture_sha256": "c5f597c45f10d44ba85411bba304b9972259af1d09843a101df5509941b9b026",
+      "trials": 4200
+    },
+    {
+      "run": "si-ic2-source-boundaries-r16-05-20260913",
+      "observations_sha256": "420639ebe64c5a12e204f7dd20036ea69dfb0025c58a72f3b16f5bda3f05867b",
+      "fixture_sha256": "520cfbedf526bc94e06de471f2427c0a40673fa08e82a6e6b5b7f920320b4ea2",
+      "trials": 3000
+    },
+    {
+      "run": "si-ic2-sources-r16-01-20260913",
+      "observations_sha256": "6caa24f55e90bb19b2c73c9bc4b367ff90880c41e10d4b4e274f9119c8d157be",
+      "fixture_sha256": "cce25730ca78aa4817b22380f5ef3f5061e0cdef925611f51dcf7a99f1407d87",
+      "trials": 1800
+    },
+    {
+      "run": "si-ic2-split-domains-r16-06-20260913",
+      "observations_sha256": "30ee5af1dae67c189027bd00639466d0a5d0753685d3e7cfdad84c5ce69f881a",
+      "fixture_sha256": "ee7d8b2fcb2edea397f8caadfa66ad29dc527ee4353512ce210cbfbdf3fbe9d5",
+      "trials": 1920
+    }
+  ],
+  "receiver_input": {
+    "run": "si-ic2-masked-r16-01-20260913",
+    "observations_sha256": "57953a5f75b3965de37497deeb11c18410a3465d9462d9e69ffa2c43db9ccdb7",
+    "fixture_sha256": "58789014daa669c77fa2c1130191fa2faed1df7de9053b330be3ee91c6667f37",
+    "trials": 1800
+  },
+  "source_tsv_sha256": "a1a8a594a372ebad59c4c2e31894ce423ece19cd4cc2ae9635b7b5cb8997f4a6",
+  "receiver_tsv_sha256": "20f4e3158a18e50e75d7af1260d313208df75fa80743dc9d3810865137f20d28",
+  "excluded": "Oversized source-boundaries-03 exited before any fixture command or observation and is not in the contract data.",
+  "prior_source_tsv_sha256": "ea5597bfe91887757ac9d667b3668d48ecf914a2833190b5662ea2fdedd6348f"
+}

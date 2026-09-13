@@ -6,12 +6,12 @@ import com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_Energy_Containe
 import com.singularity_iteration.mio_icif.energy.CustomEUEnergyStorage;
 import dev.scex.energy.ConductorRegistry;
 import dev.scex.energy.DeferredEntries;
-import dev.scex.energy.MultiSourceDistributor;
+import dev.scex.energy.DomainDistributor;
 import dev.scex.energy.ReceiverOrder;
 import dev.scex.energy.RouteCosts;
 import dev.scex.energy.minecraft.PlatformTopology;
 import java.util.ArrayList;
-import java.util.Comparator;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
@@ -233,38 +233,25 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
             long packet = generator ? Math.min(32, quote.amount()) : 32;
             ports.add(new Port(tile, at, tile.getBlockState(), storage, quote, tile.getEffectiveCapacity(), inputs, outputs, packet));
         }
-        var sources = ports.stream().filter(p -> p.outputs != 0 && p.packet > 0 && p.quote.amount() >= p.packet)
-            .sorted(Comparator.comparingInt((Port p) -> p.position.getX()).thenComparingInt(p -> p.position.getY()).thenComparingInt(p -> p.position.getZ())).toList();
+        var sources = ports.stream().filter(p -> p.outputs != 0 && p.packet > 0 && p.quote.amount() >= p.packet).toList();
         var sinks = ports.stream().filter(p -> p.inputs != 0).toList();
         if (sources.isEmpty() || sinks.isEmpty()) return;
         var snapshot = grid.conductors.snapshot(); long[] room = new long[sinks.size()];
-        int[] receivers = new int[sinks.size()]; int[] sourceOrder = new int[sources.size()];
+        int[] receivers = new int[sinks.size()];
         for (int i = 0; i < room.length; i++) { room[i] = Math.max(0, sinks.get(i).capacity - sinks.get(i).quote.amount()); receivers[i] = i; }
-        var offers = new ArrayList<MultiSourceDistributor.Offer>();
-        for (int i = 0; i < sources.size(); i++) {
-            // Source order remains an explicit separate acceptance boundary.
-            sourceOrder[i] = (int) ((i + ticks) % sources.size());
-            var source = sources.get(i);
-            var costs = routes(source, sinks, snapshot);
-            boolean[] eligible = new boolean[sinks.size()];
-            for (int receiver = 0; receiver < eligible.length; receiver++) {
-                eligible[receiver] = room[receiver] > 0 && costs.reaches(receiver)
-                    && costs.wholeLossTo(receiver) < source.packet;
-            }
-            int[] priorities = ReceiverOrder.create(receivers, eligible, level.getGameTime(), selectionRandom);
-            offers.add(new MultiSourceDistributor.Offer(source.quote.amount(), source.packet, costs, receivers, priorities));
-        }
-        var round = MultiSourceDistributor.allocate(offers, room, sourceOrder);
+        var quotes = sources.stream().map(source -> new DomainDistributor.Source(source.quote.amount(), source.packet,
+            BuiltInRegistries.BLOCK.getKey(source.state.getBlock()).equals(GENERATOR))).toList();
+        var domains = domains(sources, sinks, snapshot, receivers, level.getGameTime());
+        var round = DomainDistributor.allocate(quotes, domains, receivers, room, selectionRandom);
         var deltas = new IdentityHashMap<CustomEUEnergyStorage, Long>();
-        long loss = 0, debit = 0, credit = 0;
+        long loss = round.dissipated(), debit = 0, credit = 0;
         for (int i = 0; i < sources.size(); i++) {
-            var result = round.source(i); var source = sources.get(i);
-            debit = Math.addExact(debit, result.sourceDebit()); loss = Math.addExact(loss, result.dissipated());
-            deltas.merge(source.storage, -result.sourceDebit(), Math::addExact);
-            for (int receiver = 0; receiver < sinks.size(); receiver++) {
-                long value = result.credit(receiver); credit = Math.addExact(credit, value);
-                deltas.merge(sinks.get(receiver).storage, value, Math::addExact);
-            }
+            long value = round.debit(i); debit = Math.addExact(debit, value);
+            deltas.merge(sources.get(i).storage, -value, Math::addExact);
+        }
+        for (int receiver = 0; receiver < sinks.size(); receiver++) {
+            long value = round.credit(receiver); credit = Math.addExact(credit, value);
+            deltas.merge(sinks.get(receiver).storage, value, Math::addExact);
         }
         if (debit == 0) return;
         var writes = new ArrayList<CustomEUEnergyStorage.NetworkWrite>();
@@ -291,32 +278,67 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
         return true;
     }
     private static ConductorRegistry.Position point(BlockPos at) { return new ConductorRegistry.Position(at.getX(), at.getY(), at.getZ()); }
-    private static RouteCosts routes(Port source, List<Port> sinks, ConductorRegistry.Snapshot graph) {
-        long[] losses = new long[sinks.size()]; boolean[] reaches = new boolean[sinks.size()];
-        for (int i = 0; i < sinks.size(); i++) {
-            var sink = sinks.get(i); if (source.tile == sink.tile) continue;
-            long best = Long.MAX_VALUE; boolean found = false;
+    private List<DomainDistributor.Domain> domains(List<Port> sources, List<Port> sinks,
+            ConductorRegistry.Snapshot graph, int[] receivers, long worldTime) {
+        // Nonnegative keys identify physical wire components; negative keys identify
+        // individual direct contacts. A receiver never joins separate wire runs.
+        var grouped = new LinkedHashMap<Long, LinkedHashMap<Integer, long[]>>();
+        for (int sourceId = 0; sourceId < sources.size(); sourceId++) {
+            var source = sources.get(sourceId);
             for (Direction output : Direction.values()) {
                 if ((source.outputs & (1 << output.ordinal())) == 0) continue;
                 BlockPos start = source.position.relative(output);
-                if (start.equals(sink.position) && (sink.inputs & (1 << output.getOpposite().ordinal())) != 0) { best = 0; found = true; break; }
-                if (!graph.contains(point(start))) continue;
-                var paths = graph.routesFrom(point(start));
-                for (Direction input : Direction.values()) {
-                    if ((sink.inputs & (1 << input.ordinal())) == 0) continue;
-                    var contact = point(sink.position.relative(input)); if (!graph.contains(contact)) continue;
-                    int vertex = graph.vertex(contact);
-                    if (paths.reaches(vertex)) { best = Math.min(best, paths.lossMilliTo(vertex)); found = true; }
+                var origin = point(start);
+                boolean wired = graph.contains(origin);
+                var paths = wired ? graph.routesFrom(origin) : null;
+                long component = wired ? graph.componentOf(origin) : -1;
+                for (int receiver = 0; receiver < sinks.size(); receiver++) {
+                    var sink = sinks.get(receiver); if (source.tile == sink.tile) continue;
+                    if (start.equals(sink.position) && (sink.inputs & (1 << output.getOpposite().ordinal())) != 0) {
+                        long direct = -1L - (long) sourceId * sinks.size() - receiver;
+                        recordRoute(grouped, direct, sourceId, receiver, sinks.size(), 0);
+                    }
+                    if (!wired) continue;
+                    for (Direction input : Direction.values()) {
+                        if ((sink.inputs & (1 << input.ordinal())) == 0) continue;
+                        var contact = point(sink.position.relative(input)); if (!graph.contains(contact)) continue;
+                        int vertex = graph.vertex(contact);
+                        if (paths.reaches(vertex)) recordRoute(grouped, component, sourceId, receiver, sinks.size(), paths.lossMilliTo(vertex));
+                    }
                 }
             }
-            reaches[i] = found; losses[i] = best;
         }
-        return new RouteCosts() {
-            @Override public boolean reaches(int contact) { return reaches[contact]; }
-            @Override public long lossMilliTo(int contact) {
-                if (!reaches[contact]) throw new IllegalArgumentException("Unreachable endpoint"); return losses[contact];
+        var result = new ArrayList<DomainDistributor.Domain>();
+        for (var domain : grouped.values()) {
+            int[] ids = new int[domain.size()]; int[][] priorities = new int[domain.size()][];
+            var routes = new ArrayList<RouteCosts>(); int index = 0;
+            for (var entry : domain.entrySet()) {
+                int source = entry.getKey(); long[] losses = entry.getValue();
+                RouteCosts costs = new RouteCosts() {
+                    @Override public boolean reaches(int contact) { return losses[contact] >= 0; }
+                    @Override public long lossMilliTo(int contact) {
+                        if (!reaches(contact)) throw new IllegalArgumentException("Unreachable endpoint");
+                        return losses[contact];
+                    }
+                };
+                boolean[] eligible = new boolean[sinks.size()];
+                for (int receiver = 0; receiver < eligible.length; receiver++) {
+                    // Full connected receivers retain their random offset.
+                    eligible[receiver] = costs.reaches(receiver) && costs.wholeLossTo(receiver) < sources.get(source).packet;
+                }
+                ids[index] = source; routes.add(costs);
+                priorities[index++] = ReceiverOrder.create(receivers, eligible, worldTime, selectionRandom);
             }
-        };
+            result.add(new DomainDistributor.Domain(ids, routes, priorities));
+        }
+        return result;
+    }
+    private static void recordRoute(Map<Long, LinkedHashMap<Integer, long[]>> domains, long domain,
+            int source, int receiver, int count, long loss) {
+        long[] losses = domains.computeIfAbsent(domain, key -> new LinkedHashMap<>()).computeIfAbsent(source, key -> {
+            long[] values = new long[count]; Arrays.fill(values, -1); return values;
+        });
+        if (losses[receiver] < 0 || loss < losses[receiver]) losses[receiver] = loss;
     }
     @SubscribeEvent
     public void stopped(ServerStoppedEvent event) {

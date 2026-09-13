@@ -15,6 +15,7 @@ public final class ConductorGraph {
     private final long[] losses;
     private final int[] offsets;
     private final int[] neighbours;
+    private final int[] components;
 
     public ConductorGraph(long[] conductorLossMilli, int[][] links) {
         Objects.requireNonNull(conductorLossMilli, "conductorLossMilli");
@@ -47,7 +48,26 @@ public final class ConductorGraph {
             neighbours[cursor[ends[i]]++] = ends[i + 1];
             neighbours[cursor[ends[i + 1]]++] = ends[i];
         }
+        // Label physical wire components once. Endpoint machines are not wire
+        // vertices and therefore cannot accidentally merge distinct domains.
+        components = new int[count]; Arrays.fill(components, -1);
+        int[] queue = new int[count];
+        for (int seed = 0; seed < count; seed++) {
+            if (components[seed] >= 0) continue;
+            int head = 0, tail = 0; queue[tail++] = seed; components[seed] = seed;
+            while (head < tail) {
+                int vertex = queue[head++];
+                for (int i = offsets[vertex]; i < offsets[vertex + 1]; i++) {
+                    int next = neighbours[i];
+                    if (components[next] >= 0) continue;
+                    components[next] = seed; queue[tail++] = next;
+                }
+            }
+        }
     }
+
+    /** Stable snapshot-local ID of the physical conductor component. */
+    public int componentOf(int vertex) { check(vertex, losses.length); return components[vertex]; }
 
     /** O((V+E) log V) index construction; at most V active heap entries. */
     public Routes routesFrom(int sourceContact) {
