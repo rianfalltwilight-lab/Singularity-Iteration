@@ -99,3 +99,16 @@ CustomEUEnergyStorage 的独立钩子已开始使用 NetworkCell：首次服务�
 八归属白名单编译退出 0（10 秒），探针重新编译通过。核心代码和 0.15.3 JAR 未变化，沿用已通过的核心契约，未无故重复整套核心测试。运行 si-storage-generator-r22-monarch-03-20260913 两次 JVM/850 tick，17,954 项流程检查及 28 项实际事务边界检查通过；43 个核心类、21 个覆盖类和 37 份回执文件哈希一致。原始观察 SHA：12c334de72a36cdcc4de2f05f440703ffac78f43a1a70e00722503a7957c2a26, cb95a7e646a7b16a6b8edf1a028dc180dff405c8a4c417a920433778ca182555。汇总 mixed-storage-runtime-assessment.json；编译日志 SHA 6bba3637f6c5e4048e35e30e288ee9179e01b0aae65c5b767d3f053ac7841007。
 
 下一步让独立变压器端点持有数字状态并提供方向/模式/容量快照，补充公开平台注册、旧 ticking 隔离、保存和界面生命周期。当前没有变压器受控登记或性能结论，阶段 2 未退出。
+
+
+## 独立变压器平台实体（尚未注册）
+
+新增 cleanroom-minecraft 中的 IndependentTransformerBlockEntity，仅依赖自有数字核心及公开 Minecraft/NeoForge 类型。接收方提供注册类型、低档电包和初始原始模式；原始模式值不猜测为升降压规则，报价时由集成层明确提供方向模式。实体保存普通 buffer/mode 字段，使用独立 NetworkCell 承载整数余额；模式改变、重新加载、移除或更换世界撤销旧报价身份。非整数、负值和非有限数值保留原保存值，但不参与当前整 EU 报价。超过 double 精确整数范围的原始值同样不报价；这不是完整异常存档兼容结论。
+
+核对了缓存 Minecraft/NeoForge 源码中的 BlockEntity 保存和失效接口、BlockEntityType.create 及 LevelChunk ticker 绑定。未读取旧变压器或旧电网实现。平台输入 SHA 清单在 transformer-platform-source-inputs.json。工厂创建与 ticker 绑定是分开的入口，后续必须同时处理，不能只换实体就声称旧 ticking 已隔离。
+
+平台模块 0.4.0-r24-experimental 编译与打包退出 0，10 秒、5 个任务中 3 个执行；JAR 22770 字节，SHA 872955f714039d0ec56aa55e933eb6a384a0d5dcbf757358c8ed686ed19d893f。日志 SHA 6d97e118453eeff237ea51d02d643d72aec95acfab9a38ff9ffa9c70e65c38ce。核心 JAR 保持 0.15.3。
+
+真实服务器环境中创建未安装到世界的独立实体，借用已有控制方块的注册类型作平台元数据，未将它当作变压器注册成功。四档共 80 项检查覆盖收发预算、数字提交、保存、模式变化后旧报价、移除/恢复身份及不支持数值保留。额外两次 JVM/850 tick 的原有煤炭加工保存回归 17,954 项和事务边界 28 项也通过；37 份回执收件哈希一致。原始观察 SHA：d0409baf72acf44cfe14f2f12737b47971e2d1a336b1984bbb23e83c79928c9e, ed1d7118b67eabb0998c967304e584ad0aff1813a97586af1c4880764d66c6a1。汇总 transformer-state-runtime-assessment.json。
+
+该记录更新平台模块仅编译时的 NOT_RUN，但实际世界工厂、旧 ticker 隔离、GUI、方向路由和变压器输电仍未实现/验收。下一步在独立 opt-in 集成中接入两条创建路径和 ticker 隔离，再按真实方块覆盖放置、保存加载和拆换。阶段 2 未退出，完整来源门禁不变。

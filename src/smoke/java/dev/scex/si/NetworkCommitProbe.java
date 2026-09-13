@@ -80,6 +80,8 @@ public final class NetworkCommitProbe {
         check(a.getAmount()==68 && b.getAmount()==23 && independent.quote().amount()==40,"stale-extra-keeps-machine-mirrors");
         a.setEnergy(100);b.setEnergy(0);independent.retire();
         check(a.getAmount()==100 && b.getAmount()==0 && c.getAmount()==0,"mixed-controls-restored");
-        return Map.of("passed",true,"checks",assertions,"scope","Actual main-thread commit, guard/stale/duplicate/conservation/replay/over-capacity/context boundaries");
+        return Map.of("passed",true,"checks",assertions,
+            "transformer_state",TransformerStateProbe.run(level),
+            "scope","Actual main-thread commit, guard/stale/duplicate/conservation/replay/over-capacity/context boundaries");
     }
 }
