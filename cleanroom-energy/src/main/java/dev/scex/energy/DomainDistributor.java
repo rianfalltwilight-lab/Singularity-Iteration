@@ -52,8 +52,10 @@ public final class DomainDistributor {
      * remaining after prior domains, but retains that quote for its own source
      * cycle. Direct machine contacts are separate domains, as demonstrated by
      * R16's no-wire controls: they fill live room without the wired overshoot.
-     * Source reserves are shared across domains and never spend incoming credit
-     * in this round. A fresh snapshot is required before any world commit.
+     * One packet budget per source is shared across all domains. The complete
+     * reserve threshold is checked once, before any domain; a partially spent
+     * packet may continue into later domains. Incoming credit cannot replenish
+     * that budget in this round. A fresh snapshot is required before any commit.
      * Mixed shared-source/multiple-domain behavior remains an integration model,
      * not an assertion that all target scheduling details have been established.
      */
@@ -83,6 +85,12 @@ public final class DomainDistributor {
             int other = random.nextInt(end + 1), saved = domainOrder[end];
             domainOrder[end] = domainOrder[other]; domainOrder[other] = saved;
         }
+        long[] budgets = new long[sources.size()];
+        for (int source = 0; source < sources.size(); source++) {
+            var quote = sources.get(source);
+            budgets[source] = quote.partialPackets() ? Math.min(quote.reserve(), quote.packet())
+                : quote.reserve() >= quote.packet() ? quote.packet() : 0;
+        }
         long[] debits = new long[sources.size()], credits = new long[remaining.length];
         long loss = 0;
         for (int domainId : domainOrder) {
@@ -90,12 +98,11 @@ public final class DomainDistributor {
             var offers = new ArrayList<MultiSourceDistributor.Offer>();
             int[] sourceMap = new int[domain.sources.length];
             for (int i = 0; i < domain.sources.length; i++) {
-                int source = domain.sources[i]; var quote = sources.get(source);
-                long reserve = quote.reserve() - debits[source];
-                long packet = quote.partialPackets() ? Math.min(reserve, quote.packet()) : quote.packet();
-                if (packet <= 0 || reserve < packet) continue;
+                int source = domain.sources[i];
+                long packet = budgets[source] - debits[source];
+                if (packet <= 0) continue;
                 sourceMap[offers.size()] = source;
-                offers.add(new MultiSourceDistributor.Offer(reserve, packet, domain.routes.get(i), contacts, domain.priorities[i]));
+                offers.add(new MultiSourceDistributor.Offer(packet, packet, domain.routes.get(i), contacts, domain.priorities[i]));
             }
             long[] room = new long[remaining.length];
             for (int receiver = 0; receiver < room.length; receiver++) room[receiver] = Math.max(0, remaining[receiver]);

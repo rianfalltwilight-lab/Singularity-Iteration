@@ -1,0 +1,21 @@
+{
+  "rows": 18720,
+  "sha256": "b71e8712339d36b7f16fabe8654eb6dcdda8c733341db88ec2e32638623731a9",
+  "inputs": [
+    {
+      "run": "si-ic2-shared-source-r17-01-20260913",
+      "observations_sha256": "7d734a278efe91cb72a1f4cf070da88609974a35afbc1bf3fe95a3a1d1819f99",
+      "fixture_sha256": "aa4752dcd7e8d59052b892c0f097c3ab0036fc88ce2140f54a2216239cb15ad6",
+      "vectors": 12960,
+      "trial_sequences": 4320
+    },
+    {
+      "run": "si-ic2-shared-source-r17-02-20260913",
+      "observations_sha256": "9beea7d8182317b1ce8f1a91db83c69e0c3a37199b61a482af969507a9e7f339",
+      "fixture_sha256": "028d5fc042513d21ad8f6a02b50e0a73c7dd97b43ab29bfc8449cb3143b5c120",
+      "vectors": 5760,
+      "trial_sequences": 1920
+    }
+  ],
+  "scope": "Public normal-game input/output deltas through three consecutive ticks per reset. No target code inspected. Accounting acceptance does not establish receiver order when wire domains merge."
+}

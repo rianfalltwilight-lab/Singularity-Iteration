@@ -1,6 +1,6 @@
 param([Parameter(Mandatory)][string]$OutputDirectory)
 $ErrorActionPreference = 'Stop'
-$version = '0.9.0-r16-experimental'
+$version = '0.10.0-r17-experimental'
 $target = [IO.Path]::GetFullPath($OutputDirectory)
 if (Test-Path -LiteralPath $target) { throw 'Use a fresh output directory for a reproducible build' }
 $jdk = if ($env:JAVA_HOME) { Join-Path $env:JAVA_HOME 'bin' } else { Split-Path (Get-Command javac).Source }
@@ -41,6 +41,8 @@ if ($LASTEXITCODE -ne 0) { throw 'Receiver order contract verification failed' }
 if ($LASTEXITCODE -ne 0) { throw 'Partial receiver contract verification failed' }
 & $java -Xms32m -Xmx128m -cp ($classes + [IO.Path]::PathSeparator + $contracts) dev.scex.energy.PriorityDomainContract (Join-Path $PSScriptRoot 'fixtures/observed-source-priority.tsv') (Join-Path $PSScriptRoot 'fixtures/observed-full-receiver-priority.tsv')
 if ($LASTEXITCODE -ne 0) { throw 'Priority domain contract verification failed' }
+& $java -Xms32m -Xmx128m -cp ($classes + [IO.Path]::PathSeparator + $contracts) dev.scex.energy.SharedSourceContract (Join-Path $PSScriptRoot 'fixtures/observed-shared-source.tsv')
+if ($LASTEXITCODE -ne 0) { throw 'Shared source contract verification failed' }
 $manifest = Join-Path $target 'MANIFEST.MF'
 [IO.File]::WriteAllText($manifest, "Manifest-Version: 1.0`nImplementation-Version: $version`nSCEX-Integration-Status: Standalone experimental component; not a Minecraft mod`n`n", [Text.UTF8Encoding]::new($false))
 $artifact = Join-Path $target "scex-independent-energy-$version.jar"

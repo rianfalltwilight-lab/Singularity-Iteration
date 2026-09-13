@@ -1,10 +1,16 @@
-# Independent energy accounting — R16 experimental
+# Independent energy accounting — R17 experimental
 
 This is a new, standalone Java 21 library, **not a Minecraft mod or a complete energy network replacement**. It has no SI, Minecraft, NeoForge, IC2 or other external dependency. No IC2 source, API or decompiled implementation was used to write it. Its implementation and contracts were independently authored against ordinary game observations and accounting requirements. Existing upstream implementations with unresolved provenance were not used as templates.
 
+## R17 shared source packet budget
+
+Current version: `0.10.0-r17-experimental`. Twelve contract runners pass 1,452,005 assertions. `DomainDistributor` now fixes one packet budget per source before visiting any conductor domain. Every later domain spends only the unused part, including path loss. Full-packet storage eligibility is checked once; partial spending does not invalidate the remainder. Incoming credit cannot increase that round's budget.
+
+The change is checked against 18,720 public tick deltas from 102 reset layouts. The prior actual SI baseline violated the shared budget in 640 vectors; both current SI controls pass the accounting checks. Newly joined U-shaped networks still differ in their fixed receiver priority, explicitly excluded from this accounting acceptance and scheduled for R18. No integrated performance result or complete equivalence is claimed.
+
 ## R16 source domains and receiver offsets
 
-Current version: `0.9.0-r16-experimental`. Eleven contract runners pass 1,412,841 assertions. The older sections below describe the scopes at those checkpoints; this section supersedes R8's aggregate-room stop rule. R13–R15 timing and receiver-order details are in the repository's corresponding progress reports.
+R16 checkpoint version: `0.9.0-r16-experimental`. Eleven contract runners pass 1,412,841 assertions. The older sections below describe the scopes at those checkpoints; this section supersedes R8's aggregate-room stop rule. R13–R15 timing and receiver-order details are in the repository's corresponding progress reports.
 
 R16 freezes 14,520 public source-debit vectors and 1,800 receiver-capacity-mask vectors. Full but connected receivers retain their position in `ReceiverOrder`'s offset population; accounting skips zero demand. Within a connected conductor domain, `SourceOrder` chooses a uniform starting offering source, then visits registration IDs forwards. Sources without an offer are excluded. This differs from the receiver's reverse cycle and every-fourth-world-tick fixed phase.
 
