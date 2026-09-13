@@ -25,6 +25,7 @@ public final class WorldScenarioProbe {
     private BufferedWriter output;
     private int tick,observations,executed;
     private boolean finished;
+    private final boolean observeWorldTime=Files.exists(Path.of("world-time-observation.json"));
     private int phaseFrame=-1,phaseFrom=-1,phaseTo=-1;
     public WorldScenarioProbe(MinecraftServer server) throws Exception {
         this.server=server;
@@ -153,6 +154,7 @@ public final class WorldScenarioProbe {
         if(finished || event.getServer()!=server) return;
         try {
             var world=server.overworld();
+            if(observeWorldTime) record("world-game-time",world.getGameTime());
             if(Boolean.getBoolean("scex.independent.energy")) {
                 var engine=IndependentSiEnergy.current(server);
                 if(engine==null || !engine.metrics().failure().isEmpty()) throw new IllegalStateException("Independent engine missing or failed");

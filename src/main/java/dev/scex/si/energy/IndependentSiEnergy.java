@@ -7,15 +7,19 @@ import com.singularity_iteration.mio_icif.energy.CustomEUEnergyStorage;
 import dev.scex.energy.ConductorRegistry;
 import dev.scex.energy.DeferredEntries;
 import dev.scex.energy.MultiSourceDistributor;
+import dev.scex.energy.ReceiverOrder;
 import dev.scex.energy.RouteCosts;
 import dev.scex.energy.minecraft.PlatformTopology;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.SplittableRandom;
+import java.util.concurrent.ThreadLocalRandom;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -74,11 +78,15 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
     private final long ownerThread = Thread.currentThread().threadId();
     private final PlatformTopology topology;
     private final Map<ServerLevel, WorldGrid> worlds = new HashMap<>();
+    // Record the independent seed in probe metrics so this selection stream can
+    // be replayed. It is not a seed or algorithm taken from the reference mod.
+    private final long selectionSeed = Long.getLong("scex.independent.selectionSeed", ThreadLocalRandom.current().nextLong());
+    private final SplittableRandom selectionRandom = new SplittableRandom(selectionSeed);
     private long ticks, commits, rejected, debited, credited, dissipated;
     private String failure = "";
     private boolean closed;
     public record Metrics(long ticks, long commits, long rejected, long debited, long credited, long dissipated,
-                          int dimensions, int endpoints, boolean closed, String failure) { }
+                          int dimensions, int endpoints, boolean closed, String failure, long selectionSeed) { }
     private record Port(mio_icif_Energy_Block tile, BlockPos position, BlockState state,
                         CustomEUEnergyStorage storage, CustomEUEnergyStorage.NetworkQuote quote,
                         long capacity, int inputs, int outputs, long packet) { }
@@ -91,7 +99,7 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
     private static final class WorldGrid implements AutoCloseable {
         final DeferredEntries<BlockPos, Element> entries = new DeferredEntries<>(104_096, 65_536);
         final ConductorRegistry conductors = new ConductorRegistry(100_000, 32);
-        final Map<BlockPos, mio_icif_Energy_Block> machines = new HashMap<>();
+        final Map<BlockPos, mio_icif_Energy_Block> machines = new LinkedHashMap<>();
         final Map<Long, Integer> conductorChunks = new HashMap<>();
         boolean catchUp;
         void apply(List<DeferredEntries.Change<BlockPos, Element>> changes) {
@@ -125,7 +133,7 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
     public Metrics metrics() {
         if (Thread.currentThread().threadId() != ownerThread) throw new IllegalStateException("Read engine metrics on server thread");
         return new Metrics(ticks, commits, rejected, debited, credited, dissipated,
-            worlds.size(), worlds.values().stream().mapToInt(grid -> grid.machines.size()).sum(), closed, failure);
+            worlds.size(), worlds.values().stream().mapToInt(grid -> grid.machines.size()).sum(), closed, failure, selectionSeed);
     }
     @Override
     public void position(ServerLevel level, LevelChunk chunk, BlockPos at) {
@@ -225,22 +233,25 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
             long packet = generator ? Math.min(32, quote.amount()) : 32;
             ports.add(new Port(tile, at, tile.getBlockState(), storage, quote, tile.getEffectiveCapacity(), inputs, outputs, packet));
         }
-        ports.sort(Comparator.comparingInt((Port p) -> p.position.getX()).thenComparingInt(p -> p.position.getY()).thenComparingInt(p -> p.position.getZ()));
-        var sources = ports.stream().filter(p -> p.outputs != 0 && p.packet > 0 && p.quote.amount() >= p.packet).toList();
+        var sources = ports.stream().filter(p -> p.outputs != 0 && p.packet > 0 && p.quote.amount() >= p.packet)
+            .sorted(Comparator.comparingInt((Port p) -> p.position.getX()).thenComparingInt(p -> p.position.getY()).thenComparingInt(p -> p.position.getZ())).toList();
         var sinks = ports.stream().filter(p -> p.inputs != 0).toList();
         if (sources.isEmpty() || sinks.isEmpty()) return;
         var snapshot = grid.conductors.snapshot(); long[] room = new long[sinks.size()];
         int[] receivers = new int[sinks.size()]; int[] sourceOrder = new int[sources.size()];
         for (int i = 0; i < room.length; i++) { room[i] = Math.max(0, sinks.get(i).capacity - sinks.get(i).quote.amount()); receivers[i] = i; }
-        // Explicit deterministic rotation for this integration checkpoint. Target
-        // source/receiver probability and timing remain a separate black-box gate.
-        int[] priorities = new int[receivers.length];
-        for (int i = 0; i < priorities.length; i++) priorities[i] = (int) ((i + ticks) % priorities.length);
         var offers = new ArrayList<MultiSourceDistributor.Offer>();
         for (int i = 0; i < sources.size(); i++) {
+            // Source order remains an explicit separate acceptance boundary.
             sourceOrder[i] = (int) ((i + ticks) % sources.size());
             var source = sources.get(i);
             var costs = routes(source, sinks, snapshot);
+            boolean[] eligible = new boolean[sinks.size()];
+            for (int receiver = 0; receiver < eligible.length; receiver++) {
+                eligible[receiver] = room[receiver] > 0 && costs.reaches(receiver)
+                    && costs.wholeLossTo(receiver) < source.packet;
+            }
+            int[] priorities = ReceiverOrder.create(receivers, eligible, level.getGameTime(), selectionRandom);
             offers.add(new MultiSourceDistributor.Offer(source.quote.amount(), source.packet, costs, receivers, priorities));
         }
         var round = MultiSourceDistributor.allocate(offers, room, sourceOrder);

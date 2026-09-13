@@ -1,7 +1,7 @@
 plugins { id 'java-library' }
 
 group = 'dev.scex'
-version = '0.6.0-r13-experimental'
+version = '0.7.0-r14-experimental'
 base { archivesName = 'scex-independent-energy' }
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
@@ -98,3 +98,12 @@ tasks.register('deferredContractTest', JavaExec) {
     jvmArgs '-Xms32m', '-Xmx128m'
 }
 tasks.named('check') { dependsOn tasks.named('deferredContractTest') }
+
+tasks.register('receiverOrderContractTest', JavaExec) {
+    dependsOn tasks.named('contractClasses')
+    classpath = sourceSets.contract.runtimeClasspath
+    mainClass = 'dev.scex.energy.ReceiverOrderContract'
+    args layout.projectDirectory.file('fixtures/observed-receiver-order.tsv').asFile.absolutePath
+    jvmArgs '-Xms32m', '-Xmx128m'
+}
+tasks.named('check') { dependsOn tasks.named('receiverOrderContractTest') }

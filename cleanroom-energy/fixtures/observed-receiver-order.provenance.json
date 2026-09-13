@@ -1,0 +1,11 @@
+{
+  "reference": "IC2 Experimental 2.8.222-ex112 binary; Forge 14.23.5.2860; Java 8u202",
+  "reference_jar_sha256": "f96b1886b6d060b308fb811029d5c5cc76deb17b835aa368dcb6071f2de290d4",
+  "run": "si-ic2-receiver-r14-02-20260913",
+  "observations_sha256": "d6c6054c9d30f3c4c1b7c7a18672730132aab9c0013dc094119f3a902b59bcf6",
+  "cases_sha256": "74f6e24f676ac9312ff23c12c61ad508a59050d0fe2ffb84a1b354041c306be2",
+  "commands_sha256": "fdd0f2b312cd1d3d64be93cbc8982da78f359baac87ee41f778f12f2a4744a92",
+  "export_sha256": "0706a8134572c436504abd082a3667f1405875e34299e7aace2bc805f858d9c5",
+  "rows": 9000,
+  "scope": "Public world game time, ordinary tile save energy and creative placement order. One source with 1/2/4 symmetric receivers. Fixed priority at world time divisible by four; remaining selection evaluated as a distribution. No original algorithm/API/source inspected."
+}
