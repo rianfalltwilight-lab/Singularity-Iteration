@@ -48,3 +48,12 @@ gradlew.bat --offline --no-daemon --max-workers=2 --console=plain :cleanroom-ene
 结果与恢复时发生多轮账目计算相容，但尚未验证不同切换时刻、短暂脉冲或其他拓扑，不能宣布一般补算规则。R23 组件应视为单次账目轮次；如何安排暂停、恢复及同世界 tick 的调用次数属于尚待验收的调度层，不把本组直接计为组件动态模式支持。
 
 本组正常停止、存档、退出，收件哈希有效；原始记录 SHA-256 `b1b03fedb8b06b55cd2007979d30fb5d7a23c5ae58577773fa349c1e5eb5b844`，详见 `evidence/r23/modes-assessment.json`。没有修改归档核心或解除完整模组来源门禁。下一步以新切换时刻检验暂停/恢复轮次，再推进多面与 SI 接入。
+
+
+## 新切换时刻的冻结预测验证
+
+在原版启动前冻结输入、Java 预测器、归档核心和完整状态集合共 11 个文件；物理模式切换改为 tick 37/73。预测假设为 tick 38～75 零轮、tick 76 两轮、其他时刻一轮，每轮仍保留显式收发顺序。预测 SHA-256 `8ec5abe3eeb884965b09912cabb1247a740ab8e0dcf308392b6ce8f7c24aec59`。
+
+`si-ic2-transformer-mode-holdout-r22-monarch-01-20260913` 的 8 个场景/1,280 笔状态全部属于预先冻结集合，1,280 项物理红石及守恒检查通过。使用未改动的归档 R23 Java 组件核对相邻实际状态：304 笔零轮、968 笔单轮、8 笔双轮，无法解释的转移为 0。原始记录 SHA-256 `f9abcbe41173f0d6947ad9d5bd060a8f5f3730070aaeb7749fdd8d40d44c8ba4`，详见 `evidence/r23/mode-holdout-prediction-freeze.json`、`mode-holdout-assessment.json`、`mode-holdout-java-check.log` 和 `mode-holdout-proof.json`。
+
+远端实测约 5.1 GiB，低于 6 GiB 门槛，沿已授权 Monarch 隔离回退、单 JVM/2 GiB 堆完成。运行正常停止、存档、退出，收件哈希核验通过；登记世界及已核对保留副本的 incoming 传输包已清理。没有改变核心实现或完整来源门禁。该结果支持已测布局的新切换时刻，不证明短脉冲、多面、多变压器或一般调度概率。下一步推进批次跨接收器与 SI 接入所需的明确收发边界；阶段 2 仍未退出。
