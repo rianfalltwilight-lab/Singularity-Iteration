@@ -1,6 +1,12 @@
-# Independent energy accounting — R19 experimental
+# Independent energy accounting — R23 experimental
 
 This is a new, standalone Java 21 library, **not a Minecraft mod or a complete energy network replacement**. It has no SI, Minecraft, NeoForge, IC2 or other external dependency. No IC2 source, API or decompiled implementation was used to write it. Its implementation and contracts were independently authored against ordinary game observations and accounting requirements. Existing upstream implementations with unresolved provenance were not used as templates.
+
+## R23 transformer accounting with explicit order
+
+Version `0.14.0-r23-experimental` adds an independently authored, lossless single-path transformer accounting component. The caller supplies input-first or output-first order. All 15,200 frozen numerical one-step observations are admitted; 24 distinguish input-first, 14 distinguish output-first, and 15,162 do not distinguish them. This does not predict the reference scheduler, probabilities, multiport routing, overload effects, topology changes or SI integration.
+
+Sixteen contract runners pass 1,570,795 checks. For a standalone rebuild with Java 21 and Gradle 9.2.1, run `gradle --offline --no-daemon --max-workers=2 check jar` in this directory. The local settings file keeps that build independent of SI. See `../SCEX-R23.md` and the fixture provenance manifest.
 
 ## R19 component-scoped route allocation
 
