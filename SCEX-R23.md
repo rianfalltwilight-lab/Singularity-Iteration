@@ -111,3 +111,16 @@ gradlew.bat --offline --no-daemon --max-workers=2 --console=plain :cleanroom-ene
 完整核心 19 组/1,684,014 项检查通过，构建退出 0，外部/旧实现依赖为 0。独立 JAR `0.14.3-r23-experimental` 为 56,304 字节，SHA-256 `521b98c586eb1c7f9671a6b40ac182647444fc85f417578995904116963b0e84`，日志 `evidence/r23/split-loss-core-check-build.log`。新归档重建尚未运行；上一版 0.14.2 的归档源码已重建，18 组契约重新执行且 JAR SHA 完全一致，见 `loss-archive-verification.json`。没有修改 SI 接入类或替换冻结运行覆盖类，完整来源门禁不变。
 
 上轮 `transformer-loss-0/1/2/3` 世界及 incoming 已完成标准清理，原失败大夹具保留。当前有效双路径运行的清理回执见 `split-loss-*-cleanup-apply.log`；不包含 INCOMPLETE 现场或归档重建目录。下一步使用不同部分余量前向验证，然后将逐包账目和容量释放接入统一分配器；阶段 2 仍进行中。
+
+
+## 有损余量模型的新输入前向验证
+
+使用未修改的归档 `0.14.3-r23-experimental`，新增四档共 16 个场景，接收空间改为输出单位减 3/减 4、两个半包附近空间和输出单位加 2，初始缓冲改为 3.5/5.5 个输出单位。几何沿用两个独立的 40/80 根玻璃线路；完整输入、Java 预测器与组件共 33 个文件先冻结，再启动四个原版分片。完整预测共 1,120 个状态，每时刻最多两个。预测 SHA-256 `d60c5138aa4cebf4e2dba379a34c3e9bfaad0f6e612972f2ab027960b4070737`。
+
+640 笔新状态全部属于预先生成的状态集合，归档 Java 逐步核对实际相邻状态的 640 笔转换也全部通过。覆盖余量不足以支付第二线路损耗时保留，以及余量 3 EU 支付 2 EU 损耗后实际交付 1 EU 的边界。四个运行的原始哈希与 3,840 项导线生存检查见 `evidence/r23/residual-holdout-run-proof.json` 和逐分片 assessment；预测冻结与 Java 转换日志分别为 `residual-holdout-prediction-freeze.json`、`residual-holdout-java-check.log`。
+
+所有 Minecraft 分片均正常停止、保存、退出；Java 预测、Minecraft 运行、Java 相邻转换检查及归档重建严格串行。本轮源码归档重建重新执行 19 组/1,684,014 项契约，JAR 为 56,304 字节，SHA-256 `521b98c586eb1c7f9671a6b40ac182647444fc85f417578995904116963b0e84`，与冻结组件完全一致。见 `split-loss-archive-verification.json`。没有改动核心或增加 SI 接入结论。
+
+下一项工程工作是统一分配器的批次预算：每轮仅报价一次，跨物理导线组继续使用剩余预算，不能重新向下取整而丢弃可以传输的部分包；保留名义单包大小及逐包账目，避免用批次总量触发单包过压。随后才将同一端点输出释放的容量接入后续输入规划，并增加 SI 变压器的实际受控路径。调度概率、连通历史、变压器过压、实体爆炸和阶段 3～5 仍未通过。
+
+本轮四个有效 residual-holdout 运行的登记世界和 incoming 已按标准回执清理，原始输入/观察/预测保留；清理证明见 `evidence/r23/residual-holdout-cleanup-status.json`。
