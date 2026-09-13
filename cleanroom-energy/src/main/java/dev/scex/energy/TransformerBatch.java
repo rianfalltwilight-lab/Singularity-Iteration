@@ -50,11 +50,25 @@ public final class TransformerBatch {
     public static Allocation allocate(TransformerAccounting.Configuration configuration,
                                       long buffer, long[] room, int[] priority, long[] pathLoss) {
         Objects.requireNonNull(configuration, "configuration");
+        if (buffer < 0 || buffer > configuration.capacity())
+            throw new IllegalArgumentException("Invalid buffer");
+        long packet = configuration.outputPacket();
+        long budget = Math.min(buffer / packet, configuration.outputPackets()) * packet;
+        return allocateQuoted(packet, budget, room, priority, pathLoss);
+    }
+
+    /** Continue a previously quoted batch across domains without rounding its residual again. */
+    static Allocation allocateQuoted(long packet, long budget, long[] room, int[] priority, long[] pathLoss) {
+        return allocateQuoted(packet, budget, room, priority, pathLoss, true);
+    }
+
+    static Allocation allocateQuoted(long packet, long budget, long[] room, int[] priority, long[] pathLoss, boolean trace) {
         Objects.requireNonNull(room, "room");
         Objects.requireNonNull(priority, "priority");
         Objects.requireNonNull(pathLoss, "pathLoss");
-        if (buffer < 0 || buffer > configuration.capacity() || room.length != priority.length || room.length != pathLoss.length)
-            throw new IllegalArgumentException("Invalid buffer or vector dimensions");
+        if (packet <= 0 || budget < 0 || budget / packet > 4 || budget / packet == 4 && budget % packet != 0
+                || room.length != priority.length || room.length != pathLoss.length)
+            throw new IllegalArgumentException("Invalid quoted budget or vector dimensions");
         boolean[] seen = new boolean[room.length];
         for (int id : priority) {
             if (id < 0 || id >= room.length || seen[id])
@@ -63,25 +77,23 @@ public final class TransformerBatch {
         }
         for (long value : room) if (value < 0) throw new IllegalArgumentException("Negative demand");
         for (long value : pathLoss) if (value < 0) throw new IllegalArgumentException("Negative path loss");
-        long packet = configuration.outputPacket();
-        long budget = Math.min(buffer / packet, configuration.outputPackets()) * packet;
         long remaining = budget;
         long[] credits = new long[room.length];
         long dissipated = 0;
-        List<Delivery> deliveries = new ArrayList<>();
+        List<Delivery> deliveries = trace ? new ArrayList<>() : List.of();
         for (int id : priority) {
             long loss = pathLoss[id];
             if (room[id] == 0 || loss >= packet || remaining <= loss) continue;
             if (room[id] <= Math.min(packet, remaining) - loss) {
                 long debit = room[id] + loss;
-                deliveries.add(new Delivery(id, debit, room[id], loss));
+                if (trace) deliveries.add(new Delivery(id, debit, room[id], loss));
                 credits[id] = room[id];
                 remaining -= debit;
                 dissipated = Math.addExact(dissipated, loss);
             } else {
                 long whole = remaining / packet, tail = remaining % packet;
                 for (long i = 0; i < whole; i++) {
-                    deliveries.add(new Delivery(id, packet, packet - loss, loss));
+                    if (trace) deliveries.add(new Delivery(id, packet, packet - loss, loss));
                     credits[id] = Math.addExact(credits[id], packet - loss);
                     remaining -= packet;
                     dissipated = Math.addExact(dissipated, loss);
@@ -89,7 +101,7 @@ public final class TransformerBatch {
                 // A residual unable to pay this route's loss stays available;
                 // it must not suppress the full packets or be dissipated alone.
                 if (tail > loss) {
-                    deliveries.add(new Delivery(id, tail, tail - loss, loss));
+                    if (trace) deliveries.add(new Delivery(id, tail, tail - loss, loss));
                     credits[id] = Math.addExact(credits[id], tail - loss);
                     remaining -= tail;
                     dissipated = Math.addExact(dissipated, loss);

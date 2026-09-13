@@ -11,9 +11,14 @@ public final class DomainDistributor {
     private DomainDistributor() { }
 
     /** Full tier packets for storage, bounded residual packets for generators. */
-    public record Source(long reserve, long packet, boolean partialPackets) {
+    public record Source(long reserve, long packet, boolean partialPackets, int packetCount) {
+        public Source(long reserve, long packet, boolean partialPackets) {
+            this(reserve, packet, partialPackets, 1);
+        }
         public Source {
-            if (reserve < 0 || packet <= 0) throw new IllegalArgumentException("Invalid source quote");
+            if (reserve < 0 || packet <= 0 || packetCount < 1 || packetCount > 4
+                    || partialPackets && packetCount != 1)
+                throw new IllegalArgumentException("Invalid source quote");
         }
     }
 
@@ -79,7 +84,10 @@ public final class DomainDistributor {
      * remaining after prior domains, but retains that quote for its own source
      * cycle. Direct machine contacts are separate domains, as demonstrated by
      * R16's no-wire controls: they fill live room without the wired overshoot.
-     * One packet budget per source is shared across all domains. The complete
+     * One quoted budget per source is shared across all domains. Ordinary sources
+     * quote one packet; explicit transformer batches quote up to four whole packets
+     * from the initial reserve. Later domains retain usable partial remainders.
+     * The complete
      * reserve threshold is checked once, before any domain; a partially spent
      * packet may continue into later domains. Incoming credit cannot replenish
      * that budget in this round. A fresh snapshot is required before any commit.
@@ -127,7 +135,7 @@ public final class DomainDistributor {
         for (int source = 0; source < sources.size(); source++) {
             var quote = sources.get(source);
             budgets[source] = quote.partialPackets() ? Math.min(quote.reserve(), quote.packet())
-                : quote.reserve() >= quote.packet() ? quote.packet() : 0;
+                : Math.min(quote.reserve() / quote.packet(), quote.packetCount()) * quote.packet();
         }
         long[] debits = new long[sources.size()], credits = new long[remaining.length];
         List<Delivery> deliveries = trace ? new ArrayList<>() : List.of();
@@ -153,6 +161,34 @@ public final class DomainDistributor {
                 long[] activeQuotes = new long[quoted.length];
                 for (int receiver = 0; receiver < quoted.length; receiver++)
                     if (accepting[receiver]) activeQuotes[receiver] = quoted[receiver];
+                if (sources.get(source).packetCount() > 1) {
+                    var route = domain.routes.get(entry);
+                    long[] pathLoss = new long[remaining.length];
+                    for (int receiver = 0; receiver < remaining.length; receiver++) {
+                        if (!route.reaches(contacts[receiver])) {
+                            activeQuotes[receiver] = 0;
+                        } else {
+                            if (route.lossMilliTo(contacts[receiver]) < 0)
+                                throw new IllegalArgumentException("Negative route loss");
+                            pathLoss[receiver] = route.wholeLossTo(contacts[receiver]);
+                        }
+                    }
+                    var batch = TransformerBatch.allocateQuoted(sources.get(source).packet(), packet,
+                        activeQuotes, domain.priorities[entry], pathLoss, trace);
+                    if (trace) for (var delivery : batch.deliveries()) {
+                        deliveries.add(new Delivery(domainId, entry, source, delivery.receiver(),
+                            delivery.credit(), delivery.pathLoss()));
+                    }
+                    debits[source] = Math.addExact(debits[source], batch.debit());
+                    loss = Math.addExact(loss, batch.dissipated());
+                    for (int receiver = 0; receiver < remaining.length; receiver++) {
+                        long amount = batch.credit(receiver);
+                        credits[receiver] = Math.addExact(credits[receiver], amount);
+                        remaining[receiver] = Math.subtractExact(remaining[receiver], amount);
+                        if (amount >= quoted[receiver]) accepting[receiver] = false;
+                    }
+                    continue;
+                }
                 var receipt = trace
                     ? PacketDistributor.allocateTraced(packet, packet, domain.routes.get(entry), contacts, activeQuotes, domain.priorities[entry])
                     : PacketDistributor.allocate(packet, packet, domain.routes.get(entry), contacts, activeQuotes, domain.priorities[entry]);
