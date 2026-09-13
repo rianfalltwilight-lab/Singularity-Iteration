@@ -1,7 +1,7 @@
 plugins { id 'java-library' }
 
 group = 'dev.scex'
-version = '0.14.2-r23-experimental'
+version = '0.14.3-r23-experimental'
 base { archivesName = 'scex-independent-energy' }
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
@@ -189,3 +189,13 @@ tasks.register('transformerLossContractTest', JavaExec) {
     jvmArgs '-Xms32m', '-Xmx128m'
 }
 tasks.named('check') { dependsOn tasks.named('transformerLossContractTest') }
+
+
+tasks.register('transformerSplitLossContractTest', JavaExec) {
+    dependsOn tasks.named('contractClasses')
+    classpath = sourceSets.contract.runtimeClasspath
+    mainClass = 'dev.scex.energy.TransformerSplitLossContract'
+    args layout.projectDirectory.file('fixtures/observed-transformer-split-loss.tsv').asFile.absolutePath
+    jvmArgs '-Xms32m', '-Xmx128m'
+}
+tasks.named('check') { dependsOn tasks.named('transformerSplitLossContractTest') }

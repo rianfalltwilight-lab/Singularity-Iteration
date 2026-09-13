@@ -96,3 +96,18 @@ gradlew.bat --offline --no-daemon --max-workers=2 --console=plain :cleanroom-ene
 完整核心 18 组/1,588,967 项检查通过，新增损耗契约 10,085 项，构建退出 0，外部/旧实现依赖均为 0；日志 `evidence/r23/loss-core-check-build.log`。独立 JAR `0.14.2-r23-experimental` 为 54,327 字节，SHA-256 `9ba79e35e0d41278c78c4597d18dbff50bf3e4bc39bf0e4df258dcd1714522de`。旧归档保持不变，没有新增 SI 集成结论，完整来源门禁仍未通过。
 
 本轮另完成 0.14.1 归档源码重建：17 组/1,578,882 项检查重新执行，JAR SHA 与冻结版本完全相同，见 `evidence/r23/batch-archive-verification.json`。该重建副本保留；本轮四个已完成 Minecraft 副本的标准清理因其他实际验证任务占用共享窗口而延后，见 `loss-cleanup-status.json`，未绕过互斥量。新 0.14.2 归档重建尚未运行。下一步验证多个输出路径如何分摊部分包与损耗，并将已明确的每包信息接入统一分配器。
+
+
+## 两个有损输出路径的余量
+
+新增 16 个原版场景，四档降压变压器通过互不连接的 40/80 根玻璃线分别向两个 MFSU 输出，四个分片各 500 个观察点。运行前冻结的“剩余包数向上/向下取整计损耗”两套完整预测均被否定，各有 79/640 笔状态不同。原版观测显示：部分包余量不足以支付下一线路损耗时仍留在缓冲，后续完整包继续输出。例如 MV 第一端收到 126 EU、路径耗散 1 EU 后，第二端三个完整包共收到 378 EU、耗散 6 EU，剩余 1 EU 保留。不能把这 1 EU 单独耗散，也不能因此取消另外三个包。
+
+修正自有 `TransformerBatch`，增加每接收端路径损耗输入，保留无损重载。输出账目同时给出逐包扣电、入账及损耗，所有逐包扣电不超过名义包大小，合计与批次结果守恒；这是数值分解，不声明原版内部事件顺序。640 笔实际相邻状态全部符合显式接收顺序之一（12 笔仅 A→B、7 笔仅 B→A、621 笔两者均符合），新增契约 95,047 项。当前修正是已知数据回顾验证，仍需新输入前向验证。
+
+四个有效运行 `si-ic2-transformer-split-loss-0a/1/2/3-r22-monarch-01-20260913` 共 640 笔，3,840 项导线初始/结束存活检查通过；原始 SHA 和两套失败预测见 `evidence/r23/split-loss-combined-proof.json`、`split-loss-prediction-freeze.json`，原始预测未修改。
+
+首个 `split-loss-0` 的 Minecraft 本体结果 passed=true、正常保存退出，但包装器收尾发现新 Java PID 16972，完整回执为 INCOMPLETE。当时本任务同时启动了归档 Gradle 重建，未捕获该短命 PID 的准确子进程角色；保留现场和包装器失败，不补签通过。在全部构建 Java 退出后，以相同夹具新编号 `0a` 完整复测通过。后续所有 Java 构建和 Minecraft 验证改为串行。记录见 `evidence/r23/split-loss-0-wrapper-incomplete`。
+
+完整核心 19 组/1,684,014 项检查通过，构建退出 0，外部/旧实现依赖为 0。独立 JAR `0.14.3-r23-experimental` 为 56,304 字节，SHA-256 `521b98c586eb1c7f9671a6b40ac182647444fc85f417578995904116963b0e84`，日志 `evidence/r23/split-loss-core-check-build.log`。新归档重建尚未运行；上一版 0.14.2 的归档源码已重建，18 组契约重新执行且 JAR SHA 完全一致，见 `loss-archive-verification.json`。没有修改 SI 接入类或替换冻结运行覆盖类，完整来源门禁不变。
+
+上轮 `transformer-loss-0/1/2/3` 世界及 incoming 已完成标准清理，原失败大夹具保留。当前有效双路径运行的清理回执见 `split-loss-*-cleanup-apply.log`；不包含 INCOMPLETE 现场或归档重建目录。下一步使用不同部分余量前向验证，然后将逐包账目和容量释放接入统一分配器；阶段 2 仍进行中。

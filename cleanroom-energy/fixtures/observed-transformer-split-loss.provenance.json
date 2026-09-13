@@ -1,0 +1,30 @@
+{
+  "source": "Public platform observer and ordinary saved balances from IC2 Experimental 2.8.222-ex112 binary; no original source/API/decompilation.",
+  "runs": [
+    {
+      "run": "si-ic2-transformer-split-loss-0a-r22-monarch-01-20260913",
+      "raw_sha256": "fde32288baffb10008e22e2234a986307dad2b2e67ce8b70ee1e0e3391722803"
+    },
+    {
+      "run": "si-ic2-transformer-split-loss-1-r22-monarch-01-20260913",
+      "raw_sha256": "58b2b96e7ebceac0cbfcfadab7950f0ecbac548dcb4e5db4121429b2df9c3cbf"
+    },
+    {
+      "run": "si-ic2-transformer-split-loss-2-r22-monarch-01-20260913",
+      "raw_sha256": "9be9ad54ed28927342a5585604e232b0a12f93f1aa5532f58eac0009620b60d6"
+    },
+    {
+      "run": "si-ic2-transformer-split-loss-3-r22-monarch-01-20260913",
+      "raw_sha256": "9cf246e39560d4d52a95913d147aa4118d6da5232c6f4fc6cbccde8d1fbcd0f8"
+    }
+  ],
+  "cases": 16,
+  "vectors": 640,
+  "wire_survival_checks": 3840,
+  "failed_frozen_models": {
+    "ceil_remaining_packets": 79,
+    "floor_remaining_packets": 79
+  },
+  "fixture_sha256": "c1b4fd43d2aabde74ef497a891da7b3f2d5005c81dc1eb07661529cb22f7a869",
+  "scope": "Retrospective two-path accounting with explicit order; refined residual model is not prospective validation."
+}
