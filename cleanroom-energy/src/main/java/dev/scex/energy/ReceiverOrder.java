@@ -4,13 +4,15 @@ package dev.scex.energy;
 import java.util.Objects;
 import java.util.random.RandomGenerator;
 
-/** Independent recipient priority policy fitted to public R14 fanout observations. */
+/** Independent recipient priority policy fitted to public R14/R15 observations. */
 public final class ReceiverOrder {
     private ReceiverOrder() { }
 
     /**
      * Preserve registration priority every fourth world tick. Otherwise choose a
-     * uniform permutation of eligible recipients, using the caller's generator.
+     * uniform starting recipient, using the caller's generator, and traverse
+     * eligible registration ranks backwards with wraparound. R15's 31/1 splits
+     * distinguish this order from R14's equally distributed full permutations.
      * Ineligible entries remain in the complete result after eligible entries so
      * packet accounting retains stable receiver IDs. They consume no randomness.
      * This models the observed marginals and fixed phase, not an original PRNG.
@@ -38,12 +40,19 @@ public final class ReceiverOrder {
             if (eligible[receiver]) result[active++] = receiver;
             else result[inactive++] = receiver;
         }
-        if (worldTime % 4 != 0) {
-            for (int end = count - 1; end > 0; end--) {
-                int other = random.nextInt(end + 1);
-                int saved = result[end]; result[end] = result[other]; result[other] = saved;
-            }
+        if (count > 1) {
+            int first = worldTime % 4 == 0 ? 0 : random.nextInt(count);
+            // Two disjoint reversals form a backwards circular visit without a
+            // second receiver array, preserving the inactive tail unchanged.
+            reverse(result, 0, first);
+            reverse(result, first + 1, count - 1);
         }
         return result;
+    }
+
+    private static void reverse(int[] values, int left, int right) {
+        while (left < right) {
+            int saved = values[left]; values[left++] = values[right]; values[right--] = saved;
+        }
     }
 }

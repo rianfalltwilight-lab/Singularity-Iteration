@@ -1,0 +1,24 @@
+{
+  "reference": "IC2 Experimental 2.8.222-ex112 binary on Forge 14.23.5.2860 / Java 8u202",
+  "reference_sha256": "f96b1886b6d060b308fb811029d5c5cc76deb17b835aa368dcb6071f2de290d4",
+  "rows": 3600,
+  "fixed_phase_rows": 900,
+  "inputs": [
+    {
+      "run": "si-ic2-partial-r15-01-20260913",
+      "room": 31,
+      "observations_sha256": "1de7a6c6cc03b17130b31e872255d1f3190fbde672badb10f99bb2980d6d5538",
+      "cases_sha256": "34d71866942c0d75d03923f53d3f2968860aa0e12f07c9d1418aad03c0d67822",
+      "commands_sha256": "6c1b3f4a3d75a009dc525faa314228b4b8d9ee07c8ad31d54eebd35d0b8d0e55"
+    },
+    {
+      "run": "si-ic2-partial-r15-02-20260913",
+      "room": 11,
+      "observations_sha256": "bb43db03e0eb7fb402b96653c6e53c03f0002128ceb0c2494b272d680aa94359",
+      "cases_sha256": "ed8f3ed8b331f73fc18dd523bf5532118e85183842035c9a52f88ab691bf017d",
+      "commands_sha256": "7b30a503989e5f9c2e28d6957075dfad0c13ee6fca89fedb3e7338a56f74ebf4"
+    }
+  ],
+  "export_sha256": "7c5da0f127fb4f3afa10eb6a5b95472d8aaf48c4524cecc376e241f1383e7f13",
+  "scope": "Public world time and ordinary saved balances, 32 EU BatBox packets split over 2/3/4 receivers with 31 or 11 EU room. Reverse-cycle model consistent with observed vectors; full scheduler and target PRNG not certified."
+}

@@ -1,7 +1,7 @@
 plugins { id 'java-library' }
 
 group = 'dev.scex'
-version = '0.7.0-r14-experimental'
+version = '0.8.0-r15-experimental'
 base { archivesName = 'scex-independent-energy' }
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
@@ -107,3 +107,12 @@ tasks.register('receiverOrderContractTest', JavaExec) {
     jvmArgs '-Xms32m', '-Xmx128m'
 }
 tasks.named('check') { dependsOn tasks.named('receiverOrderContractTest') }
+
+tasks.register('partialReceiverContractTest', JavaExec) {
+    dependsOn tasks.named('contractClasses')
+    classpath = sourceSets.contract.runtimeClasspath
+    mainClass = 'dev.scex.energy.PartialReceiverContract'
+    args layout.projectDirectory.file('fixtures/observed-partial-order.tsv').asFile.absolutePath
+    jvmArgs '-Xms32m', '-Xmx128m'
+}
+tasks.named('check') { dependsOn tasks.named('partialReceiverContractTest') }
