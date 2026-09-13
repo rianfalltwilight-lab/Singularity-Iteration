@@ -44,6 +44,10 @@ public final class NetworkCommitProbe {
         try {CustomEUEnergyStorage.scexCommitNetwork(List.of(good.getFirst(),good.getFirst()),64,()->true);}
         catch(IllegalArgumentException expected){bad=true;}
         check(bad && a.getAmount()==100,"duplicate-storage-rejected");
+        check(!CustomEUEnergyStorage.scexCommitNetwork(good,0,()->true)
+            && a.getAmount()==100 && b.getAmount()==0,"restored-balance-does-not-revive-stale-quote");
+        good=List.of(new CustomEUEnergyStorage.NetworkWrite(a,a.scexNetworkQuote(),68),
+            new CustomEUEnergyStorage.NetworkWrite(b,b.scexNetworkQuote(),32));
         check(CustomEUEnergyStorage.scexCommitNetwork(good,0,()->true),"valid-batch-committed");
         check(a.getAmount()==68 && b.getAmount()==32,"exact-balanced-receipt");
         check(!CustomEUEnergyStorage.scexCommitNetwork(good,0,()->true),"replay-of-stale-balances-rejected");
