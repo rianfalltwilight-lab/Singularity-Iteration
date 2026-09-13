@@ -121,3 +121,13 @@ Java 21 下执行 `gradlew.bat --offline --no-daemon --max-workers=2 --console=p
 无接收器试验 `si-ic2-transformer-capacity-r22-monarch-01-20260913` 完成 14 个场景/2,240 笔状态，源端预充 256 个完整电包，接收器位置全程为空。已测 LV/MV/HV/EV 的最终缓冲分别为 256/1,024/4,096/16,384 EU；达到后保持 33～159 个观测 tick 不再收电，源端均仍有能量，全部 2,240 笔源端加缓冲守恒。相同变压器在已测不同供电档或红石模式下的最终缓冲一致；没有推广为任意初始 NBT、满接收器或模式切换结论。
 
 另写有限容量模型 `transformer_bounded_model_r22.py`，原先无容量预测文件和源码保持冻结。新模型回看无损坏、预充边界和无接收器三组共 5,040 笔记录全部一致；这是读过容量标签后的回顾验证，不能冒充第二次盲测。模型 SHA-256 `3fc1fd316b7f66d26c9241f06739bb6fa596e5e71ad41c39bb969a1be30eea4d`，结果见 `transformer-capacity-assessment.json` 和 `transformer-bounded-model-check.json`。下一步检验接收端恢复、部分接收与运行中模式变化，之后才接入独立 SI 端点。
+
+## 部分需求与恢复时序的反例
+
+`si-ic2-transformer-partial-r22-monarch-01-20260913` 完成 32 个场景、5,120 笔状态和能量守恒检查。MFSU 预充至剩余 0/1/一个输出单位前后/四个输出单位前后的空间，覆盖 CESU→LV 降压、CESU→MV 升压、MFE→HV 升压、MFE→EV 降压。LV 剩余 1/31/32 EU 时实际只收到该数值；剩余 33 或 127 EU 时一次收到 128 EU，超过剩余空间；剩余 129 EU 则先收 128、次 tick 再收 1。其他已测组合对应输出单位的部分尾数均按实际需求收取。各场景最后缓冲达到此前实测容量，源端余额扣除实际收电和缓冲，不能采用统一按接收器剩余空间截断整批输出的简化。
+
+`si-ic2-transformer-recovery-r22-monarch-01-20260913` 的四个场景让接收器先满电、变压器饱和，再于 tick 60 通过普通能量字段将接收器清空，不改变拓扑，共 640 笔有效状态。运行前冻结两种模型，预测 SHA-256 `22be63194a64158574ae85aad75b3cb49a92767e36f261afa1e5b441059f2995`：统一旧缓冲需求快照、统一输出后再计算需求，各有 240 笔不一致，均不接入实现。逐场景结果为 CESU→LV 和 MFE→HV 符合旧快照，CESU→MV 和 MFE→EV 符合输出后需求；不能按升/降压模式划分。先前口头按模式归纳过早，已纠正。
+
+`si-ic2-transformer-recovery-order-r22-monarch-01-20260913` 用临时原版黑曜石支撑先实际放置变压器，再移除支撑并实际放置电源，其他最终坐标、能量、红石及清空时刻不变。四场景 640 笔输入状态有效，三个场景的能量轨迹相对原顺序改变，共 360 笔，方块状态字符串未改变。先行冻结的按模式取快照假设（SHA-256 `96f9c7edb846f1ca6afe9c8aab81f5f208c34ee9ff03c9868296a7cdfb9cd10b`）仍有 120 笔不一致，拒绝采用。该结果证明已测登记历史影响恢复时序，不给出一般排序算法；存在该反例时不能将有限容量模型标作通用变压器实现。
+
+证据见 `transformer-partial-assessment.json`、`transformer-recovery-model-check.json`、`transformer-recovery-per-case-model-check.json` 与 `transformer-recovery-order-assessment.json`。三个运行均正常停止、存档、退出并核对收件哈希。远端约 5.211 GiB、Monarch 约 33.475 GiB，本地隔离回退保持 6 GiB 门槛和 2 GiB 堆。新增合计 40 场景/6,400 笔原版观察；模式切换、一般登记顺序、多面输出和 SI 接入仍未完成。
