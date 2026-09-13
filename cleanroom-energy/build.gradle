@@ -1,7 +1,7 @@
 plugins { id 'java-library' }
 
 group = 'dev.scex'
-version = '0.15.1-r24-experimental'
+version = '0.15.2-r24-experimental'
 base { archivesName = 'scex-independent-energy' }
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
@@ -219,3 +219,11 @@ tasks.register('sharedStorageContractTest', JavaExec) {
     jvmArgs '-Xms32m', '-Xmx128m'
 }
 tasks.named('check') { dependsOn tasks.named('sharedStorageContractTest') }
+
+tasks.register('networkCellContractTest', JavaExec) {
+    dependsOn tasks.named('contractClasses')
+    classpath = sourceSets.contract.runtimeClasspath
+    mainClass = 'dev.scex.energy.NetworkCellContract'
+    jvmArgs '-Xms32m', '-Xmx128m'
+}
+tasks.named('check') { dependsOn tasks.named('networkCellContractTest') }
