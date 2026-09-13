@@ -94,3 +94,15 @@ Java 21 下执行 `gradlew.bat --offline --no-daemon --max-workers=2 --console=p
 为分离世界内其他导线的影响，分别执行 `si-ic2-special-detector-r22-monarch-01-20260913` 与 `si-ic2-special-glass-r22-monarch-01-20260913`；各六个原位置场景、480 笔状态、486 项红石状态检查有效。保留每个场景的坐标、预充及红石命令，分别仅保留该种导线。两组均连续交付 80 个电包；与混合世界分别有 12 笔余额差异，只发生在 tick 42/62，下一 tick 余额重新一致。该结果支持已测世界内存在其他路径切换相关的调度影响，不证明内部算法或所有更新事件的规则。检测导线保存的 active 标志变化不是实际红石输出强度验收。
 
 三次均正常停止、存档、退出并校验收件哈希。远端约 5.185 GiB、Monarch 约 35.818 GiB，使用已授权本地回退，6 GiB 门槛和 2 GiB 堆保持。新增合计 30 场景、2,400 笔原版观测，不是 SI 对齐通过；特殊导线独立实现、检测输出、变压器和完整电网仍开放。证据见 `special-switch-assessment.json`、`special-detector-assessment.json`、`special-glass-assessment.json` 和 `special-world-comparison.json`。
+
+## 变压器初始基线与夹具纠正
+
+首轮 `si-ic2-transformer-matrix-r22-monarch-01-20260913` 通过普通创造栏已记录物品放置 LV/MV/HV/EV 变压器，CESU/MFE/MFSU 预充八个电包，垂直接空 MFSU，组合红石开/关及朝向 0/1，共 48 场景、1,920 笔状态。四种实际保存身份为 `ic2:lv_transformer`、`ic2:mv_transformer`、`ic2:hv_transformer`、`ic2:ev_transformer`。首轮朝向 0 用 blockdata 改保存字段，虽普通 NBT 已改变，但全部对应路径不收电，不能据此判定自然放置行为。
+
+独立探针仅扩展公开 Minecraft/Forge 放置助手：`@placeDown` 将 FakePlayer 的位置移到目标下方并向上看，仍调用公开 Minecraft ItemStack 使用入口；默认放置姿态未变。不调用或反射目标模组类/API。旧观察器源码和精确差异保留于 `VanillaObserver-before-down-placement.java` 与 `observer-down-placement-review.json`。
+
+实际放置复测 `si-ic2-transformer-placement-r22-monarch-01-20260913` 完成 48 场景、1,920 笔状态，身份、初始零能量、保存朝向与红石方块均有效。24 个向上对照的 960 笔轨迹与旧探针相同；向下组有 12 场景共 480 笔发生变化。原保存字段修改的 24 个向下场景明确排除出自然行为基线，不把字段核对通过冒充电网连接有效。
+
+以实际放置组作为 `transformer-reference-baseline.json`：48 场景中 10 个接收器最终有正余额，9 个变压器实际移除，1 个接收器实际移除。向上有红石时 CESU→MV 把累计输入转换为两次 512 EU 接收，MFE→HV 为两次 2,048 EU；MFSU→EV 在达到 8,192 EU 输出后移除 MFSU 接收器，之后有能量留存在变压器。向下无红石的 CESU→LV/MV/HV 全量送达，而 CESU→EV 留存 1,024 EU；这些是有限输入的结果，尚未确立一般缓冲容量和发送规则。混合世界中其他设备的损坏可能影响提交时序，下一步应以无过压的独立场景验证转换周期，再处理多面与运行中模式切换。
+
+两次均正常停止、存档、退出，收件逐项哈希通过。远端约 5.239 GiB、Monarch 约 35.467 GiB，继续已授权本地隔离回退。没有修改 SI 实现或解除来源门禁；变压器尚未独立接入，阶段 2 未退出。
