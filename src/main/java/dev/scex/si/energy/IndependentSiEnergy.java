@@ -47,10 +47,18 @@ import net.neoforged.neoforge.event.tick.LevelTickEvent;
 public final class IndependentSiEnergy implements PlatformTopology.Observer {
     private static final ResourceLocation BATBOX = id("wiring/block_bat_box");
     private static final ResourceLocation GENERATOR = id("generator/block_thermal_generator");
+    // Packet sizes are explicit public-game observations, not old grid tiers.
+    private static final Map<ResourceLocation, Long> STORAGE_PACKETS = Map.of(
+        BATBOX, 32L, id("wiring/block_cesu"), 128L,
+        id("wiring/block_mfe"), 512L, id("wiring/block_mfsu"), 2048L);
     private static final Set<ResourceLocation> ENDPOINTS = Set.of(BATBOX, GENERATOR, id("producer/block_furnace_elc"),
+        id("wiring/block_cesu"), id("wiring/block_mfe"), id("wiring/block_mfsu"),
         id("producer/block_powder_elc"), id("producer/block_extractor_elc"), id("producer/block_compressor_elc"));
     private static final Map<ResourceLocation, Long> CONDUCTORS = Map.of(
         id("wiring/cable/block_cable"), 200L, id("wiring/cable/block_cable_o"), 200L,
+        id("wiring/cable/block_tin_cable"), 200L, id("wiring/cable/block_tin_cable_1"), 200L,
+        id("wiring/cable/block_gold_cable"), 400L, id("wiring/cable/block_gold_cable_1"), 400L,
+        id("wiring/cable/block_iron_cable"), 800L, id("wiring/cable/block_iron_cable_1"), 800L,
         id("wiring/cable/block_glass_cable"), 25L);
     private static final Map<MinecraftServer, IndependentSiEnergy> SERVERS = new IdentityHashMap<>();
     private static boolean installed;
@@ -232,9 +240,10 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
             if (chunk == null || !level.shouldTickBlocksAt(ChunkPos.asLong(at)) || tile.isRemoved()
                 || chunk.getBlockEntity(at, LevelChunk.EntityCreationType.CHECK) != tile) continue;
             int inputs = 63, outputs = 0;
-            boolean generator = BuiltInRegistries.BLOCK.getKey(tile.getBlockState().getBlock()).equals(GENERATOR);
+            var type = BuiltInRegistries.BLOCK.getKey(tile.getBlockState().getBlock());
+            boolean generator = type.equals(GENERATOR);
             if (generator) { inputs = 0; outputs = 63; }
-            if (tile instanceof mio_icif_Energy_Container storageBox && BuiltInRegistries.BLOCK.getKey(tile.getBlockState().getBlock()).equals(BATBOX)) {
+            if (tile instanceof mio_icif_Energy_Container storageBox && STORAGE_PACKETS.containsKey(type)) {
                 inputs = 0;
                 for (var side : Direction.values()) {
                     if (storageBox.canProvidePowerFromSide(side)) outputs |= 1 << side.ordinal();
@@ -245,7 +254,7 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
             if (!quote.outputEnabled()) outputs = 0;
             // Original binary observations distinguish generator residual offers
             // from the BatBox full-packet reserve rule, including a 1 EU offer.
-            long packet = generator ? Math.min(32, quote.amount()) : 32;
+            long packet = generator ? Math.min(32, quote.amount()) : STORAGE_PACKETS.getOrDefault(type, 32L);
             ports.add(new Port(tile, at, tile.getBlockState(), storage, quote, tile.getEffectiveCapacity(), inputs, outputs, packet));
         }
         var sources = ports.stream().filter(p -> p.outputs != 0 && p.packet > 0 && p.quote.amount() >= p.packet).toList();
