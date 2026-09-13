@@ -2,6 +2,7 @@
 package dev.scex.energy;
 
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Objects;
 import java.util.random.RandomGenerator;
 
@@ -49,14 +50,28 @@ public final class DomainDistributor {
     public static final class Round {
         private final long[] debits, credits;
         private final long dissipated;
-        private Round(long[] debits, long[] credits, long dissipated) {
+        private final List<Delivery> deliveries;
+        private Round(long[] debits, long[] credits, long dissipated, List<Delivery> deliveries) {
             this.debits = debits; this.credits = credits; this.dissipated = dissipated;
+            this.deliveries = List.copyOf(deliveries);
         }
         public int sourceCount() { return debits.length; }
         public int receiverCount() { return credits.length; }
         public long debit(int source) { return debits[source]; }
         public long credit(int receiver) { return credits[receiver]; }
         public long dissipated() { return dissipated; }
+        /** Positive deliveries in domain/source/receiver visitation order; empty unless requested. */
+        public List<Delivery> deliveries() { return deliveries; }
+    }
+
+    /** IDs refer to the supplied vectors, including repeated source contact entries. */
+    public record Delivery(int domain, int entry, int source, int receiver, long credit, long pathLoss) {
+        public Delivery {
+            if (domain < 0 || entry < 0 || source < 0 || receiver < 0 || credit <= 0 || pathLoss < 0)
+                throw new IllegalArgumentException("Invalid positive delivery");
+            Math.addExact(credit, pathLoss);
+        }
+        public long sourceDebit() { return Math.addExact(credit, pathLoss); }
     }
 
     /**
@@ -73,6 +88,17 @@ public final class DomainDistributor {
      */
     public static Round allocate(List<Source> sourceQuotes, List<Domain> conductorDomains,
                                  int[] receiverContacts, long[] receiverRoom, RandomGenerator random) {
+        return allocate(sourceQuotes, conductorDomains, receiverContacts, receiverRoom, random, false);
+    }
+
+    /** Capture numeric delivery details without invoking callbacks or mutating a world. */
+    public static Round allocateTraced(List<Source> sourceQuotes, List<Domain> conductorDomains,
+                                       int[] receiverContacts, long[] receiverRoom, RandomGenerator random) {
+        return allocate(sourceQuotes, conductorDomains, receiverContacts, receiverRoom, random, true);
+    }
+
+    private static Round allocate(List<Source> sourceQuotes, List<Domain> conductorDomains,
+                                  int[] receiverContacts, long[] receiverRoom, RandomGenerator random, boolean trace) {
         var sources = List.copyOf(sourceQuotes);
         var domains = List.copyOf(conductorDomains);
         int[] contacts = Objects.requireNonNull(receiverContacts, "receiverContacts").clone();
@@ -104,6 +130,7 @@ public final class DomainDistributor {
                 : quote.reserve() >= quote.packet() ? quote.packet() : 0;
         }
         long[] debits = new long[sources.size()], credits = new long[remaining.length];
+        List<Delivery> deliveries = trace ? new ArrayList<>() : List.of();
         long loss = 0;
         for (int domainId : domainOrder) {
             var domain = domains.get(domainId);
@@ -126,8 +153,13 @@ public final class DomainDistributor {
                 long[] activeQuotes = new long[quoted.length];
                 for (int receiver = 0; receiver < quoted.length; receiver++)
                     if (accepting[receiver]) activeQuotes[receiver] = quoted[receiver];
-                var receipt = PacketDistributor.allocate(packet, packet, domain.routes.get(entry),
-                    contacts, activeQuotes, domain.priorities[entry]);
+                var receipt = trace
+                    ? PacketDistributor.allocateTraced(packet, packet, domain.routes.get(entry), contacts, activeQuotes, domain.priorities[entry])
+                    : PacketDistributor.allocate(packet, packet, domain.routes.get(entry), contacts, activeQuotes, domain.priorities[entry]);
+                if (trace) for (int receiver : domain.priorities[entry]) {
+                    if (receipt.credit(receiver) > 0) deliveries.add(new Delivery(domainId, entry, source, receiver,
+                        receipt.credit(receiver), receipt.deliveryLoss(receiver)));
+                }
                 debits[source] = Math.addExact(debits[source], receipt.sourceDebit());
                 loss = Math.addExact(loss, receipt.dissipated());
                 for (int receiver = 0; receiver < remaining.length; receiver++) {
@@ -138,6 +170,6 @@ public final class DomainDistributor {
                 }
             }
         }
-        return new Round(debits, credits, loss);
+        return new Round(debits, credits, loss, deliveries);
     }
 }

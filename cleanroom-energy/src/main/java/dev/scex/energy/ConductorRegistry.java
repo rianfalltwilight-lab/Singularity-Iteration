@@ -8,6 +8,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 
 /**
  * Thread-confined, bounded registration of conductors on a six-neighbour lattice.
@@ -114,7 +115,7 @@ public final class ConductorRegistry implements AutoCloseable {
             if (at.z < Integer.MAX_VALUE) { link(links, ids, i, new Position(at.x, at.y, at.z + 1)); }
         }
         ConductorGraph graph = positions.length == 0 ? null : new ConductorGraph(losses, links.toArray(int[][]::new));
-        cached = new Snapshot(owner, revision, Map.copyOf(ids), graph, maximumCachedSources);
+        cached = new Snapshot(owner, revision, Map.copyOf(ids), positions, graph, maximumCachedSources);
         rebuilds = nextRebuild;
         return cached;
     }
@@ -146,13 +147,14 @@ public final class ConductorRegistry implements AutoCloseable {
         private final Thread owner;
         private final long revision;
         private final Map<Position, Integer> ids;
+        private final Position[] positions;
         private final ConductorGraph graph;
         private final int maximumCachedSources;
         private final LinkedHashMap<Integer, ConductorGraph.Routes> routes = new LinkedHashMap<>(16, .75f, true);
         private boolean valid = true;
 
-        private Snapshot(Thread owner, long revision, Map<Position, Integer> ids, ConductorGraph graph, int limit) {
-            this.owner = owner; this.revision = revision; this.ids = ids; this.graph = graph; maximumCachedSources = limit;
+        private Snapshot(Thread owner, long revision, Map<Position, Integer> ids, Position[] positions, ConductorGraph graph, int limit) {
+            this.owner = owner; this.revision = revision; this.ids = ids; this.positions = positions; this.graph = graph; maximumCachedSources = limit;
         }
 
         private void active() {
@@ -168,6 +170,17 @@ public final class ConductorRegistry implements AutoCloseable {
             return result;
         }
         public int cachedSources() { active(); return routes.size(); }
+        public Position position(int vertex) {
+            active();
+            if (vertex < 0 || vertex >= positions.length) throw new IllegalArgumentException("Unknown conductor ID");
+            return positions[vertex];
+        }
+        /** A path tied to this lease; retaining it never authorizes a later world write. */
+        public Path path(Position source, Position receiver) {
+            var index = routesFrom(source); int target = vertex(receiver);
+            if (!index.reaches(target)) throw new IllegalArgumentException("Unreachable conductor");
+            return new Path(this, index, target);
+        }
         public int componentOf(Position at) { return graph.componentOf(vertex(at)); }
         public ConductorGraph.Routes routesFrom(Position source) {
             int id = vertex(source);
@@ -178,6 +191,21 @@ public final class ConductorRegistry implements AutoCloseable {
                 routes.put(id, result);
             }
             return result;
+        }
+    }
+
+    /** Immutable selected route. Every visit rechecks the snapshot lease. */
+    public static final class Path {
+        private final Snapshot snapshot;
+        private final ConductorGraph.Routes routes;
+        private final int receiver;
+        private Path(Snapshot snapshot, ConductorGraph.Routes routes, int receiver) {
+            this.snapshot = snapshot; this.routes = routes; this.receiver = receiver;
+        }
+        public long lossMilli() { snapshot.active(); return routes.lossMilliTo(receiver); }
+        public void visit(Consumer<Position> visitor) {
+            Objects.requireNonNull(visitor, "visitor"); snapshot.active();
+            routes.visitPath(receiver, id -> visitor.accept(snapshot.position(id)));
         }
     }
 }

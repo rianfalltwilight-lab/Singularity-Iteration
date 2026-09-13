@@ -178,8 +178,23 @@ public final class WorldScenarioProbe {
             }
             for(String command:commands.getOrDefault(tick,List.of())) {
                 var result=new int[]{Integer.MIN_VALUE};
-                var source=server.createCommandSourceStack().withSuppressedOutput().withCallback((success,value)->result[0]=success?value:-1);
-                server.getCommands().performPrefixedCommand(source,command);executed++;
+                if(command.startsWith("@explode ")) {
+                    String[] parts=command.split(" ");
+                    if(parts.length!=5) throw new IllegalArgumentException("Invalid isolated blast control");
+                    var center=new BlockPos(Integer.parseInt(parts[1]),Integer.parseInt(parts[2]),Integer.parseInt(parts[3]));
+                    float radius=Float.parseFloat(parts[4]);
+                    if(!positions.contains(center)||!Float.isFinite(radius)||radius<=0||radius>4
+                        ||server.overworld().getChunkSource().getChunkNow(center.getX()>>4,center.getZ()>>4)==null)
+                        throw new IllegalArgumentException("Blast control outside declared loaded fixture");
+                    server.overworld().removeBlock(center,false);
+                    server.overworld().explode(null,center.getX()+0.5,center.getY()+0.5,center.getZ()+0.5,radius,
+                        net.minecraft.world.level.Level.ExplosionInteraction.BLOCK);
+                    result[0]=1;
+                } else {
+                    var source=server.createCommandSourceStack().withSuppressedOutput().withCallback((success,value)->result[0]=success?value:-1);
+                    server.getCommands().performPrefixedCommand(source,command);
+                }
+                executed++;
                 record("command",Map.of("command",command,"result",result[0]));
                 if(result[0]<0) throw new IllegalStateException("Scenario command failed: "+command);
             }
