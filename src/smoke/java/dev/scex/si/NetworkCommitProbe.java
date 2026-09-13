@@ -64,6 +64,22 @@ public final class NetworkCommitProbe {
         c.setBlockContext(oldLevel,oldPos);
         a.setEnergy(100); b.setEnergy(0); c.setEnergy(0);
         check(a.getAmount()==100 && b.getAmount()==0 && c.getAmount()==0,"control-balances-restored");
+        // A standalone owned cell represents the numeric boundary of a future
+        // different block-entity family, not a registered transformer test.
+        var independent = new dev.scex.energy.NetworkCell(32);
+        var mixed = List.of(new CustomEUEnergyStorage.NetworkWrite(a,a.scexNetworkQuote(),68),
+            new CustomEUEnergyStorage.NetworkWrite(b,b.scexNetworkQuote(),23));
+        var extra = List.of(new dev.scex.energy.NetworkCell.Write(independent.quote(),40));
+        check(CustomEUEnergyStorage.scexCommitNetwork(mixed,extra,1,()->true),"mixed-owned-cell-transaction-commits");
+        check(a.getAmount()==68 && b.getAmount()==23 && independent.quote().amount()==40,"mixed-receipt-conserves-with-loss");
+        mixed=List.of(new CustomEUEnergyStorage.NetworkWrite(a,a.scexNetworkQuote(),60),
+            new CustomEUEnergyStorage.NetworkWrite(b,b.scexNetworkQuote(),23));
+        extra=List.of(new dev.scex.energy.NetworkCell.Write(independent.quote(),48));
+        independent.replace(41);independent.replace(40);
+        check(!CustomEUEnergyStorage.scexCommitNetwork(mixed,extra,0,()->true),"stale-extra-cell-rejects-entire-batch");
+        check(a.getAmount()==68 && b.getAmount()==23 && independent.quote().amount()==40,"stale-extra-keeps-machine-mirrors");
+        a.setEnergy(100);b.setEnergy(0);independent.retire();
+        check(a.getAmount()==100 && b.getAmount()==0 && c.getAmount()==0,"mixed-controls-restored");
         return Map.of("passed",true,"checks",assertions,"scope","Actual main-thread commit, guard/stale/duplicate/conservation/replay/over-capacity/context boundaries");
     }
 }

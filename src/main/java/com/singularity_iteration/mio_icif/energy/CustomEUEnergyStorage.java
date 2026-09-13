@@ -60,7 +60,20 @@ public class CustomEUEnergyStorage implements IEUEnergyStorage, IEnergyStorageAc
      */
     public static boolean scexCommitNetwork(java.util.List<NetworkWrite> requested,
                                             long dissipated, java.util.function.BooleanSupplier current) {
+        return scexCommitNetwork(requested, java.util.List.of(), dissipated, current);
+    }
+
+    /**
+     * Join independently owned endpoint cells to the same numeric transaction.
+     * Their platform identity and policy snapshots must be covered by current;
+     * NetworkCell additionally enforces thread ownership and revision validity.
+     * No extra cell is wrapped through a legacy energy interface or setter.
+     */
+    public static boolean scexCommitNetwork(java.util.List<NetworkWrite> requested,
+                                            java.util.List<dev.scex.energy.NetworkCell.Write> additional,
+                                            long dissipated, java.util.function.BooleanSupplier current) {
         var writes = java.util.List.copyOf(requested);
+        var extraWrites = java.util.List.copyOf(additional);
         if (dissipated < 0) throw new IllegalArgumentException("Negative dissipation");
         var identities = new java.util.IdentityHashMap<CustomEUEnergyStorage, Boolean>();
         var balance = java.math.BigInteger.valueOf(dissipated);
@@ -70,6 +83,10 @@ public class CustomEUEnergyStorage implements IEUEnergyStorage, IEnergyStorageAc
                 throw new IllegalArgumentException("Negative balance or duplicate storage");
             if (storage.pos == null || !(storage.level instanceof ServerLevel serverLevel) || !serverLevel.getServer().isSameThread())
                 throw new IllegalStateException("Network commit requires a server-owned storage");
+            balance = balance.add(java.math.BigInteger.valueOf(write.nextAmount()))
+                .subtract(java.math.BigInteger.valueOf(write.expected().amount()));
+        }
+        for (var write : extraWrites) {
             balance = balance.add(java.math.BigInteger.valueOf(write.nextAmount()))
                 .subtract(java.math.BigInteger.valueOf(write.expected().amount()));
         }
@@ -86,6 +103,7 @@ public class CustomEUEnergyStorage implements IEUEnergyStorage, IEnergyStorageAc
         }
         var cellWrites = new java.util.ArrayList<dev.scex.energy.NetworkCell.Write>();
         for (var write : writes) cellWrites.add(new dev.scex.energy.NetworkCell.Write(write.expected().cell(), write.nextAmount()));
+        cellWrites.addAll(extraWrites);
         if (!dev.scex.energy.NetworkCell.commit(cellWrites, dissipated, () -> true)) return false;
         // Mirror the completed owned-state transaction without invoking setters
         // or callbacks; existing save and local machine readers still use energy.
