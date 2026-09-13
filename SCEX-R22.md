@@ -84,3 +84,13 @@ Java 21 下执行 `gradlew.bat --offline --no-daemon --max-workers=2 --console=p
 `si-ic2-mixed-shared-r22-monarch-01-20260913` / `si-mixed-shared-r22-monarch-01-20260913` 完成 32 个场景、640 笔逐 tick 状态对照，全部一致，夹具状态有效，无引擎 failure/rejected。输入涵盖 CESU/CESU、MFE/CESU、CESU/MFE、MFSU/CESU 四组电源，锡/铜/玻璃及金/铁/玻璃的正反排列，共享三段路径，分别连接空 BatBox 和 MFSU。每个电源仅预充一个完整电包，不代替任意多源或连续负载验收。
 
 远端可用内存约 4.036 GiB，Monarch 约 35.76 GiB，沿已授权本地回退串行完成。两次正常停止、存档、退出并收件核对哈希；候选 70 个二进制载荷、113 个依赖及 88 个非宿主内容文件与冻结输入一致，仅已声明启动路径转换。实现未修改，无新增构建声明。详见 `evidence/r22/si-mixed-shared-r22-monarch-01-20260913-shared-comparison.json` 与 `mixed-shared-input-verification.json`。阶段 2 仍未退出。
+
+## 特殊导线成品观察
+
+已有创造栏成品记录给出 EU-Detector Cable（type 5）和 EU-Splitter Cable（type 6）的普通物品 NBT；仅据该记录放置，没有读取原版类或 API。`si-ic2-special-switch-r22-monarch-01-20260913` 的 18 个场景/1,440 笔状态有效，包含 CESU/MFE/MFSU、检测/分流/玻璃单段路径、红石初始开或关，以及 tick 40/60 的切换。预充 80 个电包，接收端为空 MFSU；1,458 项逐 tick 红石方块状态检查通过，已测余额守恒且导线与接收器存活。
+
+分流导线初始有红石时阻断，无红石时导通；tick 40 切换后，原无红石组在 tick 41 仍供电，tick 42 起停止，原有红石组到 tick 43 恢复，并在该次交付两个电包。tick 60 的反向切换有对应延迟。混合世界的检测和玻璃路径也在 tick 42/62 暂停、tick 43/63 补发，不能归因为检测导线自身规则。
+
+为分离世界内其他导线的影响，分别执行 `si-ic2-special-detector-r22-monarch-01-20260913` 与 `si-ic2-special-glass-r22-monarch-01-20260913`；各六个原位置场景、480 笔状态、486 项红石状态检查有效。保留每个场景的坐标、预充及红石命令，分别仅保留该种导线。两组均连续交付 80 个电包；与混合世界分别有 12 笔余额差异，只发生在 tick 42/62，下一 tick 余额重新一致。该结果支持已测世界内存在其他路径切换相关的调度影响，不证明内部算法或所有更新事件的规则。检测导线保存的 active 标志变化不是实际红石输出强度验收。
+
+三次均正常停止、存档、退出并校验收件哈希。远端约 5.185 GiB、Monarch 约 35.818 GiB，使用已授权本地回退，6 GiB 门槛和 2 GiB 堆保持。新增合计 30 场景、2,400 笔原版观测，不是 SI 对齐通过；特殊导线独立实现、检测输出、变压器和完整电网仍开放。证据见 `special-switch-assessment.json`、`special-detector-assessment.json`、`special-glass-assessment.json` 和 `special-world-comparison.json`。
