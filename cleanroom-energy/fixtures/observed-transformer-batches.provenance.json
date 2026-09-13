@@ -1,0 +1,8 @@
+{
+  "source": "Public Minecraft/Forge observer reading normal saved balances from user-provided IC2 Experimental 2.8.222-ex112 binary; no IC2 source/API/decompilation.",
+  "run": "si-ic2-transformer-multi-r22-monarch-01-20260913",
+  "raw_sha256": "5e7b99cf3ecddb2764f597bf90696e52abe0ece2cf0ef3ddbdf9347819722a17",
+  "rows": 1280,
+  "fixture_sha256": "7c8b35bdede4c11bd7386666352fc662df6a53d1bb87803c1307caadab3a76bc",
+  "scope": "Retrospective adjacent-state acceptance under either supplied two-receiver order. No prediction of order, general topology, losses or SI integration."
+}

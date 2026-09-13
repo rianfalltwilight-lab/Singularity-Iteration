@@ -57,3 +57,14 @@ gradlew.bat --offline --no-daemon --max-workers=2 --console=plain :cleanroom-ene
 `si-ic2-transformer-mode-holdout-r22-monarch-01-20260913` 的 8 个场景/1,280 笔状态全部属于预先冻结集合，1,280 项物理红石及守恒检查通过。使用未改动的归档 R23 Java 组件核对相邻实际状态：304 笔零轮、968 笔单轮、8 笔双轮，无法解释的转移为 0。原始记录 SHA-256 `f9abcbe41173f0d6947ad9d5bd060a8f5f3730070aaeb7749fdd8d40d44c8ba4`，详见 `evidence/r23/mode-holdout-prediction-freeze.json`、`mode-holdout-assessment.json`、`mode-holdout-java-check.log` 和 `mode-holdout-proof.json`。
 
 远端实测约 5.1 GiB，低于 6 GiB 门槛，沿已授权 Monarch 隔离回退、单 JVM/2 GiB 堆完成。运行正常停止、存档、退出，收件哈希核验通过；登记世界及已核对保留副本的 incoming 传输包已清理。没有改变核心实现或完整来源门禁。该结果支持已测布局的新切换时刻，不证明短脉冲、多面、多变压器或一般调度概率。下一步推进批次跨接收器与 SI 接入所需的明确收发边界；阶段 2 仍未退出。
+
+
+## 两输出面的独立批次分配
+
+新增 32 个原版黑盒场景/1,280 笔账目：空电源、满缓冲的 LV/MV/HV/EV 降压变压器，通过顶部及侧面连接两个 MFSU，覆盖两端空仓及一个输出单位附近的剩余空间。所有账目守恒；原始记录 SHA-256 `5e7b99cf3ecddb2764f597bf90696e52abe0ece2cf0ef3ddbdf9347819722a17`，见 `evidence/r23/multi-observations.json`。物理放置、初始身份/余额及第二接收器均有检查。运行正常停止、存档、退出，证据核验后清理登记世界及 incoming 副本。
+
+独立新增 `TransformerBatch`，引用纯 Java 的自有配置类型，按明确提供的接收顺序处理批次预算。LV 观测中剩余空间 33 EU 可接收整批 128 EU；剩余 31 EU 可精确接收 31 EU，剩余 97 EU 继续交给另一端。实现保留该批次行为，输入数组不变，不把剩余需求简单截断为整个批次的总上限。
+
+1,280 笔实际相邻状态全部符合两个指定顺序之一：19 笔只符合 A→B，16 笔只符合 B→A，1,245 笔两者均符合。这是已知观测回顾验证，不是顺序预测；新时刻/更多接收端的前向验证仍待完成。新增契约 8,087 项，完整核心 17 组/1,578,882 项检查通过，外部和旧实现依赖均为 0。构建命令 `gradlew.bat --offline --no-daemon --max-workers=2 --console=plain :cleanroom-energy:check :cleanroom-energy:jar` 退出 0，日志 `evidence/r23/batch-core-check-build.log`。
+
+新独立 JAR `0.14.1-r23-experimental` 为 54,082 字节，SHA-256 `29647132e1e2686ea09cc99888addeb9a6967cbf58227728df9353c08f6fd59e`；旧冻结 0.14.0 不变。尚未接入 SI，损耗、过压、多个变压器、实际顺序与游戏内性能不在本组件验证内。归档重建本次尚未运行，完整模组来源门禁不变。下一步先用新布局前向验证批次余量，再接入统一收发规划。
