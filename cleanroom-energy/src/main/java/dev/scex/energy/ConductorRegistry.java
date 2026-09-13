@@ -91,6 +91,8 @@ public final class ConductorRegistry implements AutoCloseable {
     }
 
     public int size() { active(); return conductors.size(); }
+    /** Cheap membership observation without constructing or retaining a graph snapshot. */
+    public boolean containsRegistered(Position at) { active(); return conductors.containsKey(Objects.requireNonNull(at, "at")); }
     public long revision() { active(); return revision; }
     public long rebuildCount() { active(); return rebuilds; }
 

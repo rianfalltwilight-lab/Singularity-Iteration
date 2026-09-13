@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.scex.energy;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.random.RandomGenerator;
@@ -22,8 +21,21 @@ public final class DomainDistributor {
         private final int[] sources;
         private final List<RouteCosts> routes;
         private final int[][] priorities;
+        private final boolean sharedContacts;
 
         public Domain(int[] sourceIds, List<? extends RouteCosts> sourceRoutes, int[][] receiverPriorities) {
+            this(sourceIds, sourceRoutes, receiverPriorities, false);
+        }
+
+        /** Explicit contact entries may share a physical source's packet budget. */
+        public static Domain withSharedSourceContacts(int[] sourceIds, List<? extends RouteCosts> contactRoutes,
+                                                       int[][] receiverPriorities) {
+            return new Domain(sourceIds, contactRoutes, receiverPriorities, true);
+        }
+
+        private Domain(int[] sourceIds, List<? extends RouteCosts> sourceRoutes, int[][] receiverPriorities,
+                       boolean sharedContacts) {
+            this.sharedContacts = sharedContacts;
             sources = Objects.requireNonNull(sourceIds, "sourceIds").clone();
             routes = List.copyOf(sourceRoutes);
             priorities = Objects.requireNonNull(receiverPriorities, "receiverPriorities").clone();
@@ -72,7 +84,7 @@ public final class DomainDistributor {
             boolean[] seen = new boolean[sources.size()];
             for (int i = 0; i < domain.sources.length; i++) {
                 int source = domain.sources[i];
-                if (source < 0 || source >= seen.length || seen[source])
+                if (source < 0 || source >= seen.length || seen[source] && !domain.sharedContacts)
                     throw new IllegalArgumentException("Invalid or duplicate domain source");
                 seen[source] = true;
                 if (domain.priorities[i].length != remaining.length)
@@ -95,26 +107,34 @@ public final class DomainDistributor {
         long loss = 0;
         for (int domainId : domainOrder) {
             var domain = domains.get(domainId);
-            var offers = new ArrayList<MultiSourceDistributor.Offer>();
-            int[] sourceMap = new int[domain.sources.length];
+            int[] offeringEntries = new int[domain.sources.length];
+            int offeringCount = 0;
             for (int i = 0; i < domain.sources.length; i++) {
                 int source = domain.sources[i];
+                if (budgets[source] > debits[source]) offeringEntries[offeringCount++] = i;
+            }
+            long[] quoted = new long[remaining.length];
+            boolean[] accepting = new boolean[remaining.length];
+            for (int receiver = 0; receiver < quoted.length; receiver++) {
+                quoted[receiver] = Math.max(0, remaining[receiver]);
+                accepting[receiver] = quoted[receiver] > 0;
+            }
+            for (int selected : SourceOrder.create(offeringCount, random)) {
+                int entry = offeringEntries[selected], source = domain.sources[entry];
                 long packet = budgets[source] - debits[source];
                 if (packet <= 0) continue;
-                sourceMap[offers.size()] = source;
-                offers.add(new MultiSourceDistributor.Offer(packet, packet, domain.routes.get(i), contacts, domain.priorities[i]));
-            }
-            long[] room = new long[remaining.length];
-            for (int receiver = 0; receiver < room.length; receiver++) room[receiver] = Math.max(0, remaining[receiver]);
-            var round = MultiSourceDistributor.allocate(offers, room, SourceOrder.create(offers.size(), random));
-            for (int localSource = 0; localSource < offers.size(); localSource++) {
-                var receipt = round.source(localSource); int source = sourceMap[localSource];
+                long[] activeQuotes = new long[quoted.length];
+                for (int receiver = 0; receiver < quoted.length; receiver++)
+                    if (accepting[receiver]) activeQuotes[receiver] = quoted[receiver];
+                var receipt = PacketDistributor.allocate(packet, packet, domain.routes.get(entry),
+                    contacts, activeQuotes, domain.priorities[entry]);
                 debits[source] = Math.addExact(debits[source], receipt.sourceDebit());
                 loss = Math.addExact(loss, receipt.dissipated());
                 for (int receiver = 0; receiver < remaining.length; receiver++) {
                     long amount = receipt.credit(receiver);
                     credits[receiver] = Math.addExact(credits[receiver], amount);
                     remaining[receiver] = Math.subtractExact(remaining[receiver], amount);
+                    if (amount >= quoted[receiver]) accepting[receiver] = false;
                 }
             }
         }

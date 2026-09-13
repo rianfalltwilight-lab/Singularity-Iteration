@@ -1,10 +1,16 @@
-# Independent energy accounting — R17 experimental
+# Independent energy accounting — R18 experimental
 
 This is a new, standalone Java 21 library, **not a Minecraft mod or a complete energy network replacement**. It has no SI, Minecraft, NeoForge, IC2 or other external dependency. No IC2 source, API or decompiled implementation was used to write it. Its implementation and contracts were independently authored against ordinary game observations and accounting requirements. Existing upstream implementations with unresolved provenance were not used as templates.
 
+## R18 explicit shared contact entries
+
+Current version: `0.11.0-r18-experimental`. Thirteen contract runners pass 1,462,915 assertions. Explicit contact entries can refer to one physical source, spending its remaining packet budget immediately after each entry. Ordinary domains continue to reject duplicate source IDs.
+
+The finite two-contact model uses 3,840 public first-tick observations. Actual SI acceptance covers 640 first-tick vectors, 1,280 subsequent stability checks and 98 finite distribution checks; a pooled loss check rejects the frozen R17 baseline. The bridge records two conductor contacts present when a generator is published. Three-contact behavior, source-before-wire ordering, contact reload semantics, arbitrary geometry and integrated performance remain unverified. See `../SCEX-R18.md` for preserved setup failures and the exact boundary.
+
 ## R17 shared source packet budget
 
-Current version: `0.10.0-r17-experimental`. Twelve contract runners pass 1,452,005 assertions. `DomainDistributor` now fixes one packet budget per source before visiting any conductor domain. Every later domain spends only the unused part, including path loss. Full-packet storage eligibility is checked once; partial spending does not invalidate the remainder. Incoming credit cannot increase that round's budget.
+R17 checkpoint version: `0.10.0-r17-experimental`. Twelve contract runners pass 1,452,005 assertions. `DomainDistributor` now fixes one packet budget per source before visiting any conductor domain. Every later domain spends only the unused part, including path loss. Full-packet storage eligibility is checked once; partial spending does not invalidate the remainder. Incoming credit cannot increase that round's budget.
 
 The change is checked against 18,720 public tick deltas from 102 reset layouts. The prior actual SI baseline violated the shared budget in 640 vectors; both current SI controls pass the accounting checks. Newly joined U-shaped networks still differ in their fixed receiver priority, explicitly excluded from this accounting acceptance and scheduled for R18. No integrated performance result or complete equivalence is claimed.
 
