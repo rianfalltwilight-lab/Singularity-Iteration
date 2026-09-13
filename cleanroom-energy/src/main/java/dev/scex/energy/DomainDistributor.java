@@ -22,6 +22,14 @@ public final class DomainDistributor {
         }
     }
 
+    /** A source and receiver ID backed by the same storage snapshot. */
+    public record SharedStorage(int source, int receiver, long capacity) {
+        public SharedStorage {
+            if (source < 0 || receiver < 0 || capacity < 0)
+                throw new IllegalArgumentException("Invalid shared storage binding");
+        }
+    }
+
     /** Sources use global IDs in registration order; route/receiver IDs are shared. */
     public static final class Domain {
         private final int[] sources;
@@ -105,8 +113,33 @@ public final class DomainDistributor {
         return allocate(sourceQuotes, conductorDomains, receiverContacts, receiverRoom, random, true);
     }
 
+    /**
+     * Release actual source debits as receiver capacity for later domains.
+     * Bindings must describe the same initial snapshot as source reserve and
+     * receiver room. Initial overcapacity is retained as signed headroom.
+     * A domain keeps its own initial demand quote; input credit never increases
+     * the previously quoted source budget. Bindings do not mutate storage.
+     */
+    public static Round allocateTraced(List<Source> sourceQuotes, List<Domain> conductorDomains,
+                                       int[] receiverContacts, long[] receiverRoom,
+                                       List<SharedStorage> sharedStorage, RandomGenerator random) {
+        return allocate(sourceQuotes, conductorDomains, receiverContacts, receiverRoom, random, true, sharedStorage);
+    }
+
+    public static Round allocate(List<Source> sourceQuotes, List<Domain> conductorDomains,
+                                 int[] receiverContacts, long[] receiverRoom,
+                                 List<SharedStorage> sharedStorage, RandomGenerator random) {
+        return allocate(sourceQuotes, conductorDomains, receiverContacts, receiverRoom, random, false, sharedStorage);
+    }
+
     private static Round allocate(List<Source> sourceQuotes, List<Domain> conductorDomains,
                                   int[] receiverContacts, long[] receiverRoom, RandomGenerator random, boolean trace) {
+        return allocate(sourceQuotes, conductorDomains, receiverContacts, receiverRoom, random, trace, List.of());
+    }
+
+    private static Round allocate(List<Source> sourceQuotes, List<Domain> conductorDomains,
+                                  int[] receiverContacts, long[] receiverRoom, RandomGenerator random, boolean trace,
+                                  List<SharedStorage> sharedStorage) {
         var sources = List.copyOf(sourceQuotes);
         var domains = List.copyOf(conductorDomains);
         int[] contacts = Objects.requireNonNull(receiverContacts, "receiverContacts").clone();
@@ -114,6 +147,24 @@ public final class DomainDistributor {
         Objects.requireNonNull(random, "random");
         if (contacts.length != remaining.length) throw new IllegalArgumentException("Receiver vector lengths");
         for (long room : remaining) if (room < 0) throw new IllegalArgumentException("Negative room");
+        var bindings = List.copyOf(sharedStorage);
+        int[] sourceReceiver = null;
+        if (!bindings.isEmpty()) {
+            sourceReceiver = new int[sources.size()];
+            java.util.Arrays.fill(sourceReceiver, -1);
+            boolean[] boundReceivers = new boolean[remaining.length];
+            for (var binding : bindings) {
+                if (binding.source() >= sources.size() || binding.receiver() >= remaining.length
+                        || sourceReceiver[binding.source()] != -1 || boundReceivers[binding.receiver()])
+                    throw new IllegalArgumentException("Invalid or repeated shared storage identity");
+                long headroom = binding.capacity() - sources.get(binding.source()).reserve();
+                if (remaining[binding.receiver()] != Math.max(0, headroom))
+                    throw new IllegalArgumentException("Inconsistent shared storage snapshot");
+                remaining[binding.receiver()] = headroom;
+                sourceReceiver[binding.source()] = binding.receiver();
+                boundReceivers[binding.receiver()] = true;
+            }
+        }
         for (var domain : domains) {
             boolean[] seen = new boolean[sources.size()];
             for (int i = 0; i < domain.sources.length; i++) {
@@ -161,6 +212,8 @@ public final class DomainDistributor {
                 long[] activeQuotes = new long[quoted.length];
                 for (int receiver = 0; receiver < quoted.length; receiver++)
                     if (accepting[receiver]) activeQuotes[receiver] = quoted[receiver];
+                int ownReceiver = sourceReceiver == null ? -1 : sourceReceiver[source];
+                if (ownReceiver >= 0) activeQuotes[ownReceiver] = 0;
                 if (sources.get(source).packetCount() > 1) {
                     var route = domain.routes.get(entry);
                     long[] pathLoss = new long[remaining.length];
@@ -180,6 +233,8 @@ public final class DomainDistributor {
                             delivery.credit(), delivery.pathLoss()));
                     }
                     debits[source] = Math.addExact(debits[source], batch.debit());
+                    if (ownReceiver >= 0)
+                        remaining[ownReceiver] = Math.addExact(remaining[ownReceiver], batch.debit());
                     loss = Math.addExact(loss, batch.dissipated());
                     for (int receiver = 0; receiver < remaining.length; receiver++) {
                         long amount = batch.credit(receiver);
@@ -197,6 +252,8 @@ public final class DomainDistributor {
                         receipt.credit(receiver), receipt.deliveryLoss(receiver)));
                 }
                 debits[source] = Math.addExact(debits[source], receipt.sourceDebit());
+                if (ownReceiver >= 0)
+                    remaining[ownReceiver] = Math.addExact(remaining[ownReceiver], receipt.sourceDebit());
                 loss = Math.addExact(loss, receipt.dissipated());
                 for (int receiver = 0; receiver < remaining.length; receiver++) {
                     long amount = receipt.credit(receiver);
