@@ -66,6 +66,9 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
         id("wiring/cable/block_tin_cable"), 33L, id("wiring/cable/block_tin_cable_1"), 33L,
         id("wiring/cable/block_cable"), 129L, id("wiring/cable/block_cable_o"), 129L,
         id("wiring/cable/block_gold_cable"), 513L, id("wiring/cable/block_gold_cable_1"), 513L);
+    private static final Set<ResourceLocation> MEASURED_BLAST_CABLES = Set.of(
+        id("wiring/cable/block_tin_cable_1"), id("wiring/cable/block_cable"),
+        id("wiring/cable/block_gold_cable_1"), id("wiring/cable/block_glass_cable"));
     private static final Map<MinecraftServer, IndependentSiEnergy> SERVERS = new IdentityHashMap<>();
     private static boolean installed;
     private static ResourceLocation id(String path) { return ResourceLocation.fromNamespaceAndPath("mio_icif", path); }
@@ -98,12 +101,12 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
     private final long selectionSeed = Long.getLong("scex.independent.selectionSeed", ThreadLocalRandom.current().nextLong());
     private final SplittableRandom selectionRandom = new SplittableRandom(selectionSeed);
     private long ticks, commits, rejected, debited, credited, dissipated;
-    private long deliveryCount, deliveryWireVisits, fusedWires, destroyedReceivers;
+    private long deliveryCount, deliveryWireVisits, fusedWires, destroyedReceivers, blastBlocks;
     private String failure = "";
     private boolean closed;
     public record Metrics(long ticks, long commits, long rejected, long debited, long credited, long dissipated,
                           int dimensions, int endpoints, boolean closed, String failure, long selectionSeed,
-                          long deliveryCount, long deliveryWireVisits, long fusedWires, long destroyedReceivers) { }
+                          long deliveryCount, long deliveryWireVisits, long fusedWires, long destroyedReceivers, long blastBlocks) { }
     private record Port(mio_icif_Energy_Block tile, BlockPos position, BlockState state,
                         CustomEUEnergyStorage storage, CustomEUEnergyStorage.NetworkQuote quote,
                         long capacity, int inputs, int outputs, long packet) { }
@@ -169,7 +172,7 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
         if (Thread.currentThread().threadId() != ownerThread) throw new IllegalStateException("Read engine metrics on server thread");
         return new Metrics(ticks, commits, rejected, debited, credited, dissipated,
             worlds.size(), worlds.values().stream().mapToInt(grid -> grid.machines.size()).sum(), closed, failure, selectionSeed,
-            deliveryCount, deliveryWireVisits, fusedWires, destroyedReceivers);
+            deliveryCount, deliveryWireVisits, fusedWires, destroyedReceivers, blastBlocks);
     }
     @Override
     public void position(ServerLevel level, LevelChunk chunk, BlockPos at) {
@@ -369,6 +372,7 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
                     topology.changed(level, at);
                     removedByEffects.add(at);
                     destroyedReceivers = Math.incrementExact(destroyedReceivers);
+                    applySmallBlockBlast(level, grid, at, removedByEffects);
                 }
             }
             if (!removedByEffects.isEmpty()) {
@@ -379,6 +383,34 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
                 grid.effectPause = true;
             }
         } else rejected++;
+    }
+    private void applySmallBlockBlast(ServerLevel level, WorldGrid grid, BlockPos center, Set<BlockPos> removed) {
+        // Independent block-only hypothesis from frozen material/position
+        // observations: the 18 face/edge neighbours, evaluated individually.
+        // The resistance cutoff matches the measured vanilla materials; values
+        // between 1 and 1.5 and other modded blocks remain unverified.
+        // Entity damage, drops, sounds and other blast strengths are separate.
+        for (int dx = -1; dx <= 1; dx++) for (int dy = -1; dy <= 1; dy++) for (int dz = -1; dz <= 1; dz++) {
+            int distanceSquared = dx * dx + dy * dy + dz * dz;
+            if (distanceSquared == 0 || distanceSquared > 2) continue;
+            var at = center.offset(dx, dy, dz);
+            var chunk = level.getChunkSource().getChunkNow(at.getX() >> 4, at.getZ() >> 4);
+            if (chunk == null) continue;
+            var state = chunk.getBlockState(at);
+            if (state.isAir() || state.getDestroySpeed(level, at) < 0) continue;
+            var type = BuiltInRegistries.BLOCK.getKey(state.getBlock());
+            float resistance = state.getBlock().getExplosionResistance();
+            if (!MEASURED_BLAST_CABLES.contains(type)
+                    && (!Float.isFinite(resistance) || resistance < 0 || resistance > 1.0F)) continue;
+            if (level.removeBlock(at, false)) {
+                grid.conductors.remove(point(at));
+                grid.machines.remove(at);
+                grid.initialGeneratorContacts.remove(at);
+                topology.changed(level, at);
+                removed.add(at);
+                blastBlocks = Math.incrementExact(blastBlocks);
+            }
+        }
     }
     private boolean valid(ServerLevel level, WorldGrid grid, ConductorRegistry.Snapshot snapshot, List<Port> ports) {
         // The independent published registry intentionally preserves one final
