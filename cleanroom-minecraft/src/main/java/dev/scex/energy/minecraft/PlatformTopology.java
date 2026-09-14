@@ -17,6 +17,7 @@ import net.minecraft.server.level.ChunkLevel;
 import net.minecraft.server.level.FullChunkStatus;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.level.BlockEvent;
@@ -37,11 +38,28 @@ public final class PlatformTopology implements AutoCloseable {
     /** Index-only callbacks on the server thread; they must not mutate the world. */
     public interface Observer {
         default void position(ServerLevel level, LevelChunk chunk, BlockPos at) { }
+        default void blockChanged(ServerLevel level, BlockPos at, BlockState before, BlockState after) { }
         default void chunkRemoved(ServerLevel level, int chunkX, int chunkZ) { }
         default void levelRemoved(ServerLevel level) { }
         default void cleared() { }
     }
     private static final Observer NO_OBSERVER = new Observer() { };
+    private static final Map<MinecraftServer, ArrayList<PlatformTopology>> INSTANCES = new java.util.IdentityHashMap<>();
+
+    /** Public chunk mutation callback. Only observer metadata may change here. */
+    public static synchronized void physicalBlockChanged(ServerLevel level, BlockPos at, BlockState before, BlockState after) {
+        if (!level.getServer().isSameThread()) throw new IllegalStateException("Block history outside server thread");
+        var instances = INSTANCES.get(level.getServer());
+        if (instances == null) return;
+        for (var instance : instances) {
+            if (instance.closed || !instance.failure.isEmpty()) continue;
+            try { instance.observer.blockChanged(level, at, before, after); }
+            catch (RuntimeException error) {
+                instance.failure = error.getClass().getSimpleName() + ": " + error.getMessage();
+                instance.pending.clear();
+            }
+        }
+    }
     private enum Kind { SAMPLE, LOAD_CHUNK, UNLOAD_CHUNK, UNLOAD_LEVEL }
     private enum Scope { POSITION, CHUNK, LEVEL }
     private record Key(ServerLevel level, Scope scope, long coordinate) { }
@@ -82,6 +100,7 @@ public final class PlatformTopology implements AutoCloseable {
         }
         this.maximumNodes = maximumNodes; this.maximumSources = maximumSources;
         this.maximumQueued = maximumQueued; this.workPerTick = workPerTick;
+        synchronized (PlatformTopology.class) { INSTANCES.computeIfAbsent(server, ignored -> new ArrayList<>()).add(this); }
         NeoForge.EVENT_BUS.register(this);
     }
 
@@ -276,6 +295,10 @@ public final class PlatformTopology implements AutoCloseable {
     public synchronized void close() {
         if (closed) { return; }
         if (!server.isSameThread()) { throw new IllegalStateException("Close on the server thread"); }
+        synchronized (PlatformTopology.class) {
+            var instances = INSTANCES.get(server);
+            if (instances != null) { instances.remove(this); if (instances.isEmpty()) INSTANCES.remove(server); }
+        }
         clearWorlds(); pending.clear(); closed = true; server = null; observer = NO_OBSERVER; NeoForge.EVENT_BUS.unregister(this);
     }
 }

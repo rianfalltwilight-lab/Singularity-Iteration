@@ -1,0 +1,22 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="Apache-2.0"
+[[mods]]
+modId="scex_energy_platform"
+version="0.6.4-r25-experimental"
+displayName="SCEX Independent Energy Platform"
+description="Experimental independently authored energy platform integration."
+[[dependencies.scex_energy_platform]]
+modId="minecraft"
+type="required"
+versionRange="[1.21.1,1.22)"
+ordering="NONE"
+side="BOTH"
+[[dependencies.scex_energy_platform]]
+modId="neoforge"
+type="required"
+versionRange="[21.1,)"
+ordering="NONE"
+side="BOTH"
+[[mixins]]
+config="scex-independent-platform.mixins.json"

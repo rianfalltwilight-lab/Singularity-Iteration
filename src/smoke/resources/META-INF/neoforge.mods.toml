@@ -5,5 +5,3 @@ license="Apache-2.0"
 modId="scex_si_smoke"
 version="1.0.0"
 displayName="SCEX SI isolated integration probe"
-[[mixins]]
-config="scex-transformer-factory.mixins.json"

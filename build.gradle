@@ -346,6 +346,15 @@ if (project.hasProperty('withSmoke')) {
     }
     neoForge {
       runs {
+        smokeClient {
+            client()
+            sourceSet = sourceSets.smoke
+            gameDirectory = file('../runs/client-audio/run/client')
+            jvmArguments.set(['-Xms256m', '-Xmx2G', '-XX:ActiveProcessorCount=2'])
+            systemProperty 'scex.client.audio', 'true'
+            systemProperty 'scex.smoke.result', 'probe-result.json'
+            systemProperty 'scex.smoke.mode', 'scenario'
+        }
         smokeServer {
             server()
             sourceSet = sourceSets.smoke
@@ -356,11 +365,13 @@ if (project.hasProperty('withSmoke')) {
             systemProperty 'scex.smoke.mode', project.findProperty('smokeMode') ?: 'inventory'
         }
       }
-      mods { scex_si_smoke {
-          sourceSet sourceSets.smoke
-          sourceSet project(':cleanroom-minecraft').sourceSets.main
-          sourceSet project(':cleanroom-energy').sourceSets.main
-      } }
+      mods {
+          scex_si_smoke { sourceSet sourceSets.smoke }
+          scex_energy_platform {
+              sourceSet project(':cleanroom-minecraft').sourceSets.main
+              sourceSet project(':cleanroom-energy').sourceSets.main
+          }
+      }
     }
     tasks.register('exportSmokeLaunch') {
         def runTask = tasks.named('runSmokeServer')
@@ -370,6 +381,18 @@ if (project.hasProperty('withSmoke')) {
         doLast {
             def launch = runTask.get()
             file('build/smoke-launch.json').text = groovy.json.JsonOutput.toJson([
+                mainClass: launch.mainClass.get(), jvmArgs: launch.allJvmArgs,
+                args: launch.args, classpath: (launch.classpath.files + launch.classpathProvider.files).collect { it.absolutePath }.unique(),
+                environment: launch.environmentProperty.get()
+            ])
+        }
+    }
+    tasks.register('exportSmokeClientLaunch') {
+        def runTask = tasks.named('runSmokeClient')
+        dependsOn { runTask.get().taskDependencies.getDependencies(runTask.get()).collect { it.path } }
+        doLast {
+            def launch = runTask.get()
+            file('build/smoke-client-launch.json').text = groovy.json.JsonOutput.toJson([
                 mainClass: launch.mainClass.get(), jvmArgs: launch.allJvmArgs,
                 args: launch.args, classpath: (launch.classpath.files + launch.classpathProvider.files).collect { it.absolutePath }.unique(),
                 environment: launch.environmentProperty.get()

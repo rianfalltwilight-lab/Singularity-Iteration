@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.scex.si.mixin;
+package dev.scex.energy.minecraft.mixin;
 
-import dev.scex.si.TransformerFactoryProbe;
+import dev.scex.energy.minecraft.integration.TransformerFactory;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -12,10 +12,11 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(value=BlockEntityType.class,remap=false)
-public abstract class TransformerTypeProbeMixin {
+public abstract class IndependentTypeMixin {
     @Inject(method="create",at=@At("HEAD"),cancellable=true,require=1)
     private void scexLoad(BlockPos position,BlockState state,CallbackInfoReturnable<BlockEntity> callback) {
-        var replacement=TransformerFactoryProbe.loaded((BlockEntityType<?>)(Object)this,position,state);
+        var replacement=TransformerFactory.loaded((BlockEntityType<?>)(Object)this,position,state);
+        if(replacement==null)replacement=dev.scex.energy.minecraft.integration.SpecialCableFactory.create((BlockEntityType<?>)(Object)this,position,state);
         if(replacement!=null)callback.setReturnValue(replacement);
     }
 }

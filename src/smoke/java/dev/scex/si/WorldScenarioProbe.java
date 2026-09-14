@@ -27,9 +27,15 @@ public final class WorldScenarioProbe {
     private boolean finished;
     private final boolean observeWorldTime=Files.exists(Path.of("world-time-observation.json"));
     private final boolean observeEndpointSurface=Files.exists(Path.of("endpoint-surface.json"));
+    private final TransformerLifecycleProbe transformerLifecycle;
+    private final TransformerModeProbe transformerMode;
+    private final SpecialCableInteractionProbe specialCableInteraction;
     private int phaseFrame=-1,phaseFrom=-1,phaseTo=-1;
     public WorldScenarioProbe(MinecraftServer server) throws Exception {
         this.server=server;
+        transformerLifecycle=Files.exists(Path.of("transformer-lifecycle.json")) ? new TransformerLifecycleProbe() : null;
+        transformerMode=Files.exists(Path.of("transformer-mode-probe.json")) ? new TransformerModeProbe() : null;
+        specialCableInteraction=Files.exists(Path.of("special-cable-interaction.json")) ? new SpecialCableInteractionProbe() : null;
         for(String line:Files.readAllLines(Path.of("positions.tsv"))) {
             if(line.isBlank() || line.startsWith("#")) continue;
             String[] xyz=line.trim().split("\\s+");
@@ -78,6 +84,21 @@ public final class WorldScenarioProbe {
                 }
             }
             record("independent-core-hashes",Map.of("passed",true,"classes",entries.size(),"artifact_sha256",manifest.get("jar_sha256").getAsString()));
+        }
+        if(Files.exists(Path.of("independent-platform.json"))) {
+            var manifest=com.google.gson.JsonParser.parseString(Files.readString(Path.of("independent-platform.json"))).getAsJsonObject();
+            var entries=manifest.getAsJsonArray("classes");
+            if(entries.isEmpty() || entries.size()>256)throw new IllegalArgumentException("Invalid platform class count");
+            for(var item:entries) {
+                var entry=item.getAsJsonObject();String name=entry.get("path").getAsString();
+                if(!name.startsWith("dev/scex/energy/minecraft/") || !name.endsWith(".class") || name.contains(".."))throw new IllegalArgumentException("Invalid platform class path");
+                try(var input=dev.scex.energy.minecraft.IndependentSpecialCableBlockEntity.class.getClassLoader().getResourceAsStream(name)) {
+                    if(input==null)throw new IllegalStateException("Missing independent platform class: "+name);
+                    String actual=java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(input.readAllBytes()));
+                    if(!actual.equals(entry.get("sha256").getAsString()))throw new IllegalStateException("Independent platform mismatch: "+name);
+                }
+            }
+            record("independent-platform-hashes",Map.of("passed",true,"classes",entries.size(),"artifact_sha256",manifest.get("jar_sha256").getAsString()));
         }
         NeoForge.EVENT_BUS.addListener(this::onTick);
         NeoForge.EVENT_BUS.addListener(this::onChunkLoad);
@@ -171,11 +192,25 @@ public final class WorldScenarioProbe {
         if(finished || event.getServer()!=server) return;
         try {
             var world=server.overworld();
+            if(specialCableInteraction!=null) {
+                var result=specialCableInteraction.inspect(world,tick);
+                if(result!=null)record("special-cable-interaction",result);
+            }
+            if(transformerMode!=null) {
+                var result=transformerMode.inspect(world,tick);
+                if(result!=null) record("transformer-mode-checks",result);
+            }
+            if(transformerLifecycle!=null) {
+                var result=transformerLifecycle.inspect(world,tick,!commands.isEmpty());
+                if(result!=null) record("transformer-lifecycle",result);
+            }
             if(observeWorldTime) record("world-game-time",world.getGameTime());
             if(Boolean.getBoolean("scex.independent.energy")) {
                 var engine=IndependentSiEnergy.current(server);
                 if(engine==null || !engine.metrics().failure().isEmpty()) throw new IllegalStateException("Independent engine missing or failed");
                 record("independent-energy",engine.metrics());
+                if (Files.exists(Path.of("startup-diagnostics.json")) && tick<=80)
+                    record("startup-diagnostics",engine.startupDiagnostics(world));
                 if(Files.exists(Path.of("transformer-factory.json"))) record("transformer-factory",TransformerFactoryProbe.metrics());
                 if(tick==18 && Boolean.getBoolean("scex.independent.commitTests"))
                     record("commit-boundaries",NetworkCommitProbe.run(world));
@@ -214,7 +249,26 @@ public final class WorldScenarioProbe {
             }
             for(String command:commands.getOrDefault(tick,List.of())) {
                 var result=new int[]{Integer.MIN_VALUE};
-                if(command.startsWith("@explode ")) {
+                if(command.startsWith("@entities ")) {
+                    String[] parts=command.split(" ");
+                    if(parts.length!=5)throw new IllegalArgumentException("entities x y z radius");
+                    var center=new BlockPos(Integer.parseInt(parts[1]),Integer.parseInt(parts[2]),Integer.parseInt(parts[3]));
+                    double radius=Double.parseDouble(parts[4]);
+                    if(!positions.contains(center)||!Double.isFinite(radius)||radius<=0||radius>16
+                        ||world.getChunkSource().getChunkNow(center.getX()>>4,center.getZ()>>4)==null)
+                        throw new IllegalArgumentException("Entity observation outside declared loaded fixture");
+                    var point=net.minecraft.world.phys.Vec3.atCenterOf(center);
+                    var box=new net.minecraft.world.phys.AABB(point.x-radius,point.y-radius,point.z-radius,point.x+radius,point.y+radius,point.z+radius);
+                    var found=world.getEntities((net.minecraft.world.entity.Entity)null,box);
+                    if(found.size()>256)throw new IllegalStateException("Entity observation bound exceeded");
+                    var snapshots=new ArrayList<Map<String,Object>>();
+                    for(var entity:found)if(entity.distanceToSqr(point)<=radius*radius) {
+                        var tag=new net.minecraft.nbt.CompoundTag();boolean saved=entity.save(tag);
+                        snapshots.add(Map.of("x",entity.getX(),"y",entity.getY(),"z",entity.getZ(),"saved",saved,"nbt",saved?tag.toString():""));
+                    }
+                    record("entity-snapshot",Map.of("x",center.getX(),"y",center.getY(),"z",center.getZ(),"radius",radius,"entities",snapshots));
+                    result[0]=1;
+                } else if(command.startsWith("@explode ")) {
                     String[] parts=command.split(" ");
                     if(parts.length!=5) throw new IllegalArgumentException("Invalid isolated blast control");
                     var center=new BlockPos(Integer.parseInt(parts[1]),Integer.parseInt(parts[2]),Integer.parseInt(parts[3]));

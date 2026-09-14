@@ -7,6 +7,7 @@ import java.util.Optional;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -26,6 +27,7 @@ public final class IndependentTransformerBlockEntity extends BlockEntity {
     private double savedBuffer;
     private int savedMode;
     private NetworkCell cell;
+    private boolean modeObserved, observedStepUp;
 
     public record Snapshot(NetworkCell.Quote energy, BlockState state, int mode,
                            boolean stepUp, TransformerAccounting.Configuration limits) { }
@@ -71,12 +73,38 @@ public final class IndependentTransformerBlockEntity extends BlockEntity {
 
     public int savedMode() { return savedMode; }
 
+    /** Existing SI fixed modes remain 0/1. Mode 2 is this independent adapter's automatic mode. */
+    public boolean validMode() { return savedMode >= 0 && savedMode <= 2; }
+
+    public boolean stepUpNow() {
+        requireServerThread();
+        return savedMode == 0 || savedMode == 2 && level.hasNeighborSignal(worldPosition);
+    }
+
+    /** Observe public redstone input once per world frame; energy changes do not renew routing. */
+    public boolean refreshMode() {
+        requireServerThread();
+        boolean stepUp = stepUpNow();
+        boolean changed = modeObserved && observedStepUp != stepUp;
+        modeObserved = true;
+        observedStepUp = stepUp;
+        if (changed) {
+            if (cell != null) cell.replace(cell.quote().amount());
+            setChanged();
+            level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 2);
+        }
+        return changed;
+    }
+
+    public int routingSignature() { return savedMode * 2 + (stepUpNow() ? 1 : 0); }
+
     public void setSavedMode(int mode) {
         requireServerThread();
         if (mode == savedMode) return;
         if (cell != null) cell.replace(cell.quote().amount());
         savedMode = mode;
         setChanged();
+        level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 2);
     }
 
     /** Called after the complete numeric transaction, never from inside its write phase. */
@@ -104,11 +132,22 @@ public final class IndependentTransformerBlockEntity extends BlockEntity {
         super.loadAdditional(tag, registries);
         savedBuffer = tag.getDouble("buffer");
         if (tag.contains("mode")) savedMode = tag.getInt("mode");
+        modeObserved = false;
+        observedStepUp = tag.getBoolean("active");
     }
 
     @Override protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
         tag.putDouble("buffer", cell == null ? savedBuffer : cell.quote().amount());
         tag.putInt("mode", savedMode);
+        tag.putBoolean("active", observedStepUp);
+    }
+
+    @Override public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
+        return saveWithoutMetadata(registries);
+    }
+
+    @Override public ClientboundBlockEntityDataPacket getUpdatePacket() {
+        return ClientboundBlockEntityDataPacket.create(this);
     }
 }

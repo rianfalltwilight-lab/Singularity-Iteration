@@ -1,7 +1,7 @@
 plugins { id 'java-library' }
 
 group = 'dev.scex'
-version = '0.4.0-r24-experimental'
+version = '0.6.4-r25-experimental'
 base { archivesName = 'scex-independent-minecraft' }
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
@@ -16,7 +16,7 @@ tasks.withType(JavaCompile).configureEach {
 tasks.withType(Jar).configureEach {
     preserveFileTimestamps = false
     reproducibleFileOrder = true
-    manifest.attributes('SCEX-Integration-Status': 'Experimental platform library; no mod entrypoint')
+    manifest.attributes('SCEX-Integration-Status': 'Experimental opt-in platform mod; independent core required')
     from(projectDir) { include 'LICENSE' }
 }
 
