@@ -72,7 +72,7 @@ public final class ReceiverOrderContract {
         var emptyRandom = new SplittableRandom(7); var untouched = new SplittableRandom(7);
         check(ReceiverOrder.create(new int[0], new boolean[0], 1, emptyRandom).length == 0, "Empty registry");
         check(Arrays.equals(ReceiverOrder.create(new int[]{1, 0}, new boolean[]{false, false}, 1, emptyRandom), new int[]{1, 0}), "No eligible receivers");
-        check(Arrays.equals(ReceiverOrder.create(new int[]{0, 1}, new boolean[]{false, true}, 1, emptyRandom), new int[]{1, 0}), "Full receiver skipped");
+        check(Arrays.equals(ReceiverOrder.create(new int[]{0, 1}, new boolean[]{false, true}, 1, emptyRandom), new int[]{1, 0}), "Disconnected receiver skipped");
         check(emptyRandom.nextLong() == untouched.nextLong(), "Zero/one eligible receiver consumed randomness");
         rejects(() -> ReceiverOrder.create(new int[]{0, 0}, both, 0, generator));
         rejects(() -> ReceiverOrder.create(new int[]{0, 2}, both, 0, generator));

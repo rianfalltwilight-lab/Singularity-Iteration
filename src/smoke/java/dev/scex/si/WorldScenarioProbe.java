@@ -26,6 +26,7 @@ public final class WorldScenarioProbe {
     private int tick,observations,executed;
     private boolean finished;
     private final boolean observeWorldTime=Files.exists(Path.of("world-time-observation.json"));
+    private final boolean observeEndpointSurface=Files.exists(Path.of("endpoint-surface.json"));
     private int phaseFrame=-1,phaseFrom=-1,phaseTo=-1;
     public WorldScenarioProbe(MinecraftServer server) throws Exception {
         this.server=server;
@@ -61,6 +62,22 @@ public final class WorldScenarioProbe {
                 }
             }
             record("runtime-patch-hashes",Map.of("passed",true,"classes",hashes));
+        }
+        if(Files.exists(Path.of("independent-core.json"))) {
+            var manifest=com.google.gson.JsonParser.parseString(Files.readString(Path.of("independent-core.json"))).getAsJsonObject();
+            var entries=manifest.getAsJsonArray("classes");
+            if(entries.isEmpty() || entries.size()>256) throw new IllegalArgumentException("Invalid independent core class count");
+            for(var item:entries) {
+                var entry=item.getAsJsonObject();String name=entry.get("path").getAsString();
+                if(!name.startsWith("dev/scex/energy/") || !name.endsWith(".class") || name.contains(".."))
+                    throw new IllegalArgumentException("Invalid independent class path");
+                try(var input=dev.scex.energy.DomainDistributor.class.getClassLoader().getResourceAsStream(name)) {
+                    if(input==null) throw new IllegalStateException("Missing independent class: "+name);
+                    String actual=java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(input.readAllBytes()));
+                    if(!actual.equals(entry.get("sha256").getAsString())) throw new IllegalStateException("Independent core mismatch: "+name);
+                }
+            }
+            record("independent-core-hashes",Map.of("passed",true,"classes",entries.size(),"artifact_sha256",manifest.get("jar_sha256").getAsString()));
         }
         NeoForge.EVENT_BUS.addListener(this::onTick);
         NeoForge.EVENT_BUS.addListener(this::onChunkLoad);
@@ -159,6 +176,7 @@ public final class WorldScenarioProbe {
                 var engine=IndependentSiEnergy.current(server);
                 if(engine==null || !engine.metrics().failure().isEmpty()) throw new IllegalStateException("Independent engine missing or failed");
                 record("independent-energy",engine.metrics());
+                if(Files.exists(Path.of("transformer-factory.json"))) record("transformer-factory",TransformerFactoryProbe.metrics());
                 if(tick==18 && Boolean.getBoolean("scex.independent.commitTests"))
                     record("commit-boundaries",NetworkCommitProbe.run(world));
             }
@@ -174,12 +192,45 @@ public final class WorldScenarioProbe {
                 if(tile!=null) {
                     row=new LinkedHashMap<>(row);row.remove("state");
                     row.put("nbt",tile.saveWithFullMetadata(server.registryAccess()).toString());record("tile-save",row);
+                    if(observeEndpointSurface && (tick==20 || tick==40 || tick==70)) {
+                        var surface=new LinkedHashMap<String,Object>();
+                        surface.put("x",at.getX());surface.put("y",at.getY());surface.put("z",at.getZ());
+                        surface.put("class",tile.getClass().getName());
+                        surface.put("superclass",tile.getClass().getSuperclass().getName());
+                        surface.put("independent_controlled",IndependentSiEnergy.controls(tile.getBlockState()));
+                        boolean energyBase=tile instanceof com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_Energy_Block;
+                        surface.put("energy_base",energyBase);
+                        if(energyBase) {
+                            var energy=(com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_Energy_Block)tile;
+                            var storage=energy.getEnergyStorageInternal();
+                            var quote=storage.scexNetworkQuote();
+                            surface.put("amount",quote.amount());surface.put("output_enabled",quote.outputEnabled());
+                            surface.put("effective_capacity",energy.getEffectiveCapacity());
+                            surface.put("storage_class",storage.getClass().getName());
+                        }
+                        record("endpoint-surface",surface);
+                    }
                 }
             }
             for(String command:commands.getOrDefault(tick,List.of())) {
                 var result=new int[]{Integer.MIN_VALUE};
-                var source=server.createCommandSourceStack().withSuppressedOutput().withCallback((success,value)->result[0]=success?value:-1);
-                server.getCommands().performPrefixedCommand(source,command);executed++;
+                if(command.startsWith("@explode ")) {
+                    String[] parts=command.split(" ");
+                    if(parts.length!=5) throw new IllegalArgumentException("Invalid isolated blast control");
+                    var center=new BlockPos(Integer.parseInt(parts[1]),Integer.parseInt(parts[2]),Integer.parseInt(parts[3]));
+                    float radius=Float.parseFloat(parts[4]);
+                    if(!positions.contains(center)||!Float.isFinite(radius)||radius<=0||radius>4
+                        ||server.overworld().getChunkSource().getChunkNow(center.getX()>>4,center.getZ()>>4)==null)
+                        throw new IllegalArgumentException("Blast control outside declared loaded fixture");
+                    server.overworld().removeBlock(center,false);
+                    server.overworld().explode(null,center.getX()+0.5,center.getY()+0.5,center.getZ()+0.5,radius,
+                        net.minecraft.world.level.Level.ExplosionInteraction.BLOCK);
+                    result[0]=1;
+                } else {
+                    var source=server.createCommandSourceStack().withSuppressedOutput().withCallback((success,value)->result[0]=success?value:-1);
+                    server.getCommands().performPrefixedCommand(source,command);
+                }
+                executed++;
                 record("command",Map.of("command",command,"result",result[0]));
                 if(result[0]<0) throw new IllegalStateException("Scenario command failed: "+command);
             }

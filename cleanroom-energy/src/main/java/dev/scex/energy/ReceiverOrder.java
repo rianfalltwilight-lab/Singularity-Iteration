@@ -4,7 +4,7 @@ package dev.scex.energy;
 import java.util.Objects;
 import java.util.random.RandomGenerator;
 
-/** Independent recipient priority policy fitted to public R14/R15 observations. */
+/** Independent recipient priority policy fitted to public R14/R15/R16 observations. */
 public final class ReceiverOrder {
     private ReceiverOrder() { }
 
@@ -13,8 +13,10 @@ public final class ReceiverOrder {
      * uniform starting recipient, using the caller's generator, and traverse
      * eligible registration ranks backwards with wraparound. R15's 31/1 splits
      * distinguish this order from R14's equally distributed full permutations.
-     * Ineligible entries remain in the complete result after eligible entries so
-     * packet accounting retains stable receiver IDs. They consume no randomness.
+     * The caller includes full but connected receivers in the eligibility domain:
+     * R16 observes that they still occupy an offset; packet accounting skips their
+     * zero demand. Unreachable entries remain after considered entries, retaining
+     * stable receiver IDs without occupying a random starting position.
      * This models the observed marginals and fixed phase, not an original PRNG.
      */
     public static int[] create(int[] registrationOrder, boolean[] eligible,

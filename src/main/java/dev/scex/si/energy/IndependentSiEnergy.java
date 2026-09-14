@@ -6,13 +6,14 @@ import com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_Energy_Containe
 import com.singularity_iteration.mio_icif.energy.CustomEUEnergyStorage;
 import dev.scex.energy.ConductorRegistry;
 import dev.scex.energy.DeferredEntries;
-import dev.scex.energy.MultiSourceDistributor;
+import dev.scex.energy.DomainDistributor;
 import dev.scex.energy.ReceiverOrder;
 import dev.scex.energy.RouteCosts;
 import dev.scex.energy.minecraft.PlatformTopology;
 import java.util.ArrayList;
-import java.util.Comparator;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -46,11 +47,28 @@ import net.neoforged.neoforge.event.tick.LevelTickEvent;
 public final class IndependentSiEnergy implements PlatformTopology.Observer {
     private static final ResourceLocation BATBOX = id("wiring/block_bat_box");
     private static final ResourceLocation GENERATOR = id("generator/block_thermal_generator");
+    // Packet sizes are explicit public-game observations, not old grid tiers.
+    private static final Map<ResourceLocation, Long> STORAGE_PACKETS = Map.of(
+        BATBOX, 32L, id("wiring/block_cesu"), 128L,
+        id("wiring/block_mfe"), 512L, id("wiring/block_mfsu"), 2048L);
     private static final Set<ResourceLocation> ENDPOINTS = Set.of(BATBOX, GENERATOR, id("producer/block_furnace_elc"),
+        id("wiring/block_cesu"), id("wiring/block_mfe"), id("wiring/block_mfsu"),
         id("producer/block_powder_elc"), id("producer/block_extractor_elc"), id("producer/block_compressor_elc"));
     private static final Map<ResourceLocation, Long> CONDUCTORS = Map.of(
         id("wiring/cable/block_cable"), 200L, id("wiring/cable/block_cable_o"), 200L,
+        id("wiring/cable/block_tin_cable"), 200L, id("wiring/cable/block_tin_cable_1"), 200L,
+        id("wiring/cable/block_gold_cable"), 400L, id("wiring/cable/block_gold_cable_1"), 400L,
+        id("wiring/cable/block_iron_cable"), 800L, id("wiring/cable/block_iron_cable_1"), 800L,
         id("wiring/cable/block_glass_cable"), 25L);
+    // Only measured fuse thresholds are enabled. Iron/glass ultimate limits
+    // remain open; the currently controlled sources offer at most 2048 EU.
+    private static final Map<ResourceLocation, Long> FUSE_LIMITS = Map.of(
+        id("wiring/cable/block_tin_cable"), 33L, id("wiring/cable/block_tin_cable_1"), 33L,
+        id("wiring/cable/block_cable"), 129L, id("wiring/cable/block_cable_o"), 129L,
+        id("wiring/cable/block_gold_cable"), 513L, id("wiring/cable/block_gold_cable_1"), 513L);
+    private static final Set<ResourceLocation> MEASURED_BLAST_CABLES = Set.of(
+        id("wiring/cable/block_tin_cable_1"), id("wiring/cable/block_cable"),
+        id("wiring/cable/block_gold_cable_1"), id("wiring/cable/block_glass_cable"));
     private static final Map<MinecraftServer, IndependentSiEnergy> SERVERS = new IdentityHashMap<>();
     private static boolean installed;
     private static ResourceLocation id(String path) { return ResourceLocation.fromNamespaceAndPath("mio_icif", path); }
@@ -83,10 +101,12 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
     private final long selectionSeed = Long.getLong("scex.independent.selectionSeed", ThreadLocalRandom.current().nextLong());
     private final SplittableRandom selectionRandom = new SplittableRandom(selectionSeed);
     private long ticks, commits, rejected, debited, credited, dissipated;
+    private long deliveryCount, deliveryWireVisits, fusedWires, destroyedReceivers, blastBlocks;
     private String failure = "";
     private boolean closed;
     public record Metrics(long ticks, long commits, long rejected, long debited, long credited, long dissipated,
-                          int dimensions, int endpoints, boolean closed, String failure, long selectionSeed) { }
+                          int dimensions, int endpoints, boolean closed, String failure, long selectionSeed,
+                          long deliveryCount, long deliveryWireVisits, long fusedWires, long destroyedReceivers, long blastBlocks) { }
     private record Port(mio_icif_Energy_Block tile, BlockPos position, BlockState state,
                         CustomEUEnergyStorage storage, CustomEUEnergyStorage.NetworkQuote quote,
                         long capacity, int inputs, int outputs, long packet) { }
@@ -100,29 +120,47 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
         final DeferredEntries<BlockPos, Element> entries = new DeferredEntries<>(104_096, 65_536);
         final ConductorRegistry conductors = new ConductorRegistry(100_000, 32);
         final Map<BlockPos, mio_icif_Energy_Block> machines = new LinkedHashMap<>();
+        final Map<BlockPos, Set<BlockPos>> initialGeneratorContacts = new HashMap<>();
         final Map<Long, Integer> conductorChunks = new HashMap<>();
+        final Map<BlockPos, ResourceLocation> conductorTypes = new HashMap<>();
         boolean catchUp;
+        boolean effectPause;
         void apply(List<DeferredEntries.Change<BlockPos, Element>> changes) {
             for (var change : changes) {
                 var at = change.key(); long chunk = ChunkPos.asLong(at);
                 if (change.before() != null && change.before().conductorLoss >= 0) {
+                    for (Direction side : Direction.values()) {
+                        var initial = initialGeneratorContacts.get(at.relative(side));
+                        if (initial != null) initial.remove(at);
+                    }
                     conductors.remove(point(at));
+                    conductorTypes.remove(at);
                     conductorChunks.compute(chunk, (key, count) -> count == 1 ? null : count - 1);
                 }
                 machines.remove(at);
+                initialGeneratorContacts.remove(at);
                 var after = change.after();
                 if (after == null) continue;
                 if (after.conductorLoss >= 0) {
                     conductors.put(point(at), after.conductorLoss);
+                    conductorTypes.put(at, after.type);
                     conductorChunks.merge(chunk, 1, Integer::sum);
                 } else {
                     if (machines.size() >= 4096) throw new IllegalStateException("Endpoint limit reached");
                     machines.put(at, (mio_icif_Energy_Block) after.tile);
+                    if (after.type.equals(GENERATOR)) {
+                        var initial = new HashSet<BlockPos>();
+                        for (Direction side : Direction.values()) {
+                            var neighbour = at.relative(side);
+                            if (conductors.containsRegistered(point(neighbour))) initial.add(neighbour);
+                        }
+                        initialGeneratorContacts.put(at, initial);
+                    }
                 }
             }
         }
         @Override public void close() {
-            entries.close(); conductors.close(); machines.clear(); conductorChunks.clear(); catchUp = false;
+            entries.close(); conductors.close(); machines.clear(); initialGeneratorContacts.clear(); conductorChunks.clear(); conductorTypes.clear(); catchUp = false; effectPause = false;
         }
     }
     private IndependentSiEnergy(MinecraftServer server) {
@@ -133,7 +171,8 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
     public Metrics metrics() {
         if (Thread.currentThread().threadId() != ownerThread) throw new IllegalStateException("Read engine metrics on server thread");
         return new Metrics(ticks, commits, rejected, debited, credited, dissipated,
-            worlds.size(), worlds.values().stream().mapToInt(grid -> grid.machines.size()).sum(), closed, failure, selectionSeed);
+            worlds.size(), worlds.values().stream().mapToInt(grid -> grid.machines.size()).sum(), closed, failure, selectionSeed,
+            deliveryCount, deliveryWireVisits, fusedWires, destroyedReceivers, blastBlocks);
     }
     @Override
     public void position(ServerLevel level, LevelChunk chunk, BlockPos at) {
@@ -189,7 +228,9 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
             var grid = worlds.get(level);
             if (grid == null || !topology.ready(level)) return;
             var changes = grid.entries.advance(ticks + 1);
-            if (changes.isEmpty()) settle(level, grid);
+            boolean effectPause = grid.effectPause;
+            grid.effectPause = false;
+            if (changes.isEmpty() && !effectPause) settle(level, grid);
             else {
                 grid.apply(changes);
                 // Public reference observations: a matured electrical edit
@@ -217,9 +258,10 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
             if (chunk == null || !level.shouldTickBlocksAt(ChunkPos.asLong(at)) || tile.isRemoved()
                 || chunk.getBlockEntity(at, LevelChunk.EntityCreationType.CHECK) != tile) continue;
             int inputs = 63, outputs = 0;
-            boolean generator = BuiltInRegistries.BLOCK.getKey(tile.getBlockState().getBlock()).equals(GENERATOR);
+            var type = BuiltInRegistries.BLOCK.getKey(tile.getBlockState().getBlock());
+            boolean generator = type.equals(GENERATOR);
             if (generator) { inputs = 0; outputs = 63; }
-            if (tile instanceof mio_icif_Energy_Container storageBox && BuiltInRegistries.BLOCK.getKey(tile.getBlockState().getBlock()).equals(BATBOX)) {
+            if (tile instanceof mio_icif_Energy_Container storageBox && STORAGE_PACKETS.containsKey(type)) {
                 inputs = 0;
                 for (var side : Direction.values()) {
                     if (storageBox.canProvidePowerFromSide(side)) outputs |= 1 << side.ordinal();
@@ -230,43 +272,72 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
             if (!quote.outputEnabled()) outputs = 0;
             // Original binary observations distinguish generator residual offers
             // from the BatBox full-packet reserve rule, including a 1 EU offer.
-            long packet = generator ? Math.min(32, quote.amount()) : 32;
+            long packet = generator ? Math.min(32, quote.amount()) : STORAGE_PACKETS.getOrDefault(type, 32L);
             ports.add(new Port(tile, at, tile.getBlockState(), storage, quote, tile.getEffectiveCapacity(), inputs, outputs, packet));
         }
-        var sources = ports.stream().filter(p -> p.outputs != 0 && p.packet > 0 && p.quote.amount() >= p.packet)
-            .sorted(Comparator.comparingInt((Port p) -> p.position.getX()).thenComparingInt(p -> p.position.getY()).thenComparingInt(p -> p.position.getZ())).toList();
+        var sources = ports.stream().filter(p -> p.outputs != 0 && p.packet > 0 && p.quote.amount() >= p.packet).toList();
         var sinks = ports.stream().filter(p -> p.inputs != 0).toList();
         if (sources.isEmpty() || sinks.isEmpty()) return;
         var snapshot = grid.conductors.snapshot(); long[] room = new long[sinks.size()];
-        int[] receivers = new int[sinks.size()]; int[] sourceOrder = new int[sources.size()];
+        int[] receivers = new int[sinks.size()];
         for (int i = 0; i < room.length; i++) { room[i] = Math.max(0, sinks.get(i).capacity - sinks.get(i).quote.amount()); receivers[i] = i; }
-        var offers = new ArrayList<MultiSourceDistributor.Offer>();
-        for (int i = 0; i < sources.size(); i++) {
-            // Source order remains an explicit separate acceptance boundary.
-            sourceOrder[i] = (int) ((i + ticks) % sources.size());
-            var source = sources.get(i);
-            var costs = routes(source, sinks, snapshot);
-            boolean[] eligible = new boolean[sinks.size()];
-            for (int receiver = 0; receiver < eligible.length; receiver++) {
-                eligible[receiver] = room[receiver] > 0 && costs.reaches(receiver)
-                    && costs.wholeLossTo(receiver) < source.packet;
-            }
-            int[] priorities = ReceiverOrder.create(receivers, eligible, level.getGameTime(), selectionRandom);
-            offers.add(new MultiSourceDistributor.Offer(source.quote.amount(), source.packet, costs, receivers, priorities));
-        }
-        var round = MultiSourceDistributor.allocate(offers, room, sourceOrder);
+        var quotes = sources.stream().map(source -> new DomainDistributor.Source(source.quote.amount(), source.packet,
+            BuiltInRegistries.BLOCK.getKey(source.state.getBlock()).equals(GENERATOR))).toList();
+        var effectPaths = new ArrayList<List<ConductorRegistry.Path[]>>();
+        var domains = domains(sources, sinks, snapshot, receivers, level.getGameTime(), grid, effectPaths);
+        var round = DomainDistributor.allocateTraced(quotes, domains, receivers, room, selectionRandom);
         var deltas = new IdentityHashMap<CustomEUEnergyStorage, Long>();
-        long loss = 0, debit = 0, credit = 0;
+        long loss = round.dissipated(), debit = 0, credit = 0;
         for (int i = 0; i < sources.size(); i++) {
-            var result = round.source(i); var source = sources.get(i);
-            debit = Math.addExact(debit, result.sourceDebit()); loss = Math.addExact(loss, result.dissipated());
-            deltas.merge(source.storage, -result.sourceDebit(), Math::addExact);
-            for (int receiver = 0; receiver < sinks.size(); receiver++) {
-                long value = result.credit(receiver); credit = Math.addExact(credit, value);
-                deltas.merge(sinks.get(receiver).storage, value, Math::addExact);
-            }
+            long value = round.debit(i); debit = Math.addExact(debit, value);
+            deltas.merge(sources.get(i).storage, -value, Math::addExact);
+        }
+        for (int receiver = 0; receiver < sinks.size(); receiver++) {
+            long value = round.credit(receiver); credit = Math.addExact(credit, value);
+            deltas.merge(sinks.get(receiver).storage, value, Math::addExact);
         }
         if (debit == 0) return;
+        long traceDebit = 0, traceCredit = 0, traceLoss = 0;
+        long[] wireVisits = {0};
+        var fusePlan = new LinkedHashMap<BlockPos, ResourceLocation>();
+        var receiverPlan = new LinkedHashMap<BlockPos, Port>();
+        for (var delivery : round.deliveries()) {
+            traceDebit = Math.addExact(traceDebit, delivery.sourceDebit());
+            traceCredit = Math.addExact(traceCredit, delivery.credit());
+            traceLoss = Math.addExact(traceLoss, delivery.pathLoss());
+            var path = effectPaths.get(delivery.domain()).get(delivery.entry())[delivery.receiver()];
+            long[] weakestMeasuredLimit = {Long.MAX_VALUE};
+            if (path == null) {
+                if (delivery.pathLoss() != 0) throw new IllegalStateException("Direct delivery has conductor loss");
+            } else {
+                if (path.lossMilli() / 1000 != delivery.pathLoss()) throw new IllegalStateException("Delivery path and quoted loss differ");
+                path.visit(position -> {
+                    wireVisits[0] = Math.incrementExact(wireVisits[0]);
+                    var at = new BlockPos(position.x(), position.y(), position.z());
+                    var type = grid.conductorTypes.get(at);
+                    if (type == null) throw new IllegalStateException("Published conductor has no material identity");
+                    Long limit = FUSE_LIMITS.get(type);
+                    if (limit != null) {
+                        weakestMeasuredLimit[0] = Math.min(weakestMeasuredLimit[0], limit);
+                        if (delivery.sourceDebit() > limit) fusePlan.put(at, type);
+                    }
+                });
+            }
+            var sink = sinks.get(delivery.receiver());
+            Long receiverLimit = STORAGE_PACKETS.get(BuiltInRegistries.BLOCK.getKey(sink.state.getBlock()));
+            // Apply the independently measured single-packet receiver rule.
+            // A fuse protects the receiver; the measured conductor boundary
+            // can destroy it even when the credited energy fits its tier.
+            // Mixed/multi-source effects and collateral blast remain unverified.
+            boolean fused = delivery.sourceDebit() > weakestMeasuredLimit[0];
+            boolean boundary = path != null && delivery.sourceDebit() == weakestMeasuredLimit[0];
+            if (receiverLimit != null && !fused && delivery.sourceDebit() > receiverLimit
+                    && (delivery.credit() > receiverLimit || boundary)) {
+                receiverPlan.put(sink.position, sink);
+            }
+        }
+        if (traceDebit != debit || traceCredit != credit || traceLoss != loss)
+            throw new IllegalStateException("Delivery trace does not reconcile with the round");
         var writes = new ArrayList<CustomEUEnergyStorage.NetworkWrite>();
         for (var port : ports) {
             long delta = deltas.getOrDefault(port.storage, 0L);
@@ -274,7 +345,72 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
         }
         if (CustomEUEnergyStorage.scexCommitNetwork(writes, loss, () -> valid(level, grid, snapshot, ports))) {
             commits++; debited = Math.addExact(debited, debit); credited = Math.addExact(credited, credit); dissipated = Math.addExact(dissipated, loss);
+            deliveryCount = Math.addExact(deliveryCount, round.deliveries().size());
+            deliveryWireVisits = Math.addExact(deliveryWireVisits, wireVisits[0]);
+            var removedByEffects = new HashSet<BlockPos>();
+            for (var fuse : fusePlan.entrySet()) {
+                var at = fuse.getKey();
+                var chunk = level.getChunkSource().getChunkNow(at.getX() >> 4, at.getZ() >> 4);
+                if (chunk == null || !BuiltInRegistries.BLOCK.getKey(chunk.getBlockState(at).getBlock()).equals(fuse.getValue())) continue;
+                if (level.removeBlock(at, false)) {
+                    // Effects run after the numeric transaction. Revoke the
+                    // conductor lease now so the destroyed wire cannot carry
+                    // another packet while its publication event is pending.
+                    grid.conductors.remove(point(at));
+                    topology.changed(level, at);
+                    removedByEffects.add(at);
+                    fusedWires = Math.incrementExact(fusedWires);
+                }
+            }
+            for (var sink : receiverPlan.values()) {
+                var at = sink.position;
+                var chunk = level.getChunkSource().getChunkNow(at.getX() >> 4, at.getZ() >> 4);
+                if (chunk == null || chunk.getBlockEntity(at) != sink.tile || !chunk.getBlockState(at).equals(sink.state)) continue;
+                if (level.removeBlock(at, false)) {
+                    grid.machines.remove(at);
+                    grid.initialGeneratorContacts.remove(at);
+                    topology.changed(level, at);
+                    removedByEffects.add(at);
+                    destroyedReceivers = Math.incrementExact(destroyedReceivers);
+                    applySmallBlockBlast(level, grid, at, removedByEffects);
+                }
+            }
+            if (!removedByEffects.isEmpty()) {
+                // Our own completed removals are already known this frame.
+                // Retire them together so a later observer echo cannot delay
+                // the measured next-END pause by an additional frame.
+                grid.apply(grid.entries.forgetIf(removedByEffects::contains));
+                grid.effectPause = true;
+            }
         } else rejected++;
+    }
+    private void applySmallBlockBlast(ServerLevel level, WorldGrid grid, BlockPos center, Set<BlockPos> removed) {
+        // Independent block-only hypothesis from frozen material/position
+        // observations: the 18 face/edge neighbours, evaluated individually.
+        // The resistance cutoff matches the measured vanilla materials; values
+        // between 1 and 1.5 and other modded blocks remain unverified.
+        // Entity damage, drops, sounds and other blast strengths are separate.
+        for (int dx = -1; dx <= 1; dx++) for (int dy = -1; dy <= 1; dy++) for (int dz = -1; dz <= 1; dz++) {
+            int distanceSquared = dx * dx + dy * dy + dz * dz;
+            if (distanceSquared == 0 || distanceSquared > 2) continue;
+            var at = center.offset(dx, dy, dz);
+            var chunk = level.getChunkSource().getChunkNow(at.getX() >> 4, at.getZ() >> 4);
+            if (chunk == null) continue;
+            var state = chunk.getBlockState(at);
+            if (state.isAir() || state.getDestroySpeed(level, at) < 0) continue;
+            var type = BuiltInRegistries.BLOCK.getKey(state.getBlock());
+            float resistance = state.getBlock().getExplosionResistance();
+            if (!MEASURED_BLAST_CABLES.contains(type)
+                    && (!Float.isFinite(resistance) || resistance < 0 || resistance > 1.0F)) continue;
+            if (level.removeBlock(at, false)) {
+                grid.conductors.remove(point(at));
+                grid.machines.remove(at);
+                grid.initialGeneratorContacts.remove(at);
+                topology.changed(level, at);
+                removed.add(at);
+                blastBlocks = Math.incrementExact(blastBlocks);
+            }
+        }
     }
     private boolean valid(ServerLevel level, WorldGrid grid, ConductorRegistry.Snapshot snapshot, List<Port> ports) {
         // The independent published registry intentionally preserves one final
@@ -291,32 +427,102 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
         return true;
     }
     private static ConductorRegistry.Position point(BlockPos at) { return new ConductorRegistry.Position(at.getX(), at.getY(), at.getZ()); }
-    private static RouteCosts routes(Port source, List<Port> sinks, ConductorRegistry.Snapshot graph) {
-        long[] losses = new long[sinks.size()]; boolean[] reaches = new boolean[sinks.size()];
-        for (int i = 0; i < sinks.size(); i++) {
-            var sink = sinks.get(i); if (source.tile == sink.tile) continue;
-            long best = Long.MAX_VALUE; boolean found = false;
+    private List<DomainDistributor.Domain> domains(List<Port> sources, List<Port> sinks,
+            ConductorRegistry.Snapshot graph, int[] receivers, long worldTime, WorldGrid grid,
+            List<List<ConductorRegistry.Path[]>> effectPaths) {
+        // Nonnegative keys identify physical wire components; negative keys identify
+        // individual direct contacts. A receiver never joins separate wire runs.
+        var grouped = new LinkedHashMap<Long, LinkedHashMap<Long, Map.Entry<long[], ConductorRegistry.Path[]>>>();
+        for (int sourceId = 0; sourceId < sources.size(); sourceId++) {
+            var source = sources.get(sourceId);
+            var initial = grid.initialGeneratorContacts.getOrDefault(source.position, Set.of());
+            int count = 0, componentId = -1;
+            boolean sameComponent = true;
+            for (Direction side : Direction.values()) {
+                if ((source.outputs & (1 << side.ordinal())) == 0) continue;
+                var at = source.position.relative(side); var position = point(at);
+                if (!graph.contains(position)) continue;
+                count++;
+                if (!initial.contains(at)) sameComponent = false;
+                int found = graph.componentOf(position);
+                if (componentId < 0) componentId = found;
+                else if (componentId != found) sameComponent = false;
+            }
+            // R18's two-contact, pre-existing conductor controls justify this
+            // finite integration scope. Three contacts and merge history remain
+            // unresolved; this does not identify an original internal algorithm.
+            boolean separateContacts = initial.size() == 2 && count == 2 && sameComponent;
             for (Direction output : Direction.values()) {
                 if ((source.outputs & (1 << output.ordinal())) == 0) continue;
                 BlockPos start = source.position.relative(output);
-                if (start.equals(sink.position) && (sink.inputs & (1 << output.getOpposite().ordinal())) != 0) { best = 0; found = true; break; }
-                if (!graph.contains(point(start))) continue;
-                var paths = graph.routesFrom(point(start));
-                for (Direction input : Direction.values()) {
-                    if ((sink.inputs & (1 << input.ordinal())) == 0) continue;
-                    var contact = point(sink.position.relative(input)); if (!graph.contains(contact)) continue;
-                    int vertex = graph.vertex(contact);
-                    if (paths.reaches(vertex)) { best = Math.min(best, paths.lossMilliTo(vertex)); found = true; }
+                var origin = point(start);
+                boolean wired = graph.contains(origin);
+                var paths = wired ? graph.routesFrom(origin) : null;
+                long component = wired ? graph.componentOf(origin) : -1;
+                long emitter = 7L * sourceId + (separateContacts ? output.ordinal() : 6);
+                for (int receiver = 0; receiver < sinks.size(); receiver++) {
+                    var sink = sinks.get(receiver); if (source.tile == sink.tile) continue;
+                    if (start.equals(sink.position) && (sink.inputs & (1 << output.getOpposite().ordinal())) != 0) {
+                        long direct = -1L - (long) sourceId * sinks.size() - receiver;
+                        recordRoute(grouped, direct, 7L * sourceId + 6, receiver, sinks.size(), 0, null, null, null);
+                    }
+                    if (!wired) continue;
+                    for (Direction input : Direction.values()) {
+                        if ((sink.inputs & (1 << input.ordinal())) == 0) continue;
+                        var contact = point(sink.position.relative(input)); if (!graph.contains(contact)) continue;
+                        int vertex = graph.vertex(contact);
+                        if (paths.reaches(vertex)) recordRoute(grouped, component, emitter, receiver, sinks.size(), paths.lossMilliTo(vertex), graph, origin, contact);
+                    }
                 }
             }
-            reaches[i] = found; losses[i] = best;
         }
-        return new RouteCosts() {
-            @Override public boolean reaches(int contact) { return reaches[contact]; }
-            @Override public long lossMilliTo(int contact) {
-                if (!reaches[contact]) throw new IllegalArgumentException("Unreachable endpoint"); return losses[contact];
+        var result = new ArrayList<DomainDistributor.Domain>();
+        for (var domain : grouped.values()) {
+            var selectedPaths = new ArrayList<ConductorRegistry.Path[]>();
+            int[] ids = new int[domain.size()]; int[][] priorities = new int[domain.size()][];
+            var routes = new ArrayList<RouteCosts>(); int index = 0; boolean shared = false;
+            for (var entry : domain.entrySet()) {
+                int source = (int) (entry.getKey() / 7); long[] losses = entry.getValue().getKey();
+                selectedPaths.add(entry.getValue().getValue());
+                boolean contactEntry = entry.getKey() % 7 != 6; shared |= contactEntry;
+                RouteCosts costs = new RouteCosts() {
+                    @Override public boolean reaches(int contact) { return losses[contact] >= 0; }
+                    @Override public long lossMilliTo(int contact) {
+                        if (!reaches(contact)) throw new IllegalArgumentException("Unreachable endpoint");
+                        return losses[contact];
+                    }
+                };
+                boolean[] eligible = new boolean[sinks.size()];
+                for (int receiver = 0; receiver < eligible.length; receiver++) {
+                    // Full connected receivers retain their random offset.
+                    eligible[receiver] = costs.reaches(receiver) && costs.wholeLossTo(receiver) < sources.get(source).packet;
+                }
+                ids[index] = source; routes.add(costs);
+                int[] registration = receivers;
+                if (contactEntry) {
+                    registration = Arrays.stream(receivers).boxed().sorted(java.util.Comparator.comparingLong(
+                        receiver -> costs.reaches(receiver) ? costs.lossMilliTo(receiver) : Long.MAX_VALUE))
+                        .mapToInt(Integer::intValue).toArray();
+                }
+                priorities[index++] = ReceiverOrder.create(registration, eligible, worldTime, selectionRandom);
             }
-        };
+            result.add(shared ? DomainDistributor.Domain.withSharedSourceContacts(ids, routes, priorities)
+                : new DomainDistributor.Domain(ids, routes, priorities));
+            effectPaths.add(selectedPaths);
+        }
+        return result;
+    }
+    private static void recordRoute(Map<Long, LinkedHashMap<Long, Map.Entry<long[], ConductorRegistry.Path[]>>> domains, long domain,
+            long source, int receiver, int count, long loss, ConductorRegistry.Snapshot graph,
+            ConductorRegistry.Position origin, ConductorRegistry.Position target) {
+        var selected = domains.computeIfAbsent(domain, key -> new LinkedHashMap<>()).computeIfAbsent(source, key -> {
+            long[] values = new long[count]; Arrays.fill(values, -1); return Map.entry(values, new ConductorRegistry.Path[count]);
+        });
+        long[] losses = selected.getKey();
+        if (losses[receiver] < 0 || loss < losses[receiver]) {
+            losses[receiver] = loss;
+            selected.getValue()[receiver] = graph == null ? null : graph.path(origin, target);
+        }
     }
     @SubscribeEvent
     public void stopped(ServerStoppedEvent event) {

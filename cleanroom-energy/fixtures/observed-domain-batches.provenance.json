@@ -1,0 +1,28 @@
+{
+  "rows": 5920,
+  "inputs": [
+    {
+      "path": "source\\cleanroom-energy\\fixtures\\observed-transformer-batches.tsv",
+      "sha256": "7c8b35bdede4c11bd7386666352fc662df6a53d1bb87803c1307caadab3a76bc"
+    },
+    {
+      "path": "source\\cleanroom-energy\\fixtures\\observed-transformer-split-loss.tsv",
+      "sha256": "c1b4fd43d2aabde74ef497a891da7b3f2d5005c81dc1eb07661529cb22f7a869"
+    },
+    {
+      "path": "source\\cleanroom-energy\\fixtures\\observed-transformer-loss.tsv",
+      "sha256": "09e4a4adfe850401089e4600a427a3202bd14c81ab344894c0ae57e9f0440625"
+    },
+    {
+      "path": "evidence\\r23\\residual-holdout-observed-transitions.tsv",
+      "sha256": "d79dab2b5415b37024ac1b1417c21d1c724db90e5bdfa0fd735fc259549a6488"
+    },
+    {
+      "path": "evidence\\r23\\triple-observed-transitions.tsv",
+      "sha256": "6006212fdb887d8cb6ec7cd339ccae7192efd76bd414f6fbffabc51d31a3d92a"
+    }
+  ],
+  "fixture_sha256": "410d24fb813ddf3d95ad7f1dcd27244ca5fde9820d6574ef27e478833295d279",
+  "source": "Previously retained public Minecraft/Forge saved-state observations from original binary; no original source/API/decompilation.",
+  "scope": "Single batch emitter across separate output domains, up to three receivers; explicit domain order, no scheduling probability, capacity release or SI runtime acceptance."
+}

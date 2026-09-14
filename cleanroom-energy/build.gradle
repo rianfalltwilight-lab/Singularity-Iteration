@@ -1,7 +1,7 @@
 plugins { id 'java-library' }
 
 group = 'dev.scex'
-version = '0.8.0-r15-experimental'
+version = '0.15.3-r24-experimental'
 base { archivesName = 'scex-independent-energy' }
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
@@ -116,3 +116,114 @@ tasks.register('partialReceiverContractTest', JavaExec) {
     jvmArgs '-Xms32m', '-Xmx128m'
 }
 tasks.named('check') { dependsOn tasks.named('partialReceiverContractTest') }
+
+tasks.register('priorityDomainContractTest', JavaExec) {
+    dependsOn tasks.named('contractClasses')
+    classpath = sourceSets.contract.runtimeClasspath
+    mainClass = 'dev.scex.energy.PriorityDomainContract'
+    args layout.projectDirectory.file('fixtures/observed-source-priority.tsv').asFile.absolutePath
+    args layout.projectDirectory.file('fixtures/observed-full-receiver-priority.tsv').asFile.absolutePath
+    jvmArgs '-Xms32m', '-Xmx128m'
+}
+tasks.named('check') { dependsOn tasks.named('priorityDomainContractTest') }
+
+tasks.register('sharedSourceContractTest', JavaExec) {
+    dependsOn tasks.named('contractClasses')
+    classpath = sourceSets.contract.runtimeClasspath
+    mainClass = 'dev.scex.energy.SharedSourceContract'
+    args layout.projectDirectory.file('fixtures/observed-shared-source.tsv').asFile.absolutePath
+    jvmArgs '-Xms32m', '-Xmx128m'
+}
+tasks.named('check') { dependsOn tasks.named('sharedSourceContractTest') }
+
+tasks.register('contactBudgetContractTest', JavaExec) {
+    dependsOn tasks.named('contractClasses')
+    classpath = sourceSets.contract.runtimeClasspath
+    mainClass = 'dev.scex.energy.ContactBudgetContract'
+    args layout.projectDirectory.file('fixtures/observed-two-contact.tsv').asFile.absolutePath
+    jvmArgs '-Xms32m', '-Xmx128m'
+}
+tasks.named('check') { dependsOn tasks.named('contactBudgetContractTest') }
+
+tasks.register('componentRoutesContractTest', JavaExec) {
+    dependsOn tasks.named('contractClasses')
+    classpath = sourceSets.contract.runtimeClasspath
+    mainClass = 'dev.scex.energy.ComponentRoutesContract'
+    jvmArgs '-Xms32m', '-Xmx128m'
+}
+tasks.named('check') { dependsOn tasks.named('componentRoutesContractTest') }
+
+tasks.register('deliveryTraceContractTest', JavaExec) {
+    dependsOn tasks.named('contractClasses')
+    classpath = sourceSets.contract.runtimeClasspath
+    mainClass = 'dev.scex.energy.DeliveryTraceContract'
+    jvmArgs '-Xms32m', '-Xmx128m'
+}
+tasks.named('check') { dependsOn tasks.named('deliveryTraceContractTest') }
+
+tasks.register('transformerAccountingContractTest', JavaExec) {
+    dependsOn tasks.named('contractClasses')
+    classpath = sourceSets.contract.runtimeClasspath
+    mainClass = 'dev.scex.energy.TransformerAccountingContract'
+    args layout.projectDirectory.file('fixtures/observed-transformer-steps.tsv').asFile.absolutePath
+    jvmArgs '-Xms32m', '-Xmx128m'
+}
+tasks.named('check') { dependsOn tasks.named('transformerAccountingContractTest') }
+
+
+tasks.register('transformerBatchContractTest', JavaExec) {
+    dependsOn tasks.named('contractClasses')
+    classpath = sourceSets.contract.runtimeClasspath
+    mainClass = 'dev.scex.energy.TransformerBatchContract'
+    args layout.projectDirectory.file('fixtures/observed-transformer-batches.tsv').asFile.absolutePath
+    jvmArgs '-Xms32m', '-Xmx128m'
+}
+tasks.named('check') { dependsOn tasks.named('transformerBatchContractTest') }
+
+
+tasks.register('transformerLossContractTest', JavaExec) {
+    dependsOn tasks.named('contractClasses')
+    classpath = sourceSets.contract.runtimeClasspath
+    mainClass = 'dev.scex.energy.TransformerLossContract'
+    args layout.projectDirectory.file('fixtures/observed-transformer-loss.tsv').asFile.absolutePath
+    jvmArgs '-Xms32m', '-Xmx128m'
+}
+tasks.named('check') { dependsOn tasks.named('transformerLossContractTest') }
+
+
+tasks.register('transformerSplitLossContractTest', JavaExec) {
+    dependsOn tasks.named('contractClasses')
+    classpath = sourceSets.contract.runtimeClasspath
+    mainClass = 'dev.scex.energy.TransformerSplitLossContract'
+    args layout.projectDirectory.file('fixtures/observed-transformer-split-loss.tsv').asFile.absolutePath
+    jvmArgs '-Xms32m', '-Xmx128m'
+}
+tasks.named('check') { dependsOn tasks.named('transformerSplitLossContractTest') }
+
+
+tasks.register('domainBatchContractTest', JavaExec) {
+    dependsOn tasks.named('contractClasses')
+    classpath = sourceSets.contract.runtimeClasspath
+    mainClass = 'dev.scex.energy.DomainBatchContract'
+    args layout.projectDirectory.file('fixtures/observed-domain-batches.tsv').asFile.absolutePath
+    jvmArgs '-Xms32m', '-Xmx128m'
+}
+tasks.named('check') { dependsOn tasks.named('domainBatchContractTest') }
+
+
+tasks.register('sharedStorageContractTest', JavaExec) {
+    dependsOn tasks.named('contractClasses')
+    classpath = sourceSets.contract.runtimeClasspath
+    mainClass = 'dev.scex.energy.SharedStorageContract'
+    args layout.projectDirectory.file('fixtures/observed-transformer-steps.tsv').asFile.absolutePath
+    jvmArgs '-Xms32m', '-Xmx128m'
+}
+tasks.named('check') { dependsOn tasks.named('sharedStorageContractTest') }
+
+tasks.register('networkCellContractTest', JavaExec) {
+    dependsOn tasks.named('contractClasses')
+    classpath = sourceSets.contract.runtimeClasspath
+    mainClass = 'dev.scex.energy.NetworkCellContract'
+    jvmArgs '-Xms32m', '-Xmx128m'
+}
+tasks.named('check') { dependsOn tasks.named('networkCellContractTest') }

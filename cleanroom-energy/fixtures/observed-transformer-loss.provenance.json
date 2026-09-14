@@ -1,0 +1,34 @@
+{
+  "source": "Public platform observer reading ordinary saved balances from original IC2 Experimental 2.8.222-ex112 binary; no original source/API/decompilation.",
+  "runs": [
+    {
+      "run": "si-ic2-transformer-loss-0-r22-monarch-01-20260913",
+      "raw_sha256": "84a800986690d728741ef24e3ec97eea67621fadee83ccddcf95f66505a1103e",
+      "vectors": 360
+    },
+    {
+      "run": "si-ic2-transformer-loss-1-r22-monarch-01-20260913",
+      "raw_sha256": "82bd6433cdda41d13411c513d8e2d87412e20111ccde771631da959a227c4f37",
+      "vectors": 360
+    },
+    {
+      "run": "si-ic2-transformer-loss-2-r22-monarch-01-20260913",
+      "raw_sha256": "6a82f3b4c3fb2b420155d1ed930a5f13ca2c49687d0eafc2de06df45bd9b3be7",
+      "vectors": 360
+    },
+    {
+      "run": "si-ic2-transformer-loss-3-r22-monarch-01-20260913",
+      "raw_sha256": "656ff3ac163440f327182efa2daeed165dbfa3cc5f37285f406179c8d087c9a9",
+      "vectors": 360
+    }
+  ],
+  "cases": 36,
+  "vectors": 1440,
+  "wire_survival_checks": 2904,
+  "per_packet_differences": 0,
+  "per_batch_differences": 640,
+  "prediction_sha256": "511ecaeadba1ac198325cee9d862f89f28fd88db578133dfe1cb3613bbdda825",
+  "fixture_sha256": "09e4a4adfe850401089e4600a427a3202bd14c81ab344894c0ae57e9f0440625",
+  "split_inputs_equal": true,
+  "scope": "One glass output path, empty source and full buffer; 1/40/80 wires. Split runs follow preexisting frozen equations."
+}

@@ -1,0 +1,2 @@
+// Allows the dependency-free component to be rebuilt without the SI project.
+rootProject.name = 'scex-independent-energy'

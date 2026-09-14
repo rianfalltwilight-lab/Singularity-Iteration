@@ -1,0 +1,35 @@
+{
+  "passed": true,
+  "vectors": 3840,
+  "distribution_checks": 328,
+  "violations": 0,
+  "failure_examples": [],
+  "sources": [
+    {
+      "run": "si-ic2-join-order-r18-02-20260913",
+      "selected_first_tick_vectors": 640,
+      "observations_sha256": "55df9324a371e45c2fbba1aa2ef04e68c178067318d97dff569488c7d4846af5",
+      "fixture_sha256": "0295dace8760d9d2f94ebea39d8a33b6778897fc85074996f13fbdfd6967a7f5"
+    },
+    {
+      "run": "si-ic2-join-order-r18-04-20260913",
+      "selected_first_tick_vectors": 640,
+      "observations_sha256": "65dfa83820bb6910d771a8ae60280311e47e821354564d462ef8958c04b54048",
+      "fixture_sha256": "0295dace8760d9d2f94ebea39d8a33b6778897fc85074996f13fbdfd6967a7f5"
+    },
+    {
+      "run": "si-ic2-join-order-r18-05-20260913",
+      "selected_first_tick_vectors": 960,
+      "observations_sha256": "daead09ba2256cbc79066accd50f91c9e74a1275ea933cab1b12c56d8b065d55",
+      "fixture_sha256": "9bc8996c57987f8f8568417165b248332b87302db6394c93081ea595a41bc883"
+    },
+    {
+      "run": "si-ic2-join-order-r18-06-20260913",
+      "selected_first_tick_vectors": 1600,
+      "observations_sha256": "9a6ae61a34ed5b74009405a5ad20176064b37c7877830d2027e69b7c2bb9c60c",
+      "fixture_sha256": "5b74268ccc23cade4a2688b67df7dfaabc83264f8e67796f59983d3eab907644"
+    }
+  ],
+  "scope": "Only the observed seven-wire/two-contact U graphs where wires predate source publication. Two independently modeled contact entries share a source packet budget; per-contact receiver priority begins at the nearest receiver in the fixed phase. Three contacts, history/merge behavior, arbitrary routes and original PRNG are not certified.",
+  "fixture_sha256": "6d2c904da4f679aa903af98b49f6a361acf716c8fca7c610b3328c8bc27b6709"
+}

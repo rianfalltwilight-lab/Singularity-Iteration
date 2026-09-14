@@ -1,0 +1,62 @@
+{
+  "rows": 15200,
+  "sha256": "b2d7861785762dca3135390b57fc812bb65d9fc2a5b814448ee8ba59fd74bc76",
+  "sources": [
+    {
+      "run": "si-ic2-transformer-safe-r22-monarch-01-20260913",
+      "vectors": 560,
+      "raw_sha256": "106628b9435ae907840323147a09c0e02dfd3a4079fb9cde3c7582e8f1f21d3e"
+    },
+    {
+      "run": "si-ic2-transformer-boundary-r22-monarch-01-20260913",
+      "vectors": 2240,
+      "raw_sha256": "6a26fe4a9730616763f57e76629fbeb7d61b1ad2562c3bb1d9dd2890cd85e04d"
+    },
+    {
+      "run": "si-ic2-transformer-capacity-r22-monarch-01-20260913",
+      "vectors": 2240,
+      "raw_sha256": "da83aa0d7254f819b6e9934587e93addd5c37b29ee4908b7af429f8d8a1b0f70"
+    },
+    {
+      "run": "si-ic2-transformer-partial-r22-monarch-01-20260913",
+      "vectors": 5120,
+      "raw_sha256": "ae2c2b1827be02144c53854d7d9e14f01469dcc87e8d29151efe26e9bf3152e4"
+    },
+    {
+      "run": "si-ic2-transformer-recovery-r22-monarch-01-20260913",
+      "vectors": 640,
+      "raw_sha256": "7e841b11849e167cea3dc52ca83ca79eb2143fc7a27db14e0de7ab16e5d2d49c"
+    },
+    {
+      "run": "si-ic2-transformer-recovery-order-r22-monarch-01-20260913",
+      "vectors": 640,
+      "raw_sha256": "7d3f562046075e597d1ca7299d16f437c2b0b8c3b4116655ae3a143a51ba16f5"
+    },
+    {
+      "run": "si-ic2-transformer-repeat-0-1-r22-monarch-01-20260913",
+      "vectors": 640,
+      "raw_sha256": "fc2d4b9dceee01bb0910057b4a8c2c3519fbed81e4117706a030d1040cbdb4fe"
+    },
+    {
+      "run": "si-ic2-transformer-repeat-1-1-r22-monarch-01-20260913",
+      "vectors": 640,
+      "raw_sha256": "affba8c8be53ed82b365e3d2e2f28c2e787888598dd42ef66ae526796f2d8ad5"
+    },
+    {
+      "run": "si-ic2-transformer-repeat-0-2-r22-monarch-01-20260913",
+      "vectors": 640,
+      "raw_sha256": "5fb8916feb317d679e8e0a15da727f3363a45539d90efde3d4fde0c85ac6aa16"
+    },
+    {
+      "run": "si-ic2-transformer-repeat-1-2-r22-monarch-01-20260913",
+      "vectors": 640,
+      "raw_sha256": "fcc0e5605cd8574992a00a20b7c2ae5b95c41f9a0937e5e98cbde59eebe5f6a4"
+    },
+    {
+      "run": "si-ic2-transformer-cycles-r22-monarch-01-20260913",
+      "vectors": 1200,
+      "raw_sha256": "c47c5c3c50a6bee0624084a48b3e4a53d6121aa0911d2731be36c0c778ae5f9f"
+    }
+  ],
+  "scope": "Numeric original black-box one-step transitions. Membership in accounting outcomes does not predict schedule choices or their distribution."
+}

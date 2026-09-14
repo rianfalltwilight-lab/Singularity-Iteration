@@ -16,11 +16,13 @@ public final class PacketDistributor {
         private final long debit;
         private final long loss;
         private final long[] credits;
+        private final long[] deliveryLosses;
 
-        private Allocation(long debit, long loss, long[] credits) {
+        private Allocation(long debit, long loss, long[] credits, long[] deliveryLosses) {
             this.debit = debit;
             this.loss = loss;
             this.credits = credits;
+            this.deliveryLosses = deliveryLosses;
         }
 
         public long sourceDebit() { return debit; }
@@ -28,6 +30,11 @@ public final class PacketDistributor {
         public int receiverCount() { return credits.length; }
         public long credit(int receiver) { return credits[receiver]; }
         public long[] credits() { return credits.clone(); }
+        /** Exact loss captured during planning; no later route query is needed. */
+        public long deliveryLoss(int receiver) {
+            if (deliveryLosses == null) throw new IllegalStateException("Delivery details were not requested");
+            return credits[receiver] > 0 ? deliveryLosses[receiver] : 0;
+        }
     }
 
     /**
@@ -44,6 +51,17 @@ public final class PacketDistributor {
     /** General-index entry; disconnected contacts are skipped without a debit. */
     public static Allocation allocate(long reserve, long packet, RouteCosts routes,
                                       int[] contacts, long[] room, int[] priority) {
+        return allocate(reserve, packet, routes, contacts, room, priority, false);
+    }
+
+    /** Preserve each positive delivery's already-calculated loss for effects planning. */
+    public static Allocation allocateTraced(long reserve, long packet, RouteCosts routes,
+                                            int[] contacts, long[] room, int[] priority) {
+        return allocate(reserve, packet, routes, contacts, room, priority, true);
+    }
+
+    private static Allocation allocate(long reserve, long packet, RouteCosts routes,
+                                       int[] contacts, long[] room, int[] priority, boolean trace) {
         Objects.requireNonNull(routes, "routes");
         Objects.requireNonNull(contacts, "contacts");
         Objects.requireNonNull(room, "room");
@@ -71,7 +89,7 @@ public final class PacketDistributor {
         }
         long[] credits = new long[count];
         if (reserve < packet) {
-            return new Allocation(0, 0, credits);
+            return new Allocation(0, 0, credits, trace ? losses : null);
         }
         long remaining = packet;
         long dissipated = 0;
@@ -88,6 +106,6 @@ public final class PacketDistributor {
             remaining -= delivered + loss;
             dissipated += loss;
         }
-        return new Allocation(packet - remaining, dissipated, credits);
+        return new Allocation(packet - remaining, dissipated, credits, trace ? losses : null);
     }
 }

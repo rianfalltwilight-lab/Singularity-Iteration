@@ -42,9 +42,13 @@ public final class MultiSourceDistributor {
 
     /**
      * Pure O(S*R) accounting in caller-supplied source and per-source receiver
-     * orders. Later sources skip receivers already filled by earlier sources;
-     * still-active receivers retain their original demand quote for this round.
-     * This can overshoot capacity. It is an independent model consistent with
+     * orders within one conductor domain. A receiver closes when one source
+     * satisfies its original quote; partial credits from different sources do
+     * not accumulate towards this stop condition. R16's small-packet controls
+     * distinguish this from the older aggregate-room stop condition. This can
+     * overshoot capacity by more than one packet when many sources contribute.
+     * Remaining room reports the actual total, independently of eligibility.
+     * It is an independent model consistent with
      * black-box outcomes, not a description of inspected target internals.
      * Orders are explicit inputs, not an emulation of a game's random scheduler.
      * Callers must revalidate their complete world snapshot before applying this
@@ -54,9 +58,11 @@ public final class MultiSourceDistributor {
         List<Offer> sources = List.copyOf(offers);
         long[] quoted = Objects.requireNonNull(receiverRoom, "receiverRoom").clone();
         long[] remaining = quoted.clone();
+        boolean[] accepting = new boolean[quoted.length];
         int[] order = Objects.requireNonNull(sourcePriority, "sourcePriority").clone();
         if (order.length != sources.size()) { throw new IllegalArgumentException("Source order length"); }
         for (long room : remaining) { if (room < 0) { throw new IllegalArgumentException("Negative receiver room"); } }
+        for (int i = 0; i < quoted.length; i++) accepting[i] = quoted[i] > 0;
         boolean[] seen = new boolean[sources.size()];
         for (int source : order) {
             if (source < 0 || source >= sources.size() || seen[source]) {
@@ -69,13 +75,14 @@ public final class MultiSourceDistributor {
             Offer offer = sources.get(source);
             long[] activeQuotes = new long[remaining.length];
             for (int receiver = 0; receiver < remaining.length; receiver++) {
-                if (remaining[receiver] > 0) { activeQuotes[receiver] = quoted[receiver]; }
+                if (accepting[receiver]) { activeQuotes[receiver] = quoted[receiver]; }
             }
             var receipt = PacketDistributor.allocate(offer.reserve, offer.packet, offer.routes,
                     offer.contacts, activeQuotes, offer.receiverPriority);
             receipts[source] = receipt;
             for (int receiver = 0; receiver < remaining.length; receiver++) {
-                remaining[receiver] -= receipt.credit(receiver);
+                remaining[receiver] = Math.subtractExact(remaining[receiver], receipt.credit(receiver));
+                if (receipt.credit(receiver) >= quoted[receiver]) accepting[receiver] = false;
             }
         }
         return new Round(receipts, remaining);
