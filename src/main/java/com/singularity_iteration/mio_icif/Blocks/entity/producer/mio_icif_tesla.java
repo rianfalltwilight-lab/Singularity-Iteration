@@ -42,6 +42,7 @@ import java.util.UUID;
  */
 @SuppressWarnings("null")
 public class mio_icif_tesla extends mio_icif_producer {
+    private boolean scexAttackInProgress;
 
     private static final SlotLayout LAYOUT = SlotLayout.builder()
         .battery()
@@ -194,6 +195,7 @@ public class mio_icif_tesla extends mio_icif_producer {
      * 执行电击攻击
      */
     private void performAttack(Level level, BlockPos pos) {
+        if (scexAttackInProgress || !scexCurrentAttackOwner(level, pos)) return;
         // 检查能量是否足够
         if (getEnergyStorage().getAmount() < ENERGY_PER_ATTACK) {
             return;
@@ -206,60 +208,81 @@ public class mio_icif_tesla extends mio_icif_producer {
         );
 
         List<LivingEntity> entities = level.getEntitiesOfClass(LivingEntity.class, attackArea);
+        Vec3 damagePos = new Vec3(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
+        DamageSource damageSource = new DamageSource(
+            level.registryAccess().registryOrThrow(net.minecraft.core.registries.Registries.DAMAGE_TYPE)
+                .getHolderOrThrow(mio_icif_DamageTypes.TESLA_COIL), damagePos);
+        var payment = getEnergyStorageInternal().scexReserveInternal(ENERGY_PER_ATTACK);
+        if (payment == null) return;
+        scexAttackInProgress = true;
         
         // 记录本次攻击的实体UUID
         Set<UUID> currentAttackedEntities = new HashSet<>();
 
-        for (LivingEntity entity : entities) {
-            // 跳过死亡的实体
-            if (!entity.isAlive()) {
-                continue;
+        try {
+            for (LivingEntity entity : entities) {
+                if (!scexCurrentAttackOwner(level, pos)) break;
+                // 跳过死亡的实体
+                if (!entity.isAlive()) {
+                    continue;
+                }
+
+                UUID entityId = entity.getUUID();
+
+                // 检查是否是首次攻击
+                boolean isFirstAttack = !lastAttackedEntities.contains(entityId);
+
+                // 计算伤害
+                float damage;
+                if (isFirstAttack) {
+                    damage = FIRST_ATTACK_DAMAGE;
+                } else {
+                    damage = FOLLOW_UP_DAMAGE_MIN + level.random.nextFloat() * (FOLLOW_UP_DAMAGE_MAX - FOLLOW_UP_DAMAGE_MIN);
+                }
+
+                // 检查防化服 - 穿全套防化服的免疫伤害
+                if (RadiationProtectionUtil.isWearingFullHazmat(entity)) {
+                    continue; // 防化服免疫，不造成伤害
+                }
+
+                // A cancelled damage event has no paid effect and must not damage armor.
+                // An exception can follow a partially applied foreign effect: settle once,
+                // propagate it, and never refund/retry that unknown outcome.
+                boolean accepted;
+                try {
+                    accepted = entity.hurt(damageSource, damage);
+                } catch (RuntimeException | Error failure) {
+                    payment.commit();
+                    throw failure;
+                }
+                if (!accepted) continue;
+                payment.commit();
+                if (scexCurrentAttackOwner(level, pos)) damageArmor(entity, level);
+
+                // 记录本次攻击的实体UUID
+                currentAttackedEntities.add(entityId);
             }
-
-            UUID entityId = entity.getUUID();
-            
-            // 检查是否是首次攻击
-            boolean isFirstAttack = !lastAttackedEntities.contains(entityId);
-            
-            // 计算伤害
-            float damage;
-            if (isFirstAttack) {
-                damage = FIRST_ATTACK_DAMAGE;
-            } else {
-                damage = FOLLOW_UP_DAMAGE_MIN + level.random.nextFloat() * (FOLLOW_UP_DAMAGE_MAX - FOLLOW_UP_DAMAGE_MIN);
+        } finally {
+            try {
+                if (payment.isPending()) payment.cancel();
+            } finally {
+                scexAttackInProgress = false;
             }
-
-            // 检查防化服 - 穿全套防化服的免疫伤害
-            if (RadiationProtectionUtil.isWearingFullHazmat(entity)) {
-                continue; // 防化服免疫，不造成伤害
-            }
-
-            // 创建固定位置的伤害源 - 使用特斯拉线圈特定的伤害类型
-            Vec3 damagePos = new Vec3(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5);
-            DamageSource damageSource = new DamageSource(
-                level.registryAccess().registryOrThrow(net.minecraft.core.registries.Registries.DAMAGE_TYPE)
-                    .getHolderOrThrow(mio_icif_DamageTypes.TESLA_COIL),
-                damagePos
-            );
-
-            // 对实体造成伤害
-            entity.hurt(damageSource, damage);
-
-            // 对盔甲造成额外损坏，即使是穿全套防化服 also
-            damageArmor(entity, level);
-
-            // 记录本次攻击的实体UUID
-            currentAttackedEntities.add(entityId);
         }
 
         // 更新上次攻击记录
         lastAttackedEntities.clear();
         lastAttackedEntities.addAll(currentAttackedEntities);
 
-        // 只有实际攻击到实体时才消耗能量
-        if (!currentAttackedEntities.isEmpty()) {
-            getEnergyStorageInternal().extract(ENERGY_PER_ATTACK, false);
-        }
+    }
+
+    private boolean scexCurrentAttackOwner(Level level, BlockPos pos) {
+        if (isRemoved() || getLevel() != level || !getBlockPos().equals(pos)
+                || !(level instanceof net.minecraft.server.level.ServerLevel serverLevel)
+                || !serverLevel.getServer().isSameThread()) return false;
+        var chunk = serverLevel.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4);
+        return chunk != null && serverLevel.shouldTickBlocksAt(net.minecraft.world.level.ChunkPos.asLong(pos))
+            && chunk.getBlockEntity(pos, net.minecraft.world.level.chunk.LevelChunk.EntityCreationType.CHECK) == this;
     }
 
     /**

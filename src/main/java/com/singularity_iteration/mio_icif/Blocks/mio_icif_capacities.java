@@ -2460,7 +2460,7 @@ public class mio_icif_capacities {
             mio_icif_block_entities.NUCLEAR_REACTOR_GENERATOR_ENTITY_TYPE.get(),
             (blockEntity, direction) -> {
                 if (blockEntity instanceof mio_icif_nuclear_reactor_generator reactor) {
-                    return MioIcifAPI.instance().getCapabilities().adaptHeatStorage(reactor.getHeatStorage());
+                    return reactor.getHeatStorageCapability(direction);
                 }
                 return null;
             }
@@ -2478,7 +2478,6 @@ public class mio_icif_capacities {
             }
         );
 
-        registerAPIHeatCapability(event, mio_icif_block_entities.NUCLEAR_REACTOR_GENERATOR_ENTITY_TYPE.get());
         Singularity_Iteration.LOGGER.info("Registered EU energy, item handler, HU heat and fluid capabilities for Nuclear Reactor Generator");
 
         // Register capabilities for Reactor Fluid Port (流体反应堆流体端口)
@@ -2530,7 +2529,8 @@ public class mio_icif_capacities {
             mio_icif_block_entities.REACTOR_CHAMBER_ENTITY_TYPE.get(),
             (blockEntity, direction) -> {
                 if (blockEntity instanceof com.singularity_iteration.mio_icif.Blocks.entity.reactor.mio_icif_reactor_chamber chamber) {
-                    return MioIcifAPI.instance().getCapabilities().adaptHeatStorage(chamber.getHeatStorageCapability(direction));
+                    var port=chamber.getHeatStorageCapability(direction);
+                    return port instanceof IMioIcifCapabilities.IHeatStorage api?api:null;
                 }
                 return null;
             }
@@ -2548,7 +2548,6 @@ public class mio_icif_capacities {
             }
         );
         
-        registerAPIHeatCapability(event, mio_icif_block_entities.REACTOR_CHAMBER_ENTITY_TYPE.get());
         Singularity_Iteration.LOGGER.info("Registered EU energy, HU heat and item handler capabilities for Reactor Chamber");
 
         // Register capabilities for Redstone Reactor Coolant Injector (反应堆冷却液注入器)

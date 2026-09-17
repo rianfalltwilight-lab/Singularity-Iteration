@@ -36,6 +36,7 @@ public final class ReactorStateProbe {
    var chamber=BuiltInRegistries.BLOCK.get(ResourceLocation.parse("mio_icif:reactor/block_reactor_chamber"));for(var side:Direction.values())check(w.setBlockAndUpdate(AT.relative(side),chamber.defaultBlockState()),"six actual chambers placed");
   }
   if(tick==60){
+   if(Files.exists(Path.of("reactor-item-calls.json")))rows.add(Map.of("public_item_calls",ReactorItemCallsProbe.inspect(w)));
    rows.add(Map.of("phase","six-chambers","columns",m(w).getAvailableColumns(),"slots",m(w).getCurrentSlotCount(),"saved",m(w).saveWithoutMetadata(w.registryAccess()).toString()));
    var items=new ArrayList<Map<String,Object>>();
    for(var id:BuiltInRegistries.ITEM.keySet())if(id.getNamespace().equals("mio_icif")&&id.getPath().startsWith("reactor/")){

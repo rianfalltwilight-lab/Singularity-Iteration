@@ -81,80 +81,11 @@ public class mio_icif_Block_Nuclear_Reactor_Generator extends mio_icif_entity_bl
 
     @Override
     public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean isMoving) {
-        if (!level.isClientSide() && !state.is(newState.getBlock())) {
-            // 检查是否是因为堆温过高导致的爆�
-        BlockEntity blockEntity = level.getBlockEntity(pos);
-            if (blockEntity instanceof mio_icif_nuclear_reactor_generator reactor) {
-                int currentHeat = (int) reactor.getCurrentHeat();
-                int maxHeat = (int) reactor.getMaxHeat();
-                double heatPercentage = (double) currentHeat / maxHeat;
-
-                // 如果堆温超过 20%，触发核�
-            if (heatPercentage >= 0.20) {
-                    // 触发核爆
-                    triggerExplosion(level, pos, heatPercentage);
-                    // 不调用父类的 onRemove，因为爆炸已经处理了方块移除
-                    return;
-                }
-            }
-
-            mio_icif_multiblock_manager.notifyBlockChanged(level, pos);
-        }
+        // R123 normal heated command-removal controls: dismantling below capacity has no blast.
+        // Always complete vanilla removal so caches and inventories cannot outlive the block.
         super.onRemove(state, level, pos, newState, isMoving);
-    }
-
-    /**
-     * 触发核爆�
- * @param level 世界
-     * @param pos 爆炸位置
-     * @param heatPercentage 堆温百分配
- */
-    private void triggerExplosion(Level level, BlockPos pos, double heatPercentage) {
-        if (level.isClientSide()) return;
-
-        // 基础爆炸半径
-        float baseRadius = 1.5f;
-        float explosionRadius = baseRadius + (float)(heatPercentage * 2.5f);
-
-        // 产生爆炸
-        level.explode(null, pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5,
-            explosionRadius, Level.ExplosionInteraction.BLOCK);
-
-        // 如果堆温超过 50%，额外产生火�
-    if (heatPercentage >= 0.50) {
-            // 在周围生成火
-            for (int x = -3; x <= 3; x++) {
-                for (int y = -3; y <= 3; y++) {
-                    for (int z = -3; z <= 3; z++) {
-                        BlockPos firePos = pos.offset(x, y, z);
-                        if (level.getBlockState(firePos).isAir() && level.getBlockState(firePos.below()).isSolidRender(level, firePos.below())) {
-                            level.setBlock(firePos, net.minecraft.world.level.block.Blocks.FIRE.defaultBlockState(), 3);
-                        }
-                    }
-                }
-            }
-        }
-
-        // 如果堆温超过 80%，产生辐射效果
-    if (heatPercentage >= 0.80) {
-            // 对周围生物造成辐射伤害
-            var entities = level.getEntities(null,
-                new net.minecraft.world.phys.AABB(
-                    pos.getX() - 15, pos.getY() - 15, pos.getZ() - 15,
-                    pos.getX() + 16, pos.getY() + 16, pos.getZ() + 16
-                )
-            );
-
-            for (var entity : entities) {
-                if (entity instanceof net.minecraft.world.entity.LivingEntity livingEntity) {
-                    // 造成辐射伤害
-                    livingEntity.hurt(level.damageSources().magic(), 15.0f);
-                    // 添加辐射效果
-                    livingEntity.addEffect(new net.minecraft.world.effect.MobEffectInstance(
-                        com.singularity_iteration.mio_icif.effect.mio_icif_effects.RADIATION, 300, 2));
-                }
-            }
-        }
+        if (!level.isClientSide() && !state.is(newState.getBlock()))
+            mio_icif_multiblock_manager.notifyBlockChanged(level, pos);
     }
 
     @Override

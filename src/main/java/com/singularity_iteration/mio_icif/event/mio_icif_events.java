@@ -478,30 +478,10 @@ public class mio_icif_events {
     }
 
     /**
-     * 检查核反应仓是否同时接触多个核反应堆，如果是则爆炸
+     * 按已加载的相邻核心数量检查反应仓，失去唯一连接时正常移除并掉落。
      */
-    private static void checkChamberMultipleReactors(Level level, BlockPos chamberPos) {
-        int reactorCount = 0;
-
-        // 检查核反应仓周围的6个面
-        for (Direction direction : Direction.values()) {
-            BlockPos neighborPos = chamberPos.relative(direction);
-            BlockState neighborState = level.getBlockState(neighborPos);
-
-            if (neighborState.getBlock() instanceof mio_icif_Block_Nuclear_Reactor_Generator) {
-                reactorCount++;
-            }
-        }
-
-        // 如果连接了多个核反应堆，立即爆炸
-        if (reactorCount > 1) {
-            // 产生爆炸
-            level.explode(null, chamberPos.getX() + 0.5, chamberPos.getY() + 0.5, chamberPos.getZ() + 0.5,
-                1.5f, Level.ExplosionInteraction.BLOCK);
-
-            // 移除核反应仓方块（不触发掉落）
-            level.removeBlock(chamberPos, false);
-        }
+    private static void checkChamberMultipleReactors(Level level,BlockPos chamberPos) {
+        dev.scex.si.reactor.ChamberTopology.checkAndDrop(level,chamberPos);
     }
 
     /**

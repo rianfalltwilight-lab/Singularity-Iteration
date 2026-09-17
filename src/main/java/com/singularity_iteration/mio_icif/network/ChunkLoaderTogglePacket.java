@@ -39,10 +39,13 @@ public record ChunkLoaderTogglePacket(BlockPos pos, int dx, int dz) implements C
                 Level level = serverPlayer.level();
                 BlockPos pos = packet.pos;
 
-                if (!level.isLoaded(pos)) return;
+                if (!level.isLoaded(pos) || serverPlayer.isSpectator()
+                    || !(serverPlayer.containerMenu instanceof com.singularity_iteration.mio_icif.Menu.Producer.ChunkLoaderMenu menu)
+                    || !pos.equals(menu.getBlockPos()) || !menu.stillValid(serverPlayer)) return;
 
                 BlockEntity blockEntity = level.getBlockEntity(pos);
                 if (blockEntity instanceof mio_icif_chunk_loader loader) {
+                    if (menu.getBlockEntity() != loader || serverPlayer.distanceToSqr(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5) > 64.0) return;
                     if (!loader.isChunkInRange(packet.dx, packet.dz)) return;
 
                     ChunkPos selfChunk = loader.getSelfChunkPos();

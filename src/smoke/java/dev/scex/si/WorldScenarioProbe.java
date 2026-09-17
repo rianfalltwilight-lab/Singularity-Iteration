@@ -51,6 +51,18 @@ public final class WorldScenarioProbe {
     private final BlastStateProbe blastStates;
     private final MatterStateProbe matterStates;
     private final ReactorStateProbe reactorStates;
+    private final NuclearItemWorldProbe nuclearItems;
+    private final ChamberWorldProbe chambers;
+    private final ChamberColdProbe chamberCold;
+    private final ChunkTicketWorldProbe chunkTickets;
+    private final OrdinaryConsumerWorldProbe ordinaryConsumers;
+    private final TeslaPaymentWorldProbe teslaPayment;
+    private final ChamberLifecycleProbe chamberLifecycle;
+    private final LegacyUuStateProbe legacyUuStates;
+    private final ArmorApiDefaultsProbe armorApiDefaults;
+    private final UuLegacyAdmissionWorldProbe uuLegacyAdmission;
+    private final LegacyElectricAdapterPublicProbe legacyElectricAdapter;
+    private final ArmorApiCandidateProbe armorApiCandidate;
     private final ReactorWorldProbe reactorWorld;
     private final FluidReactorWorldProbe fluidReactorWorld;
     private final MatterWorldProbe matterWorld;
@@ -72,6 +84,18 @@ public final class WorldScenarioProbe {
         blastStates=Files.exists(Path.of("blast-states.json")) ? new BlastStateProbe() : null;
         matterStates=Files.exists(Path.of("matter-states.json")) ? new MatterStateProbe() : null;
         reactorStates=Files.exists(Path.of("reactor-states.json")) ? new ReactorStateProbe() : null;
+        nuclearItems=Files.exists(Path.of("nuclear-item-world.json")) ? new NuclearItemWorldProbe() : null;
+        chambers=Files.exists(Path.of("chamber-world.json")) ? new ChamberWorldProbe() : null;
+        chamberCold=Files.exists(Path.of("chamber-cold.json")) ? new ChamberColdProbe(server) : null;
+        chunkTickets=Files.exists(Path.of("chunk-ticket-world.json")) ? new ChunkTicketWorldProbe() : null;
+        ordinaryConsumers=Files.exists(Path.of("ordinary-consumer-world.json")) ? new OrdinaryConsumerWorldProbe() : null;
+        teslaPayment=Files.exists(Path.of("tesla-payment-world.json")) ? new TeslaPaymentWorldProbe() : null;
+        chamberLifecycle=Files.exists(Path.of("chamber-lifecycle.json")) ? new ChamberLifecycleProbe() : null;
+        legacyUuStates=Files.exists(Path.of("legacy-uu-states.json")) ? new LegacyUuStateProbe() : null;
+        uuLegacyAdmission=Files.exists(Path.of("uu-legacy-admission-world.json")) ? new UuLegacyAdmissionWorldProbe() : null;
+        legacyElectricAdapter=Files.exists(Path.of("legacy-electric-adapter-r133.json")) ? new LegacyElectricAdapterPublicProbe() : null;
+        armorApiCandidate=Files.exists(Path.of("armor-api-candidate.json")) ? new ArmorApiCandidateProbe() : null;
+        armorApiDefaults=Files.exists(Path.of("armor-api-defaults.json")) ? new ArmorApiDefaultsProbe() : null;
         reactorWorld=Files.exists(Path.of("reactor-world.json")) ? new ReactorWorldProbe() : null;
         fluidReactorWorld=Files.exists(Path.of("fluid-reactor-world.json")) ? new FluidReactorWorldProbe(server) : null;
         matterWorld=Files.exists(Path.of("matter-world.json")) ? new MatterWorldProbe() : null;
@@ -265,6 +289,18 @@ public final class WorldScenarioProbe {
             if(blastStates!=null){var result=blastStates.inspect(world,tick);if(result!=null)record("blast-states",result);}
             if(matterStates!=null){var result=matterStates.inspect(world,tick);if(result!=null)record("matter-states",result);}
             if(reactorStates!=null){var result=reactorStates.inspect(world,tick);if(result!=null)record("reactor-states",result);}
+            if(nuclearItems!=null){var result=nuclearItems.inspect(world,tick);if(result!=null)record("nuclear-items",result);}
+            if(chambers!=null){var result=chambers.inspect(world,tick);if(result!=null)record("chamber-world",result);}
+            if(chamberCold!=null){var result=chamberCold.inspect(world,tick);if(result!=null)record("chamber-cold",result);}
+            if(chunkTickets!=null){var result=chunkTickets.inspect(world,tick);if(result!=null)record("chunk-ticket-world",result);}
+            if(ordinaryConsumers!=null){var result=ordinaryConsumers.inspect(world,tick);if(result!=null)record("ordinary-consumer-world",result);}
+            if(teslaPayment!=null){var result=teslaPayment.inspect(world,tick);if(result!=null)record("tesla-payment-world",result);}
+            if(chamberLifecycle!=null){var result=chamberLifecycle.inspect(world,tick);if(result!=null)record("chamber-lifecycle",result);}
+            if(legacyUuStates!=null){var result=legacyUuStates.inspect(world,tick);if(result!=null)record("legacy-uu-states",result);}
+            if(uuLegacyAdmission!=null){var result=uuLegacyAdmission.inspect(world,tick);if(result!=null)record("uu-legacy-admission-world",result);}
+            if(legacyElectricAdapter!=null){var result=legacyElectricAdapter.inspect(world,tick);if(result!=null)record("legacy-electric-adapter-r133",result);}
+            if(armorApiCandidate!=null){var result=armorApiCandidate.inspect(world,tick);if(result!=null)record("armor-api-candidate",result);}
+            if(armorApiDefaults!=null){var result=armorApiDefaults.inspect(world,tick);if(result!=null)record("armor-api-defaults",result);}
             if(reactorWorld!=null){var result=reactorWorld.inspect(world,tick);if(result!=null)record("reactor-world",result);}
             if(fluidReactorWorld!=null){var result=fluidReactorWorld.inspect(world,tick);if(result!=null)record("fluid-reactor-world",result);}
             if(matterWorld!=null){var result=matterWorld.inspect(world,tick);if(result!=null)record("matter-world",result);}

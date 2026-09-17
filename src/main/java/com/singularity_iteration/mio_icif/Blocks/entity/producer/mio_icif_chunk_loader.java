@@ -31,6 +31,9 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.items.IItemHandler;
 
 import java.util.Set;
+import dev.scex.si.energy.OwnedChunkTickets;
+import net.neoforged.neoforge.common.world.chunk.TicketHelper;
+import net.neoforged.neoforge.common.world.chunk.TicketSet;
 
 @SuppressWarnings("null")
 public class mio_icif_chunk_loader extends mio_icif_Energy_Block implements ISlotValidator {
@@ -56,7 +59,11 @@ public class mio_icif_chunk_loader extends mio_icif_Energy_Block implements ISlo
     protected final long baseCapacity;
 
     private final LongOpenHashSet loadedChunks = new LongOpenHashSet();
+    private final LongOpenHashSet forcedChunks = new LongOpenHashSet();
     private boolean active = false;
+    private boolean ticketUpdate;
+    private boolean destroyed;
+    private long paidTick = Long.MIN_VALUE;
     private double euPerChunk = DEFAULT_EU_PER_CHUNK;
 
     private final ContainerData containerData = new ContainerData() {
@@ -105,7 +112,9 @@ public class mio_icif_chunk_loader extends mio_icif_Energy_Block implements ISlo
     public mio_icif_chunk_loader(BlockPos pos, BlockState state, BlockEntityType<?> type) {
         super(pos, state, type, DEFAULT_CAPACITY, DEFAULT_MAX_RECEIVE, DEFAULT_MAX_EXTRACT, CableTier.MV);
         this.baseCapacity = DEFAULT_CAPACITY;
-        this.itemHandler = new MachineItemHandler(LAYOUT);
+        this.itemHandler = new MachineItemHandler(LAYOUT) {
+            @Override protected void onContentsChanged(int slot) { setChanged(); }
+        };
         this.itemHandler.setValidator(this);
         this.setAsConsumer();
     }
@@ -120,7 +129,7 @@ public class mio_icif_chunk_loader extends mio_icif_Energy_Block implements ISlo
     }
 
     public Set<Long> getLoadedChunks() {
-        return loadedChunks;
+        return Set.copyOf(loadedChunks);
     }
 
     public int getLoadedChunkCount() {
@@ -149,104 +158,116 @@ public class mio_icif_chunk_loader extends mio_icif_Energy_Block implements ISlo
 
     public boolean isChunkInRange(ChunkPos chunk) {
         ChunkPos self = getSelfChunkPos();
-        return Math.abs(chunk.x - self.x) <= CHUNK_RADIUS
-            && Math.abs(chunk.z - self.z) <= CHUNK_RADIUS;
+        return Math.abs((long) chunk.x - self.x) <= CHUNK_RADIUS
+            && Math.abs((long) chunk.z - self.z) <= CHUNK_RADIUS;
     }
 
     public boolean isChunkInRange(int xOff, int zOff) {
-        return Math.abs(xOff) <= CHUNK_RADIUS && Math.abs(zOff) <= CHUNK_RADIUS;
+        return Math.abs((long) xOff) <= CHUNK_RADIUS && Math.abs((long) zOff) <= CHUNK_RADIUS;
+    }
+
+
+    private boolean live() {
+        if (destroyed || isRemoved() || !(level instanceof ServerLevel server) || !server.getServer().isSameThread()) return false;
+        var chunk = server.getChunkSource().getChunkNow(worldPosition.getX() >> 4, worldPosition.getZ() >> 4);
+        return chunk != null && chunk.getBlockEntity(worldPosition, net.minecraft.world.level.chunk.LevelChunk.EntityCreationType.CHECK) == this
+            && chunk.getBlockState(worldPosition).getBlock() == getBlockState().getBlock();
     }
 
     public boolean addChunkToLoaded(ChunkPos chunk) {
-        if (level == null || level.isClientSide) return false;
-        if (!isChunkInRange(chunk)) return false;
-        if (loadedChunks.size() >= MAX_CHUNKS) return false;
-
-        long key = chunkKey(chunk);
-        if (loadedChunks.add(key)) {
-            if (level instanceof ServerLevel serverLevel) {
-                serverLevel.setChunkForced(chunk.x, chunk.z, true);
-            }
-            setChanged();
-            return true;
-        }
-        return false;
+        if (!live() || ticketUpdate || !isChunkInRange(chunk) || loadedChunks.size() >= MAX_CHUNKS) return false;
+        // Selection is free; the next natural tick pays before installing tickets.
+        if (!loadedChunks.add(chunkKey(chunk))) return false;
+        setChanged(); return true;
     }
 
     public boolean removeChunkFromLoaded(ChunkPos chunk) {
-        if (level == null || level.isClientSide) return false;
-
-        ChunkPos self = getSelfChunkPos();
-        if (chunk.x == self.x && chunk.z == self.z) return false;
-
+        if (!live() || ticketUpdate || chunk.equals(getSelfChunkPos())) return false;
         long key = chunkKey(chunk);
-        if (loadedChunks.remove(key)) {
-            if (level instanceof ServerLevel serverLevel) {
-                serverLevel.setChunkForced(chunk.x, chunk.z, false);
-            }
-            setChanged();
-            return true;
-        }
-        return false;
+        if (!loadedChunks.remove(key)) return false;
+        removeTicket((ServerLevel) level, key);
+        setChanged(); return true;
     }
 
     public void toggleChunk(ChunkPos chunk) {
-        long key = chunkKey(chunk);
-        if (loadedChunks.contains(key)) {
-            removeChunkFromLoaded(chunk);
-        } else {
-            addChunkToLoaded(chunk);
-        }
+        if (loadedChunks.contains(chunkKey(chunk))) removeChunkFromLoaded(chunk);
+        else addChunkToLoaded(chunk);
     }
 
-    private void forceLoadAllChunks() {
-        if (level == null || !(level instanceof ServerLevel serverLevel)) return;
-        for (long key : loadedChunks) {
-            ChunkPos pos = fromChunkKey(key);
-            serverLevel.setChunkForced(pos.x, pos.z, true);
-        }
+    private void removeTicket(ServerLevel server, long key) {
+        ChunkPos chunk = fromChunkKey(key);
+        OwnedChunkTickets.CONTROLLER.forceChunk(server, worldPosition, chunk.x, chunk.z, false, true);
+        forcedChunks.remove(key);
     }
 
-    private void unforceNonSelfChunks() {
-        if (level == null || !(level instanceof ServerLevel serverLevel)) return;
-        ChunkPos self = getSelfChunkPos();
-        for (long key : loadedChunks) {
-            ChunkPos pos = fromChunkKey(key);
-            if (pos.x != self.x || pos.z != self.z) {
-                serverLevel.setChunkForced(pos.x, pos.z, false);
+    private void releaseTickets(ServerLevel server, Set<Long> additional) {
+        var all = new java.util.HashSet<Long>(forcedChunks); all.addAll(additional);
+        for (long key : all) removeTicket(server, key);
+        active = false;
+    }
+
+    private long cost(int count) {
+        double amount = Math.ceil(count * euPerChunk);
+        return count == 0 ? 0 : !Double.isFinite(amount) || amount <= 0 || amount >= Long.MAX_VALUE ? Long.MAX_VALUE : (long) amount;
+    }
+
+    private void updateTickets(ServerLevel server) {
+        if (!live() || ticketUpdate || paidTick == server.getGameTime()) return;
+        paidTick = server.getGameTime();
+        Set<Long> selected = Set.copyOf(loadedChunks);
+        long amount = cost(selected.size());
+        var payment = amount == 0 ? null : energyStorage.scexReserveInternal(amount);
+        if (payment == null) { releaseTickets(server, Set.of()); setLit(false); setChanged(); return; }
+        ticketUpdate = true;
+        boolean complete = false;
+        try {
+            for (long key : Set.copyOf(forcedChunks)) if (!selected.contains(key)) removeTicket(server, key);
+            for (long key : selected) {
+                if (!live()) return;
+                if (forcedChunks.add(key)) {
+                    ChunkPos chunk = fromChunkKey(key);
+                    OwnedChunkTickets.CONTROLLER.forceChunk(server, worldPosition, chunk.x, chunk.z, true, true);
+                }
+                if (!live()) return;
             }
+            if (!selected.equals(Set.copyOf(loadedChunks))) return;
+            payment.commit(); complete = true; active = true;
+        } finally {
+            if (!complete) {
+                // forceChunk can add its ticket after a loading callback removes this owner.
+                try { releaseTickets(server, selected); } finally { payment.cancel(); }
+            }
+            ticketUpdate = false;
         }
+        if (live()) { setLit(active); setChanged(); }
+    }
+
+    /** NeoForge startup validation runs before saved tickets are reinstated. */
+    public void scexValidateSavedTickets(TicketHelper helper, TicketSet saved) {
+        if (!live() || ticketUpdate || !saved.ticking().contains(chunkKey(getSelfChunkPos()))) {
+            helper.removeAllTickets(worldPosition); return;
+        }
+        var retained = new LongOpenHashSet();
+        for (long key : saved.ticking()) {
+            if (loadedChunks.contains(key) && isChunkInRange(fromChunkKey(key))) retained.add(key);
+            else helper.removeTicket(worldPosition, key, true);
+        }
+        for (long key : saved.nonTicking()) helper.removeTicket(worldPosition, key, false);
+        long amount = cost(retained.size());
+        // No external callback occurs between this quote and whole-EU debit.
+        if (!retained.contains(chunkKey(getSelfChunkPos())) || amount == 0 || energyStorage.consumeEnergyInternal(amount, true) != amount) {
+            helper.removeAllTickets(worldPosition); active = false; return;
+        }
+        if (energyStorage.consumeEnergyInternal(amount, false) != amount) throw new IllegalStateException("Chunk startup payment changed");
+        forcedChunks.addAll(retained); active = true; paidTick = level.getGameTime(); setChanged();
     }
 
     public static void tick(Level level, BlockPos pos, BlockState state, mio_icif_chunk_loader blockEntity) {
-        if (level.isClientSide()) return;
-
+        if (!(level instanceof ServerLevel server) || !blockEntity.live()) return;
         blockEntity.recalculateUpgradeStats();
         mio_icif_Energy_Block.tick(level, pos, state, blockEntity);
         blockEntity.handleBatterySlot();
-
-        long energyCost = (long) Math.ceil(blockEntity.loadedChunks.size() * blockEntity.euPerChunk);
-        boolean canAfford = blockEntity.energyStorage.getAmount() >= energyCost;
-        if (canAfford && energyCost > 0) {
-            canAfford = blockEntity.energyStorage.extract(energyCost, true) >= energyCost;
-            if (canAfford) {
-                blockEntity.energyStorage.extract(energyCost, false);
-            }
-        } else if (energyCost == 0) {
-            canAfford = true;
-        }
-
-        if (canAfford != blockEntity.active) {
-            if (canAfford) {
-                blockEntity.active = true;
-                blockEntity.forceLoadAllChunks();
-            } else {
-                blockEntity.active = false;
-                blockEntity.unforceNonSelfChunks();
-            }
-            blockEntity.setLit(blockEntity.active);
-            blockEntity.setChanged();
-        }
+        blockEntity.updateTickets(server);
     }
 
     private void recalculateUpgradeStats() {
@@ -264,54 +285,12 @@ public class mio_icif_chunk_loader extends mio_icif_Energy_Block implements ISlo
     }
 
     private void handleBatterySlot() {
-        if (level == null || level.isClientSide) return;
-        ItemStack batteryStack = itemHandler.getStackInSlot(BATTERY_SLOT);
-        if (batteryStack.isEmpty()) return;
-
-        if (energyStorage.getAmount() >= getEffectiveCapacity()) return;
-
-        long energyNeeded = getEffectiveCapacity() - energyStorage.getAmount();
-        long maxTransfer = Math.min(energyNeeded, getEffectiveMaxReceive());
-
-        if (batteryStack.getItem() == net.minecraft.world.item.Items.REDSTONE) {
-            long energyToAdd = Math.min(mio_icif_producer.REDSTONE_ENERGY_VALUE, maxTransfer);
-            if (energyToAdd > 0) {
-                batteryStack.shrink(1);
-                energyStorage.receive(energyToAdd, false);
-                setChanged();
-            }
-            return;
-        }
-
-        if (isBattery(batteryStack)) {
-            long stored = getBatteryStored(batteryStack);
-            if (stored > 0) {
-                long chargeRate = getBatteryChargeRate(batteryStack);
-                long toExtract = Math.min(stored, Math.min(chargeRate, maxTransfer));
-                long extracted = dischargeBattery(batteryStack, toExtract, false);
-                if (extracted > 0) {
-                    energyStorage.receive(extracted, false);
-                    setChanged();
-                }
-            }
-        }
+        scexFeBridge().discharge(itemHandler, BATTERY_SLOT);
     }
 
-    private boolean isBattery(ItemStack stack) {
-        return com.singularity_iteration.mio_icif.api.MioIcifAPI.instance().getItemAPI().isBattery(stack)
-            || stack.getItem() == net.minecraft.world.item.Items.REDSTONE;
-    }
-
-    private long getBatteryStored(ItemStack stack) {
-        return com.singularity_iteration.mio_icif.api.MioIcifAPI.instance().getItemAPI().getBatteryStored(stack);
-    }
-
-    private long dischargeBattery(ItemStack stack, long amount, boolean simulate) {
-        return com.singularity_iteration.mio_icif.api.MioIcifAPI.instance().getItemAPI().dischargeBattery(stack, amount, simulate);
-    }
-
-    private long getBatteryChargeRate(ItemStack stack) {
-        return com.singularity_iteration.mio_icif.api.MioIcifAPI.instance().getItemAPI().getChargeRate(stack);
+    @Override
+    public net.neoforged.neoforge.energy.IEnergyStorage scexFeCapability(net.minecraft.core.Direction side) {
+        return scexFeBridge().port(side);
     }
 
     public void setLit(boolean lit) {
@@ -332,23 +311,25 @@ public class mio_icif_chunk_loader extends mio_icif_Energy_Block implements ISlo
     @Override
     public void onLoad() {
         super.onLoad();
-        if (level != null && !level.isClientSide && !loadedChunks.isEmpty()) {
-            forceLoadAllChunks();
-        }
+        // Saved active is display history, never permission for an unpaid ticket.
+        active = false;
     }
 
     @Override
     public void setRemoved() {
+        if (level instanceof ServerLevel server && server.getServer().isSameThread()
+                && !ticketUpdate && !OwnedChunkTickets.stopping(server.getServer())) releaseTickets(server, Set.of());
         super.setRemoved();
     }
 
     public void destroy() {
-        if (level != null && !level.isClientSide && level instanceof ServerLevel serverLevel) {
-            for (long key : loadedChunks) {
-                ChunkPos pos = fromChunkKey(key);
-                serverLevel.setChunkForced(pos.x, pos.z, false);
-            }
-        }
+        if (level instanceof ServerLevel server && !server.getServer().isSameThread())
+            throw new IllegalStateException("Chunk loader destruction requires server thread");
+        destroyed = true;
+        active = false;
+        // During synchronous chunk loading, defer removal until forceChunk has
+        // installed its region ticket. Early tracker removal would strand it.
+        if (!ticketUpdate && level instanceof ServerLevel server && server.getServer().isSameThread()) releaseTickets(server, Set.of());
     }
 
     @Override
@@ -363,20 +344,26 @@ public class mio_icif_chunk_loader extends mio_icif_Energy_Block implements ISlo
         chunksTag.putInt("count", i);
         tag.put("loadedChunks", chunksTag);
         tag.putBoolean("active", active);
+        tag.put("inventory", itemHandler.serializeNBT(registries));
     }
 
     @Override
     public void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+        // Restore upgrade capacity before legacy-mode energy loading can clamp it.
+        itemHandler.deserializeNBT(registries, tag.getCompound("inventory"));
+        recalculateUpgradeStats();
         super.loadAdditional(tag, registries);
         loadedChunks.clear();
         CompoundTag chunksTag = tag.getCompound("loadedChunks");
-        int count = chunksTag.getInt("count");
+        int count = Math.max(0, Math.min(MAX_CHUNKS, chunksTag.getInt("count")));
         for (int i = 0; i < count; i++) {
             if (chunksTag.contains("c" + i, Tag.TAG_LONG)) {
-                loadedChunks.add(chunksTag.getLong("c" + i));
+                long key = chunksTag.getLong("c" + i);
+                if (isChunkInRange(fromChunkKey(key))) loadedChunks.add(key);
             }
         }
-        active = tag.getBoolean("active");
+        active = false;
+        paidTick = Long.MIN_VALUE;
 
         recalculateUpgradeStats();
     }
@@ -400,7 +387,8 @@ public class mio_icif_chunk_loader extends mio_icif_Energy_Block implements ISlo
 
     @Override
     public boolean useEnergy(long amount) {
-        return energyStorage.extract(amount, false) >= amount;
+        if (!live() || amount < 0 || energyStorage.consumeEnergyInternal(amount, true) != amount) return false;
+        return energyStorage.consumeEnergyInternal(amount, false) == amount;
     }
 
     @Override
@@ -426,13 +414,13 @@ public class mio_icif_chunk_loader extends mio_icif_Energy_Block implements ISlo
 
     @Override
     public long getEffectiveMaxReceive() {
-        long base = energyStorage.getMaxReceive();
+        long base = DEFAULT_MAX_RECEIVE;
         return Math.max(base, getEffectiveCableTier().getPowerRating());
     }
 
     @Override
     public double getDemandedEnergy() {
-        if (isPowerSource) return 0.0D;
+        if (energyStorage.scexNetworkControlled() || isPowerSource) return 0.0D;
         long spaceAvailable = getEffectiveCapacity() - energyStorage.getAmount();
         if (spaceAvailable <= 0) return 0.0D;
         return spaceAvailable;

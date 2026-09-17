@@ -99,6 +99,20 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
         id("producer/block_metal_former_advanced"), id("producer/block_block_cutter"),
         id("producer/block_recycler_elc"), id("producer/block_induction_elc"),
         id("producer/block_miner_elc"), id("producer/block_advanced_miner_elc"), id("producer/block_electrolyzer_elc"), id("producer/block_condenser"), id("producer/block_pump_elc"), id("producer/block_pattern_storage"));
+    // R130 reviewed ordinary consumers: one owned CustomEU balance, six input faces.
+    // Work-accounting exceptions stay outside this allowlist; see the R130 evidence.
+    private static final Set<ResourceLocation> ORDINARY_CONSUMERS = Set.of(
+        id("producer/block_canner_elc"),
+        id("producer/block_neutron_polymerizer"),
+        id("producer/block_redstone_reactor_coolant_injector"),
+        id("producer/block_lapis_reactor_coolant_injector"),
+        id("producer/block_terra_elc"),
+        id("producer/block_matron_elc"),
+        id("producer/block_harvest_elc"),
+        id("producer/block_teleporter_elc"),
+        id("producer/block_sorter_elc"),
+        id("producer/block_fluid_regulator_elc"),
+        id("producer/block_batch_crafter"), id("producer/block_tesla"), id("producer/block_chunk_loader"));
     private static final Set<ResourceLocation> BASIC_PROCESSORS = Set.of(id("producer/block_furnace_elc"),
         id("producer/block_powder_elc"), id("producer/block_extractor_elc"), id("producer/block_compressor_elc"));
     // Packet sizes are explicit public-game observations, not old grid tiers.
@@ -137,7 +151,7 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
             || dev.scex.energy.IndependentEnergyMode.feature("worldFuelGenerators") && WORLD_FUEL_GENERATOR_PACKETS.containsKey(type)
             || dev.scex.energy.IndependentEnergyMode.feature("nuclearReactors") && id("generator/block_nuclear_reactor_generator").equals(type)
             || dev.scex.energy.IndependentEnergyMode.feature("kineticGenerators") && KINETIC_CONVERTERS.contains(type)
-            || dev.scex.energy.IndependentEnergyMode.feature("processingMachines") && EXTENDED_PROCESSORS.contains(type)
+            || dev.scex.energy.IndependentEnergyMode.feature("processingMachines") && (EXTENDED_PROCESSORS.contains(type) || ORDINARY_CONSUMERS.contains(type))
             || dev.scex.energy.IndependentEnergyMode.feature("thermalConverters") && STIRLING.equals(type)
             || dev.scex.energy.IndependentEnergyMode.feature("extendedSolar") && SolarGeneratorProfile.find(type.toString()).isPresent()
             || dev.scex.energy.IndependentEnergyMode.feature("transformers") && TRANSFORMERS.contains(type)
@@ -262,7 +276,7 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
                         CustomEUEnergyStorage storage, CustomEUEnergyStorage.NetworkQuote quote,
                         long capacity, int inputs, int outputs, long packet, int packets,
                         IndependentTransformerBlockEntity.Snapshot transformer, FeLedger.OutputQuote outputBudget,
-                        EnergyAmount potential) {
+                        EnergyAmount potential, List<BlockPos> emitterPositions) {
         EnergyAmount offered() {
             if (potential != null) return potential;
             return outputBudget == null ? quote.exactAmount() : outputBudget.limitOffer(quote.exactAmount());
@@ -547,7 +561,7 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
                 var quote = new CustomEUEnergyStorage.NetworkQuote(level, at, saved.energy().amount(),
                     limits.capacity(), limits.inputLimit(), limits.outputPacket(), limits.outputPacket(), true, true, saved.energy());
                 ports.add(new Port(tile, at, saved.state(), null, quote, limits.capacity(), input, output,
-                    limits.outputPacket(), limits.outputPackets(), saved, null, null));
+                    limits.outputPacket(), limits.outputPackets(), saved, null, null, List.of(at)));
                 continue;
             }
             var machine = tile;
@@ -572,7 +586,7 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
             var outputBudget = outputs != 0 && machine instanceof mio_icif_Energy_Container container
                 ? container.scexFeBridge().quoteNativeOutput() : null;
             var potential = prepareDemand && machine instanceof DemandEnergySource demand ? demand.potentialEnergy() : null;
-            ports.add(new Port(tile, at, tile.getBlockState(), storage, quote, ownedCapacity(machine), inputs, outputs, packet, 1, null, outputBudget, potential));
+            ports.add(new Port(tile, at, tile.getBlockState(), storage, quote, ownedCapacity(machine), inputs, outputs, packet, 1, null, outputBudget, potential, emissionPositions(tile)));
         }
         var sources = ports.stream().filter(p -> p.outputs != 0 && p.packet > 0
             && (GENERATORS.contains(BuiltInRegistries.BLOCK.getKey(p.state.getBlock()))
@@ -809,6 +823,8 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
             if (chunk == null || !level.shouldTickBlocksAt(ChunkPos.asLong(port.position)) || port.tile.isRemoved()
                 || chunk.getBlockEntity(port.position, LevelChunk.EntityCreationType.CHECK) != port.tile
                 || chunk.getBlockState(port.position) != port.state) return false;
+            if (!port.emitterPositions.equals(emissionPositions(port.tile))) return false;
+            if (port.tile instanceof DemandEnergySource demand && (port.outputs & ~demand.outputFaces()) != 0) return false;
             if (port.transformer != null) {
                 var transformer = (IndependentTransformerBlockEntity) port.tile;
                 if (!transformer.validMode() || !transformer.isCurrent(port.transformer, transformer.stepUpNow())) return false;
@@ -816,6 +832,10 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
                     || !port.storage.scexNetworkQuote().equals(port.quote)) return false;
         }
         return true;
+    }
+    private static List<BlockPos> emissionPositions(BlockEntity tile){
+        return tile instanceof com.singularity_iteration.mio_icif.Blocks.entity.generator.mio_icif_nuclear_reactor_generator reactor
+            ?reactor.electricalContactPositions():List.of(tile.getBlockPos());
     }
     private static ConductorRegistry.Position point(BlockPos at) { return new ConductorRegistry.Position(at.getX(), at.getY(), at.getZ()); }
     private List<DomainDistributor.Domain> domains(List<Port> sources, List<Port> sinks,
@@ -842,10 +862,11 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
             // R18's two-contact, pre-existing conductor controls justify this
             // finite integration scope. Three contacts and merge history remain
             // unresolved; this does not identify an original internal algorithm.
-            boolean separateContacts = initial.size() == 2 && count == 2 && sameComponent;
-            for (Direction output : Direction.values()) {
+            boolean separateContacts = source.emitterPositions.size()==1 && initial.size() == 2 && count == 2 && sameComponent;
+            for (var sourcePosition : source.emitterPositions) for (Direction output : Direction.values()) {
                 if ((source.outputs & (1 << output.ordinal())) == 0) continue;
-                BlockPos start = source.position.relative(output);
+                BlockPos start = sourcePosition.relative(output);
+                if(source.emitterPositions.contains(start))continue;
                 var origin = point(start);
                 boolean wired = graph.contains(origin) && graph.permits(origin, output.getOpposite().get3DDataValue());
                 var paths = wired ? graph.routesFrom(origin) : null;

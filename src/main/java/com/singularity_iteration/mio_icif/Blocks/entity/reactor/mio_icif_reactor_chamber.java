@@ -1,81 +1,100 @@
+// SPDX-License-Identifier: Apache-2.0
 package com.singularity_iteration.mio_icif.Blocks.entity.reactor;
-
-import com.singularity_iteration.mio_icif.api.item.IReactorChamber;
-
 import com.singularity_iteration.mio_icif.Blocks.entity.generator.mio_icif_nuclear_reactor_generator;
+import com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_block_entities;
+import com.singularity_iteration.mio_icif.api.item.IReactorChamber;
 import com.singularity_iteration.mio_icif.energy.EnergyUnit.IEUEnergyStorage;
-import com.singularity_iteration.mio_icif.energy.grid.*;
+import com.singularity_iteration.mio_icif.energy.EnergyUnit.CableTier;
+import com.singularity_iteration.mio_icif.energy.grid.IEnergySource;
+import com.singularity_iteration.mio_icif.energy.grid.IEnergyAcceptor;
 import com.singularity_iteration.mio_icif.energy.heat.IHeatStorage;
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.Direction;
+import dev.scex.si.reactor.GuardedReactorHeat;
+import dev.scex.si.energy.IndependentSiEnergy;
+import net.minecraft.core.*;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.MenuProvider;
-import net.minecraft.world.entity.player.Inventory;
-import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.player.*;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
 import net.neoforged.neoforge.items.IItemHandler;
-import org.jetbrains.annotations.Nullable;
 
-/**
- * 核反应堆腔室方块实体
- * 
- * 功能：
- * - 用于增加核反应堆的额外槽位数
- * - 每个面接触核反应堆就额外添加6个额外槽位（每个槽位置）
- * - 当腔室完全包围核反应堆时，核反应堆拥有完整的 54 个可用槽
- * - 腔室自身没有 GUI，显示所连接的核反应堆的 GUI
- * - 当核反应堆被移除时接触两个核反应堆会断开连接
- */
-@SuppressWarnings("null")
-public class mio_icif_reactor_chamber extends BlockEntity implements MenuProvider, IEnergySource, IReactorChamber {
-    
-    // 存储连接的核反应堆位置
-    private BlockPos connectedReactorPos = null;
-    
-    // 标记是否已验证连接
-    private boolean connectionValidated = false;
-    
-    // 上次验证的时间（tick 计数）
-    private long lastValidationTick = 0;
-    
-    // 验证间隔：每 20 tick 验证一次（约1 秒）
-    private static final int VALIDATION_INTERVAL = 20;
-    
-    public mio_icif_reactor_chamber(BlockPos pos, BlockState state) {
-        super(com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_block_entities.REACTOR_CHAMBER_ENTITY_TYPE.get(), pos, state);
-    }
-
-    @Override
-    public void onLoad() {
-        super.onLoad();
-        // 方块实体载入时立即寻找相邻的核反应堆
-        // 这样即使NBT 加载没有connectedReactorPos，也能尽快建立连接
-        if (level != null && !level.isClientSide && connectedReactorPos == null) {
-            findAdjacentReactor(level, worldPosition);
-        }
-    }
-
-    /**
-     * 每tick 更新逻辑
-     */
-    public static void tick(Level level, BlockPos pos, BlockState state, mio_icif_reactor_chamber chamber) {
-        if (level.isClientSide()) {
-            return;
-        }
-
-        // 定期验证连接，确保是有效连接
-        chamber.validateConnection(level, pos);
-
-        // 如果连接有效，根据堆温显示粒子效果
-        chamber.spawnHeatParticles(level, pos);
-    }
-
-    /**
-     * 根据核反应堆堆温产生粒子效果
-     */
+/** A live contact of exactly one adjacent core; owns neither heat nor EU nor items. */
+public class mio_icif_reactor_chamber extends BlockEntity implements MenuProvider,IEnergySource,IReactorChamber {
+ private BlockPos savedConnection;private long lastValidationTick;
+ public mio_icif_reactor_chamber(BlockPos pos,BlockState state){super(mio_icif_block_entities.REACTOR_CHAMBER_ENTITY_TYPE.get(),pos,state);}
+ private boolean live(){
+  if(!(level instanceof ServerLevel w)||!w.getServer().isSameThread()||isRemoved())return false;
+  var c=w.getChunkSource().getChunkNow(worldPosition.getX()>>4,worldPosition.getZ()>>4);
+  return c!=null&&c.getBlockState(worldPosition).is(getBlockState().getBlock())&&c.getBlockEntity(worldPosition,LevelChunk.EntityCreationType.CHECK)==this;
+ }
+ public mio_icif_nuclear_reactor_generator getConnectedReactor(){
+  if(!live())return null;var w=(ServerLevel)level;mio_icif_nuclear_reactor_generator result=null;
+  for(var side:Direction.values()){
+   var at=worldPosition.relative(side);var c=w.getChunkSource().getChunkNow(at.getX()>>4,at.getZ()>>4);if(c==null)continue;
+   if(c.getBlockEntity(at,LevelChunk.EntityCreationType.CHECK) instanceof mio_icif_nuclear_reactor_generator core&&core.isLiveReactor()){
+    if(result!=null)return null;result=core;
+   }
+  }return result;
+ }
+ public BlockPos getConnectedReactorPos(){var core=getConnectedReactor();return core==null?null:core.getBlockPos();}
+ private void refresh(){var next=getConnectedReactorPos();if(!java.util.Objects.equals(next,savedConnection)){savedConnection=next;setChanged();}lastValidationTick=level==null?0:level.getGameTime();}
+ @Override public void onLoad(){super.onLoad();refresh();IndependentSiEnergy.changed(this);}
+ @Override public void setRemoved(){super.setRemoved();IndependentSiEnergy.changed(this);}
+ @Override public void clearRemoved(){super.clearRemoved();IndependentSiEnergy.changed(this);}
+ public static void tick(Level world,BlockPos pos,BlockState state,mio_icif_reactor_chamber chamber){if(!chamber.live())return;if(world.getGameTime()%20==0)dev.scex.si.reactor.ChamberTopology.checkAndDrop(world,pos);if(!chamber.live())return;chamber.refresh();chamber.spawnHeatParticles(world,pos);}
+ @Override public Component getDisplayName(){var core=getConnectedReactor();return core==null?Component.translatable("container.mio_icif.reactor_chamber"):core.getDisplayName();}
+ @Override public AbstractContainerMenu createMenu(int id,Inventory inventory,Player player){var core=getConnectedReactor();return core==null?null:core.createMenu(id,inventory,player);}
+ @Override protected void saveAdditional(CompoundTag tag,HolderLookup.Provider provider){
+  super.saveAdditional(tag,provider);var at=getConnectedReactorPos();
+  if(at!=null){tag.putInt("ReactorX",at.getX());tag.putInt("ReactorY",at.getY());tag.putInt("ReactorZ",at.getZ());}
+  tag.putBoolean("ConnectionValidated",at!=null);tag.putLong("LastValidationTick",lastValidationTick);
+ }
+ @Override public void loadAdditional(CompoundTag tag,HolderLookup.Provider provider){
+  super.loadAdditional(tag,provider);savedConnection=tag.contains("ReactorX")&&tag.contains("ReactorY")&&tag.contains("ReactorZ")?new BlockPos(tag.getInt("ReactorX"),tag.getInt("ReactorY"),tag.getInt("ReactorZ")):null;lastValidationTick=tag.getLong("LastValidationTick");
+ }
+ public IEUEnergyStorage getEnergyStorageCapability(Direction side){
+  var expected=getConnectedReactor();if(expected==null)return null;var delegate=expected.getEnergyStorageCapability(side);
+  return new IEUEnergyStorage(){
+   private boolean available(){return getConnectedReactor()==expected&&expected.outputFaces()!=0;}
+   @Override public long receive(long n,boolean simulate){return 0;}
+   @Override public long extract(long n,boolean simulate){return available()?delegate.extract(n,simulate):0;}
+   @Override public long getAmount(){return available()?delegate.getAmount():0;}
+   @Override public long getCapacity(){return available()?delegate.getCapacity():0;}
+   @Override public boolean canReceive(){return false;}
+   @Override public boolean canExtract(){return available()&&delegate.canExtract();}
+   @Override public boolean canConnect(CableTier tier){return available()&&delegate.canConnect(tier);}
+   @Override public long generateEnergy(long n,boolean simulate){return 0;}
+   @Override public long useEnergy(long n,boolean simulate){return 0;}
+  };
+ }
+ public IHeatStorage getHeatStorageCapability(Direction side){
+  var expected=getConnectedReactor();if(expected==null)return null;
+  return new GuardedReactorHeat(expected.getHeatStorage(),()->getConnectedReactor()==expected&&expected.getHeatStorageCapability(side).canExtractHeat(),()->{expected.setChanged();dev.scex.si.energy.ContainerToTank.markUnsaved(expected);});
+ }
+ public IItemHandler getItemHandlerCapability(Direction side){
+  var expected=getConnectedReactor();if(expected==null)return null;var delegate=expected.getItemHandlerCapability(side);
+  return new IItemHandler(){
+   private boolean available(){return getConnectedReactor()==expected;}
+   @Override public int getSlots(){return delegate.getSlots();}
+   @Override public ItemStack getStackInSlot(int slot){return available()?delegate.getStackInSlot(slot):ItemStack.EMPTY;}
+   @Override public ItemStack insertItem(int slot,ItemStack stack,boolean simulate){return available()?delegate.insertItem(slot,stack,simulate):stack;}
+   @Override public ItemStack extractItem(int slot,int n,boolean simulate){return available()?delegate.extractItem(slot,n,simulate):ItemStack.EMPTY;}
+   @Override public int getSlotLimit(int slot){return delegate.getSlotLimit(slot);}
+   @Override public boolean isItemValid(int slot,ItemStack stack){return available()&&delegate.isItemValid(slot,stack);}
+  };
+ }
+ // The independent grid settles every core once using all its contact positions.
+ @Override public boolean emitsEnergyTo(IEnergyAcceptor acceptor,Direction side){return false;}
+ @Override public double getOfferedEnergy(){return 0;}
+ @Override public void drawEnergy(double amount){}
+ @Override public int getSourceTier(){var core=getConnectedReactor();return core==null?-1:core.getSourceTier();}
+ @Override public int getPacketCount(){return 1;}
     private void spawnHeatParticles(Level level, BlockPos pos) {
         if (level.isClientSide()) return;
 
@@ -133,232 +152,4 @@ public class mio_icif_reactor_chamber extends BlockEntity implements MenuProvide
         );
     }
     
-    /**
-     * 验证与核反应堆的连接
-     * 注意：邻居变化检测已移至事件系统（mio_icif_events.onNeighborNotify）
-     * 这里确保连接仍然有效
-     */
-    private void validateConnection(Level level, BlockPos pos) {
-        long currentTick = level.getGameTime();
-
-        // 只在达到验证间隔时才检查
-        if (currentTick - lastValidationTick < VALIDATION_INTERVAL) {
-            return;
-        }
-
-        lastValidationTick = currentTick;
-
-        // 如果世界正在处理方块更新，跳过验证以避免死锁
-        if (level.isClientSide() || !level.hasChunk(pos.getX() >> 4, pos.getZ() >> 4)) {
-            return;
-        }
-
-        if (connectedReactorPos != null) {
-            // 检查之前连接的核反应堆是否还存在
-            BlockState reactorState = level.getBlockState(connectedReactorPos);
-            if (!(reactorState.getBlock() instanceof com.singularity_iteration.mio_icif.Blocks.generator.mio_icif_Block_Nuclear_Reactor_Generator)) {
-                // 核反应堆不存在了，重置连接
-                connectedReactorPos = null;
-                connectionValidated = false;
-                setChanged();
-            }
-            // 核反应堆还存在，不需要重新寻找
-            return;
-        }
-
-        // 没有连接的核反应堆，寻找相邻的核反应堆
-        findAdjacentReactor(level, pos);
-    }
-
-    /**
-     * 寻找相邻的核反应堆
-     * 找到并记录连接，邻居变化通知已由事件系统处理
-     */
-    private void findAdjacentReactor(Level level, BlockPos pos) {
-        // 遍历六个面
-        for (Direction direction : Direction.values()) {
-            BlockPos neighborPos = pos.relative(direction);
-            BlockState neighborState = level.getBlockState(neighborPos);
-
-            if (neighborState.getBlock() instanceof com.singularity_iteration.mio_icif.Blocks.generator.mio_icif_Block_Nuclear_Reactor_Generator) {
-                // 找到核反应堆，记录连接
-                connectedReactorPos = neighborPos;
-                connectionValidated = true;
-                setChanged();
-                return;
-            }
-        }
-
-        // 没找到连接的核反应堆
-        connectedReactorPos = null;
-        connectionValidated = false;
-    }
-    
-    /**
-     * 获取连接的核反应堆
-     */
-    @Nullable
-    public mio_icif_nuclear_reactor_generator getConnectedReactor() {
-        if (connectedReactorPos == null || level == null) {
-            return null;
-        }
-        
-        BlockEntity be = level.getBlockEntity(connectedReactorPos);
-        if (be instanceof mio_icif_nuclear_reactor_generator) {
-            return (mio_icif_nuclear_reactor_generator) be;
-        }
-        
-        return null;
-    }
-    
-    /**
-     * 获取连接的核反应堆位置
-     */
-    @Nullable
-    public BlockPos getConnectedReactorPos() {
-        return connectedReactorPos;
-    }
-    
-    // ==================== MenuProvider 接口实现 ====================
-    
-    @Override
-    public Component getDisplayName() {
-        // 如果有连接的核反应堆，使用它的显示名称
-        mio_icif_nuclear_reactor_generator reactor = getConnectedReactor();
-        if (reactor != null) {
-            return reactor.getDisplayName();
-        }
-        return Component.translatable("container.mio_icif.reactor_chamber");
-    }
-    
-    @Nullable
-    @Override
-    public AbstractContainerMenu createMenu(int containerId, Inventory playerInventory, Player player) {
-        // 如果有连接的核反应堆，打开它的菜单
-        mio_icif_nuclear_reactor_generator reactor = getConnectedReactor();
-        if (reactor != null) {
-            return reactor.createMenu(containerId, playerInventory, player);
-        }
-        
-        // 没有连接的核反应堆，无法打开 GUI
-        return null;
-    }
-    
-    // ==================== NBT 保存与加载 ====================
-    
-    @Override
-    protected void saveAdditional(net.minecraft.nbt.CompoundTag tag, net.minecraft.core.HolderLookup.Provider registries) {
-        super.saveAdditional(tag, registries);
-        
-        if (connectedReactorPos != null) {
-            tag.putInt("ReactorX", connectedReactorPos.getX());
-            tag.putInt("ReactorY", connectedReactorPos.getY());
-            tag.putInt("ReactorZ", connectedReactorPos.getZ());
-        }
-        tag.putBoolean("ConnectionValidated", connectionValidated);
-        tag.putLong("LastValidationTick", lastValidationTick);
-    }
-    
-    @Override
-    public void loadAdditional(net.minecraft.nbt.CompoundTag tag, net.minecraft.core.HolderLookup.Provider registries) {
-        super.loadAdditional(tag, registries);
-        
-        if (tag.contains("ReactorX") && tag.contains("ReactorY") && tag.contains("ReactorZ")) {
-            connectedReactorPos = new BlockPos(tag.getInt("ReactorX"), tag.getInt("ReactorY"), tag.getInt("ReactorZ"));
-        }
-        connectionValidated = tag.getBoolean("ConnectionValidated");
-        lastValidationTick = tag.getLong("LastValidationTick");
-    }
-    
-    // ==================== 能力转发 ====================
-    
-    /**
-     * 获取 EU 能量存储能力，转发到连接的核反应堆
-     * @param direction 方向
-     * @return 能量存储能力
-     */
-    @Nullable
-    public IEUEnergyStorage getEnergyStorageCapability(@Nullable Direction direction) {
-        mio_icif_nuclear_reactor_generator reactor = getConnectedReactor();
-        if (reactor != null) {
-            return reactor.getEnergyStorageCapability(direction);
-        }
-        return null;
-    }
-    
-    /**
-     * 获取热存储能力，转发到连接的核反应堆
-     * @param direction 方向
-     * @return 热存储能力
-     */
-    @Nullable
-    public IHeatStorage getHeatStorageCapability(@Nullable Direction direction) {
-        mio_icif_nuclear_reactor_generator reactor = getConnectedReactor();
-        if (reactor != null) {
-            return reactor.getHeatStorage();
-        }
-        return null;
-    }
-    
-    /**
-     * 获取物品处理器能力，转发到连接的核反应堆
-     * @param direction 方向
-     * @return 物品处理器
-     */
-    @Nullable
-    public IItemHandler getItemHandlerCapability(@Nullable Direction direction) {
-        mio_icif_nuclear_reactor_generator reactor = getConnectedReactor();
-        if (reactor != null) {
-            return reactor.getItemHandlerCapability(direction);
-        }
-        return null;
-    }
-    
-    // ==================== IEnergyEmitter ====================
-
-    @Override
-    public boolean emitsEnergyTo(IEnergyAcceptor acceptor, Direction direction) {
-        // 腔室只要有连接的核反应堆位置就可以向任何方向输出能量
-        // 注意：在电网系统调用 getConnectedReactor() 获取EU电网节点时 level 可能尚未设置
-        // 电网系统）通过 IMetaDelegate.getSubTiles() 遍历每个腔室，需要通过此方法判断连接
-        // 只要 connectedReactorPos 不为 null，就说明这个腔室属于某个核反应堆
-        return connectedReactorPos != null;
-    }
-
-    @Override
-    public double getOfferedEnergy() {
-        mio_icif_nuclear_reactor_generator reactor = getConnectedReactor();
-        if (reactor != null) {
-            return reactor.getOfferedEnergy();
-        }
-        return 0.0D;
-    }
-
-    @Override
-    public void drawEnergy(double amount) {
-        mio_icif_nuclear_reactor_generator reactor = getConnectedReactor();
-        if (reactor != null) {
-            reactor.drawEnergy((long) amount);
-        }
-    }
-
-    @Override
-    public int getSourceTier() {
-        // 委托到连接的核反应堆
-        mio_icif_nuclear_reactor_generator reactor = getConnectedReactor();
-        if (reactor != null) {
-            return reactor.getSourceTier();
-        }
-        return -1;
-    }
-
-    @Override
-    public int getPacketCount() {
-        // 委托到连接的核反应堆
-        mio_icif_nuclear_reactor_generator reactor = getConnectedReactor();
-        if (reactor != null) {
-            return reactor.getPacketCount();
-        }
-        return 1;
-    }
 }

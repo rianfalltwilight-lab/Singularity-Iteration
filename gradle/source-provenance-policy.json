@@ -23,7 +23,6 @@
       "paths": [
         "src/main/java/com/singularity_iteration/mio_icif/Items/Armor/mio_icif_solar_helmet.java",
         "src/main/java/com/singularity_iteration/mio_icif/Items/Armor/mio_icif_chestplate_energy_pack.java",
-        "src/main/java/com/singularity_iteration/mio_icif/api/item/IElectricArmorItem.java",
         "src/main/java/com/singularity_iteration/mio_icif/api/item/BatteryElectricAdapter.java",
         "src/main/java/com/singularity_iteration/mio_icif/api/item/electric/ISpecialElectricItem.java",
         "src/main/java/com/singularity_iteration/mio_icif/api/item/electric/IElectricItemManager.java",
@@ -47,19 +46,6 @@
         "src/main/java/com/singularity_iteration/mio_icif/crop/PlantEatingPlant.java"
       ],
       "basis": "R56 comment-only inspection names IC2 internal crop classes/methods and algorithm correspondence. Bodies were not opened. Conservative exclusion pending independent gameplay-based replacement, not a copying finding."
-    },
-    {
-      "id": "reactor-internal-api-and-method-notices",
-      "prefixes": [],
-      "paths": [
-        "src/main/java/com/singularity_iteration/mio_icif/api/reactor/IBaseReactorComponent.java",
-        "src/main/java/com/singularity_iteration/mio_icif/api/reactor/IReactor.java",
-        "src/main/java/com/singularity_iteration/mio_icif/Items/Reactor/mio_icif_condensator.java",
-        "src/main/java/com/singularity_iteration/mio_icif/Items/Reactor/mio_icif_heat_vent.java",
-        "src/main/java/com/singularity_iteration/mio_icif/Items/Reactor/mio_icif_nuclear_reactor.java",
-        "src/main/java/com/singularity_iteration/mio_icif/Items/Reactor/mio_icif_mox_reactor.java"
-      ],
-      "basis": "R46 SI comments name IC2 reactor interfaces and internal method/callback correspondence. Bodies were not read in this audit. Conservative exclusion pending independent gameplay-based replacement; not a copying finding."
     },
     {
       "id": "grid",
@@ -163,6 +149,55 @@
       "predecessor_sha256": "8070dd2815dc90d51cfad68406efb8221be341127cffd6e62358fa362ac70c96",
       "evidence": "../evidence/r118/replacement-provenance.json",
       "scope": "Independent electrical reactor candidate from160 finite normal reference cases and public SI ABI; fluid/accident/chamber energy routing and runtime acceptance remain open. Other six nuclear source exclusions retained."
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/api/reactor/IBaseReactorComponent.java",
+      "revision": "R122",
+      "predecessor_sha256": "8e7742969a0b20f583a62d81972195c81115fd9ed8085bd9acdd8ad0b5763a93",
+      "evidence": "../evidence/r122/replacement-provenance.json",
+      "scope": "New SI public interface/item implementation from R116/R117 normal reference and R121 SI public-call observations. No predecessor body read. Compile/runtime acceptance pending; source replacement alone is not complete nuclear behavior acceptance."
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/api/reactor/IReactor.java",
+      "revision": "R122",
+      "predecessor_sha256": "bacf7e1f2b4c873dd0b421e7fd3eb13c17a425db6ffc9cc47e78f1ea6f604a9b",
+      "evidence": "../evidence/r122/replacement-provenance.json",
+      "scope": "New SI public interface/item implementation from R116/R117 normal reference and R121 SI public-call observations. No predecessor body read. Compile/runtime acceptance pending; source replacement alone is not complete nuclear behavior acceptance."
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Items/Reactor/mio_icif_condensator.java",
+      "revision": "R122",
+      "predecessor_sha256": "33b7666e09c83c105c961f67231721ffcc429068a9ed478d5ad92419bb826b17",
+      "evidence": "../evidence/r122/replacement-provenance.json",
+      "scope": "New SI public interface/item implementation from R116/R117 normal reference and R121 SI public-call observations. No predecessor body read. Compile/runtime acceptance pending; source replacement alone is not complete nuclear behavior acceptance."
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Items/Reactor/mio_icif_heat_vent.java",
+      "revision": "R122",
+      "predecessor_sha256": "21de991b864ff173ab4c4c8b9bd17debad820ec1e7808c0161666d3395333edd",
+      "evidence": "../evidence/r122/replacement-provenance.json",
+      "scope": "New SI public interface/item implementation from R116/R117 normal reference and R121 SI public-call observations. No predecessor body read. Compile/runtime acceptance pending; source replacement alone is not complete nuclear behavior acceptance."
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Items/Reactor/mio_icif_nuclear_reactor.java",
+      "revision": "R122",
+      "predecessor_sha256": "189258c8e1b29c88d2dcd33fc53fca9d506ff8948b8e8c231230964e6b3b5c29",
+      "evidence": "../evidence/r122/replacement-provenance.json",
+      "scope": "New SI public interface/item implementation from R116/R117 normal reference and R121 SI public-call observations. No predecessor body read. Compile/runtime acceptance pending; source replacement alone is not complete nuclear behavior acceptance."
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Items/Reactor/mio_icif_mox_reactor.java",
+      "revision": "R122",
+      "predecessor_sha256": "d489a5522566d295382fbf1f9fa0f4c61d5ba46af2dc8d910c817d8a8576d47e",
+      "evidence": "../evidence/r122/replacement-provenance.json",
+      "scope": "New SI public interface/item implementation from R116/R117 normal reference and R121 SI public-call observations. No predecessor body read. Compile/runtime acceptance pending; source replacement alone is not complete nuclear behavior acceptance."
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/api/item/IElectricArmorItem.java",
+      "revision": "R133",
+      "predecessor_sha256": "d77cf64b40d61e13fbc0f1d55ba7ad85bf997a6d1edc57f0f9da8289d6fcba3c",
+      "evidence": "../evidence/r133/replacement-provenance.json",
+      "scope": "Independent SI public ABI and allowed AbstractElectricArmor/BatteryTransfer defaults. R129 public baseline 165 calls collected; negative and multi-count consume behavior intentionally differs. Candidate compile, ABI and runtime acceptance pending. All other exclusions and full-source gate remain held."
     }
   ],
   "retired_source_groups": [

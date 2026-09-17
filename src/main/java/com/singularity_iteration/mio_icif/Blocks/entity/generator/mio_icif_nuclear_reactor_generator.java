@@ -57,6 +57,7 @@ public class mio_icif_nuclear_reactor_generator extends mio_icif_Energy_Generato
     public static final float HEAT_LOSS_FACTOR=0;
     public static final long ENERGY_GENERATION_RATE=0,ENERGY_CAPACITY=1000000,MAX_RECEIVE=0,MAX_EXTRACT=8192;
     private final PlatformHeatStorage heat=new PlatformHeatStorage(10000,0,1000,20,5000,0);
+    private final dev.scex.si.reactor.GuardedReactorHeat heatPort=new dev.scex.si.reactor.GuardedReactorHeat(heat,()->live()&&this.ready&&this.hold.isEmpty(),this::dirty);
     private final mio_icif_fluid_reactor_handler fluid=new mio_icif_fluid_reactor_handler(this::fluidAvailable,this::dirty);
     private mio_icif_multiblock_manager<mio_icif_fluid_reactor_validator> structure;
     private mio_icif_reactor_mode mode=mio_icif_reactor_mode.GENERATOR;
@@ -83,7 +84,8 @@ public class mio_icif_nuclear_reactor_generator extends mio_icif_Energy_Generato
     private boolean live(){
         if(!(level instanceof ServerLevel server)||!server.getServer().isSameThread()||isRemoved())return false;
         var chunk=server.getChunkSource().getChunkNow(worldPosition.getX()>>4,worldPosition.getZ()>>4);
-        return chunk!=null&&chunk.getBlockEntity(worldPosition,LevelChunk.EntityCreationType.CHECK)==this;
+        return chunk!=null&&chunk.getBlockState(worldPosition).is(getBlockState().getBlock())
+            &&chunk.getBlockEntity(worldPosition,LevelChunk.EntityCreationType.CHECK)==this;
     }
     private void dirty(){setChanged();if(level!=null&&!level.isClientSide)ContainerToTank.markUnsaved(this);}
     private void frame(){long now=level.getGameTime();if(frameAt!=now){frameAt=now;frameUsed=EnergyAmount.ZERO;}}
@@ -95,7 +97,16 @@ public class mio_icif_nuclear_reactor_generator extends mio_icif_Energy_Generato
         if(structure!=null&&structure.isValid())for(var at:structure.getRedstonePorts())if(level.hasNeighborSignal(at))return true;
         return false;
     }
-    private boolean isChamber(BlockPos at){return level!=null&&level.getChunkSource().hasChunk(at.getX()>>4,at.getZ()>>4)&&BuiltInRegistries.BLOCK.getKey(level.getBlockState(at).getBlock()).toString().equals("mio_icif:reactor/block_reactor_chamber");}
+    public boolean isLiveReactor(){return live();}
+    private boolean isChamber(BlockPos at){
+        if(!(level instanceof ServerLevel w)||!w.getServer().isSameThread())return false;
+        var c=w.getChunkSource().getChunkNow(at.getX()>>4,at.getZ()>>4);
+        return c!=null&&c.getBlockEntity(at,LevelChunk.EntityCreationType.CHECK) instanceof com.singularity_iteration.mio_icif.Blocks.entity.reactor.mio_icif_reactor_chamber chamber&&chamber.getConnectedReactor()==this;
+    }
+    public List<BlockPos> electricalContactPositions(){
+        if(!live())return List.of();var out=new ArrayList<BlockPos>();out.add(worldPosition);
+        for(var side:Direction.values()){var at=worldPosition.relative(side);if(isChamber(at))out.add(at);}return List.copyOf(out);
+    }
     private boolean fluidAvailable(){return live()&&ready&&hold.isEmpty()&&mode==mio_icif_reactor_mode.FLUID&&isValidFluidReactorStructure();}
     private void refreshStructure(){
         var validator=new mio_icif_fluid_reactor_validator();boolean valid=validator.validate(level,worldPosition).isValid();
@@ -160,6 +171,7 @@ public class mio_icif_nuclear_reactor_generator extends mio_icif_Energy_Generato
     @Override public long getPowerOutput(){return MAX_EXTRACT;}
     @Override public int getFuelBurnTime(ItemStack stack){return 0;}
     public HeatStorage getHeatStorage(){return heat;}
+    public dev.scex.si.reactor.GuardedReactorHeat getHeatStorageCapability(Direction side){return heatPort;}
     @Override public long getCurrentHeat(){return heat.getHeatStored();}
     @Override public long getMaxHeat(){return heat.getMaxHeatStored();}
     @Override public double getCurrentTemperature(){return heat.getTemperature();}

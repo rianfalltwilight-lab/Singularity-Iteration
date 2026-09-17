@@ -35,7 +35,7 @@ import net.neoforged.neoforge.fluids.capability.IFluidHandler;
 
 /** Registered identities, ordinary memory/replication and resource reloads; never installs test quotes. */
 public final class UuCatalogWorldProbe {
-    private static final int EXPECTED_ENTRIES=347, EXPECTED_FINITE=147, EXPECTED_DENIED=200;
+    private static final int EXPECTED_ENTRIES=379, EXPECTED_FINITE=165, EXPECTED_DENIED=214;
     private static final String RESOURCE = "data/mio_icif/uu/mapped_ic2.json";
     private static final ResourceLocation RESOURCE_ID = ResourceLocation.fromNamespaceAndPath("mio_icif", "uu/mapped_ic2.json");
     private static final Path PACK = Path.of("world/datapacks/scex-uu-catalog-test");
@@ -125,6 +125,7 @@ public final class UuCatalogWorldProbe {
             if (raw.equals("Infinity")) {
                 denied++;
                 check(quote == null, "Explicit Infinity has no quote " + target);
+                check(UuQuoteBook.classify(world.getServer(),stack).disposition()==UuQuoteBook.Disposition.KNOWN_DENIED, "Explicit Infinity is a known exclusion, not unsupported " + target);
             } else {
                 finite++;
                 double expectedPrice = Double.parseDouble(raw) / 100000.0;
@@ -210,33 +211,42 @@ public final class UuCatalogWorldProbe {
             var base = JsonParser.parseString(originalCatalog).getAsJsonObject();
             check(fixture.get("mapped_entries").getAsInt()==EXPECTED_ENTRIES
                     && base.getAsJsonArray("entries").size()==EXPECTED_ENTRIES,
-                    "Frozen R109 mapped entry count is exactly 347");
+                    "Frozen R133 mapped entry count is exactly 379");
             var audit = verifyCatalog(world, base, originalGeneration, false);
             finiteEntries = (Integer) audit.get("finite"); deniedEntries = (Integer) audit.get("denied");
             check(finiteEntries==EXPECTED_FINITE && deniedEntries==EXPECTED_DENIED
                     && (Integer)audit.get("unmapped")==0,
-                    "All 347 R109 identities: 147 finite, 200 Infinity, zero unmapped");
+                    "All 379 R133 identities: 165 finite, 214 Infinity, zero unmapped");
             var eligibilityFile = "data/mio_icif/uu/scan_eligibility.json";
             String eligibilityText;
             try (var input = UuPricingLifecycle.class.getResourceAsStream("/" + eligibilityFile)) {
                 check(input != null, "Actual eligibility resource exists");
                 eligibilityText = new String(input.readAllBytes(), StandardCharsets.UTF_8);
             }
-            check(hash(eligibilityText).equals(fixture.get("eligibility_sha256").getAsString()), "Exact R105 eligibility resource");
-            var eligible = JsonParser.parseString(eligibilityText).getAsJsonObject().getAsJsonArray("denied_scan_items");
-            check(eligible.size()==22, "Twenty-two observed canonical paid-denial identities");
+            check(hash(eligibilityText).equals(fixture.get("eligibility_sha256").getAsString()), "Exact R133 eligibility resource");
+            var eligibleDocument = JsonParser.parseString(eligibilityText).getAsJsonObject();
+            var eligible = eligibleDocument.getAsJsonArray("denied_scan_items");
+            var eligibleStacks = eligibleDocument.getAsJsonArray("denied_scan_stacks");
+            check(eligible.size()==22 && eligibleStacks.size()==33, "Frozen R133 eligibility:22 default IDs plus33 exact stacks");
             var eligibleNames = new HashSet<String>();
+            var eligibleRows = new ArrayList<JsonObject>();
             for (var value : eligible) {
-                var name=value.getAsString(); check(eligibleNames.add(name), "Unique denial admission " + name);
-                var stack=item(name); var assessment=UuQuoteBook.classify(world.getServer(),stack);
+                var row=new JsonObject();row.addProperty("target_item",value.getAsString());eligibleRows.add(row);
+            }
+            for (var value : eligibleStacks) eligibleRows.add(value.getAsJsonObject());
+            for (var value : eligibleRows) {
+                var name=value.get("target_item").getAsString(); check(eligibleNames.add(name), "Unique denial admission " + name);
+                var stack=value.has("target_stack")?dev.scex.si.processing.UuMappedCatalog.explicitStack(value.get("target_stack").getAsString(),name,world.registryAccess()):item(name);
+                var assessment=UuQuoteBook.classify(world.getServer(),stack);
                 check(assessment.disposition()==UuQuoteBook.Disposition.KNOWN_DENIED && assessment.deniedScanEligible()
                         && assessment.finite()==null, "Normal loader admits exact paid-denial identity " + name);
-                var marker=new net.minecraft.nbt.CompoundTag(); marker.putString("r105_unobserved",name);
+                var marker=stack.getOrDefault(DataComponents.CUSTOM_DATA,CustomData.EMPTY).copyTag();marker.putString("r133_unobserved",name);
                 stack.set(DataComponents.CUSTOM_DATA,CustomData.of(marker));
                 var variant=UuQuoteBook.classify(world.getServer(),stack);
                 check(variant.disposition()==UuQuoteBook.Disposition.UNSUPPORTED && !variant.deniedScanEligible()
-                        && variant.finite()==null, "Changed default components gain neither quote nor denial eligibility " + name);
+                        && variant.finite()==null, "Changed components gain neither quote nor denial eligibility " + name);
             }
+            check(eligibleNames.size()==55,"All55 old and newly observed exact admissions verified");
             Files.writeString(Path.of("uu-catalog-identities.json"), new Gson().toJson(audit));
             var memories = BuiltInRegistries.ITEM.stream().filter(value -> value instanceof mio_icif_memory).toList();
             var blocks = BuiltInRegistries.BLOCK.stream().filter(value -> value instanceof mio_icif_block_replicator_elc).toList();

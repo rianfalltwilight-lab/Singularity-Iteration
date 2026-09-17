@@ -1,427 +1,64 @@
+// SPDX-License-Identifier: Apache-2.0
 package com.singularity_iteration.mio_icif.Items.Reactor;
-
-import com.singularity_iteration.mio_icif.api.reactor.ReactorComponentType;
-
-import com.singularity_iteration.mio_icif.Items.DataComponent.FuelRodDurability;
 import com.singularity_iteration.mio_icif.Items.Normal.mio_icif_data_components;
-import net.minecraft.ChatFormatting;
+import com.singularity_iteration.mio_icif.api.reactor.ReactorComponentType;
+import java.util.List;
+import java.util.Objects;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
-import org.jetbrains.annotations.Nullable;
 
-import java.util.function.Supplier;
-
-/**
- * ?????��?�类
- * 
- * ?��??��??
- * - 继承?��?��??��?��?��???���?
- * - ?��??��?�电??��????��?��?�两个�?��??
- * - ?��?��??��?��??中�????��?��??度来??�电??�产??��?��??
- * - �?20 tick�?秒�?��????��??次�?��??�?
- * - 使用DataComponent存�?��?��??度�?�使?��?????��?�使?��次数????????��?�可以�?????
- */
-@SuppressWarnings("null")
+/** SI item identity and legacy public calls. The authoritative world cycle is ReactorCycle. */
 public class mio_icif_nuclear_reactor extends mio_icif_reactor {
-    
-    // ??�电??��?�EU/tick）?
-    private final int energyOutput;
-    
-    // ??��?��?��?�HU/tick�?
-    private final int heatOutput;
-    
-    // ?��?��?��中�?��?��???���?影�?�周?��?????��?��??
-    private final boolean isNeutronReflector;
-    
-    // ?????��?�类??��?�SINGLE, DUAL, QUAD�?
-    private final FuelRodType rodType;
-    
-    // 中�?��?��?�数据???��?�周??��?????中�?��???��??��??
-    // ??��??棒�??1???�???��?��??棒�??2???�???��?��??棒�??4???
-    private final int neutronPulseCount;
-    
-    // ?���???�电系数据???��??�?1�???��?��??�?4�???��?��??�?12�?
-    // ?��于计算基�???�电??��??5EU ?? ?���???�电系数
-    private final int baseEnergyMultiplier;
-
-    // ?��竭�????��?��?��??供�?��??
-    private final Supplier<Item> depletedItemSupplier;
-    
-    // ??��?�间??��??0 tick = 1秒�??
-    public static final int OPERATION_INTERVAL = 20;
-
-    @SuppressWarnings("null")
-public enum FuelRodType {
-        SINGLE(1, 1, 1, 1),     // ??��?��????��?????�?1?��????���?1??�中格子???���?系数1
-        DUAL(2, 2, 2, 4),       // ??��?��????��?????�?2?��????���?2??�中格子???���?系数4
-        QUAD(4, 3, 4, 12);      // ??��?��????��?????�?3?��????���?4??�中格子???���?系数12
-        
-        private final int efficiencyMultiplier;
-        private final int range;
-        private final int neutronPulseCount;
-        private final int baseEnergyMultiplier;
-        
-        FuelRodType(int efficiencyMultiplier, int range, int neutronPulseCount, int baseEnergyMultiplier) {
-            this.efficiencyMultiplier = efficiencyMultiplier;
-            this.range = range;
-            this.neutronPulseCount = neutronPulseCount;
-            this.baseEnergyMultiplier = baseEnergyMultiplier;
-        }
-        
-        public int getEfficiencyMultiplier() {
-            return efficiencyMultiplier;
-        }
-        
-        public int getRange() {
-            return range;
-        }
-        
-        public int getNeutronPulseCount() {
-            return neutronPulseCount;
-        }
-        
-        public int getBaseEnergyMultiplier() {
-            return baseEnergyMultiplier;
-        }
+    public static final int OPERATION_INTERVAL=20;
+    private final int baseEnergy,baseHeat;private final FuelRodType rodType;private final boolean reflector;private final Supplier<Item> depleted;
+    public mio_icif_nuclear_reactor(Properties p,int uses,int energy,int heat,FuelRodType type){this(p,uses,energy,heat,type,false,null);}
+    public mio_icif_nuclear_reactor(Properties p,int uses,int energy,int heat,FuelRodType type,Supplier<Item> depleted){this(p,uses,energy,heat,type,false,depleted);}
+    public mio_icif_nuclear_reactor(Properties p,int uses,int energy,int heat,FuelRodType type,boolean reflector){this(p,uses,energy,heat,type,reflector,null);}
+    public mio_icif_nuclear_reactor(Properties p,int uses,int energy,int heat,FuelRodType type,boolean reflector,Supplier<Item> depleted){
+        super(p,uses,reflector?ReactorComponentType.NEUTRON_REFLECTOR:ReactorComponentType.FUEL_ROD,true,false);
+        if(uses<=0||energy<0||heat<0)throw new IllegalArgumentException("Invalid fuel profile");
+        baseEnergy=energy;baseHeat=heat;rodType=Objects.requireNonNull(type);this.reflector=reflector;this.depleted=depleted;
     }
-    
-    /**
-     * ?????�函???
-     * @param properties ??��??属性??
-     * @param maxDurability ???大�?��??度�??使用寿命�???��?��?�tick�?
-     * @param energyOutput ?���???�电??��?�EU/tick）?
-     * @param heatOutput ?���???��?��?��?�HU/tick�?
-     * @param rodType ?????��?�类???
-     */
-    public mio_icif_nuclear_reactor(Properties properties, int maxDurability, 
-                                     int energyOutput, int heatOutput, FuelRodType rodType) {
-        this(properties, maxDurability, energyOutput, heatOutput, rodType, false, () -> null);
+    public int getEnergyOutput(){return baseEnergy;}
+    public int getActualEnergyOutput(){return Math.multiplyExact(baseEnergy,getNumberOfCells());}
+    @Override public int getHeatOutput(){return baseHeat;}
+    public int getActualHeatOutput(){return Math.multiplyExact(baseHeat,getNumberOfCells());}
+    public FuelRodType getRodType(){return rodType;}
+    @Override public boolean isNeutronReflector(){return reflector;}
+    @Override public Item getDepletedItem(){return depleted==null?null:depleted.get();}
+    public int getNeutronPulseCount(){return rodType.getNeutronPulseCount();}
+    @Override public int getNeutronPulseOutput(){return getNeutronPulseCount();}
+    public int getBaseEnergyMultiplier(){return rodType.getBaseEnergyMultiplier();}
+    public int getBaseSelfPulses(){return rodType.getRange();}
+    @Override public int getNumberOfCells(){return rodType.getEfficiencyMultiplier();}
+    @Override public boolean canReceiveNeutronPulse(){return true;}
+    /** R121 public-call convention: each legacy call advances a 20-call durability clock. */
+    protected boolean advanceLegacyTick(ItemStack stack){
+        if(stack.isEmpty())return false;var d=stack.get(mio_icif_data_components.FUEL_ROD_DURABILITY.get());
+        if(d==null||d.maxUses()<=0||d.remainingUses()<=0||d.remainingUses()>d.maxUses()||d.tickCounter()<0||d.tickCounter()>=20)return false;
+        int tick=d.tickCounter()+1;stack.set(mio_icif_data_components.FUEL_ROD_DURABILITY.get(),new com.singularity_iteration.mio_icif.Items.DataComponent.FuelRodDurability(d.remainingUses()-(tick==20?1:0),d.maxUses(),tick%20));return true;
     }
-    
-    /**
-     * ?????�函?���?带枯竭�?��??供�?��??�?
-     * @param properties ??��??属性??
-     * @param maxDurability ???大�?��??度�??使用寿命�???��?��?�tick�?
-     * @param energyOutput ?���???�电??��?�EU/tick）?
-     * @param heatOutput ?���???��?��?��?�HU/tick�?
-     * @param rodType ?????��?�类???
-     * @param depletedItemSupplier ?��竭�????��?��?��??供�?��??
-     */
-    public mio_icif_nuclear_reactor(Properties properties, int maxDurability, 
-                                     int energyOutput, int heatOutput, FuelRodType rodType,
-                                     Supplier<Item> depletedItemSupplier) {
-        this(properties, maxDurability, energyOutput, heatOutput, rodType, false, depletedItemSupplier);
+    protected int pulses(int a,int b){if(a<0||b<0)throw new IllegalArgumentException("Negative pulse count");return Math.addExact(a,b);}
+    public int calculateHeatOutput(int count){if(count<0)throw new IllegalArgumentException("Negative pulse count");return Math.toIntExact(Math.multiplyExact((long)baseHeat,Math.multiplyExact((long)count,count+1L))/2);}
+    public OperationResult getHeatOutput(ItemStack stack,int pulses,int reflected){int heat=Math.multiplyExact(2,calculateHeatOutput(pulses(pulses,reflected)));if(!advanceLegacyTick(stack))return new OperationResult(0,0,true);return new OperationResult(0,heat,isDepleted(stack));}
+    public OperationResult operate(ItemStack stack,int pulses,int reflected){int heat=calculateHeatOutput(pulses(pulses,reflected));int eu=Math.multiplyExact(baseEnergy,Math.addExact(getBaseEnergyMultiplier(),pulses));if(!advanceLegacyTick(stack))return new OperationResult(0,0,true);return new OperationResult(eu,heat,isDepleted(stack));}
+    public boolean acceptNeutronPulse(ItemStack stack,AtomicInteger energy,boolean heatPhase){if(isDepleted(stack))return false;if(!heatPhase)energy.updateAndGet(n->Math.addExact(n,baseEnergy));return true;}
+    @Override public void appendHoverText(ItemStack stack,TooltipContext context,List<Component> lines,TooltipFlag flag){super.appendHoverText(stack,context,lines,flag);lines.add(Component.literal(getCurrentDurability(stack)+" reactor cycles; "+getNumberOfCells()+" cells"));}
+    public enum FuelRodType {
+        SINGLE(1,1),DUAL(2,2),QUAD(4,3);
+        private final int cells,self;
+        FuelRodType(int cells,int self){this.cells=cells;this.self=self;}
+        public int getEfficiencyMultiplier(){return cells;}
+        public int getRange(){return self;}
+        public int getNeutronPulseCount(){return cells;}
+        public int getBaseEnergyMultiplier(){return cells*self;}
     }
-    
-    /**
-     * ?????�函?���?带中格子?��???��??�项�?
-     * @param properties ??��??属性??
-     * @param maxDurability ???大�?��??度�??使用寿命�???��?��?�tick�?
-     * @param energyOutput ?���???�电??��?�EU/tick）?
-     * @param heatOutput ?���???��?��?��?�HU/tick�?
-     * @param rodType ?????��?�类???
-     * @param isNeutronReflector ?��?��?��中�?��?��???��
-     */
-    public mio_icif_nuclear_reactor(Properties properties, int maxDurability, 
-                                     int energyOutput, int heatOutput, 
-                                     FuelRodType rodType, boolean isNeutronReflector) {
-        this(properties, maxDurability, energyOutput, heatOutput, rodType, isNeutronReflector, () -> null);
-    }
-
-    /**
-     * 完整?????�函???
-     * @param properties ??��??属性??
-     * @param maxDurability ???大�?��??度�??使用寿命�???��?��?�tick�?
-     * @param energyOutput ?���???�电??��?�EU/tick）?
-     * @param heatOutput ?���???��?��?��?�HU/tick�?
-     * @param rodType ?????��?�类???
-     * @param isNeutronReflector ?��?��?��中�?��?��???��
-     * @param depletedItemSupplier ?��竭�????��?��?��??供�?��??
-     */
-    public mio_icif_nuclear_reactor(Properties properties, int maxDurability, 
-                                     int energyOutput, int heatOutput, 
-                                     FuelRodType rodType, boolean isNeutronReflector,
-                                     Supplier<Item> depletedItemSupplier) {
-        super(properties, maxDurability, ReactorComponentType.FUEL_ROD, true, false);
-        this.energyOutput = energyOutput;
-        this.heatOutput = heatOutput;
-        this.rodType = rodType;
-        this.isNeutronReflector = isNeutronReflector;
-        this.neutronPulseCount = rodType.getNeutronPulseCount();
-        this.baseEnergyMultiplier = rodType.getBaseEnergyMultiplier();
-        this.depletedItemSupplier = depletedItemSupplier;
-    }
-    
-    /**
-     * ?��??�基�???�电??��?�EU/tick）?
-     */
-    public int getEnergyOutput() {
-        return energyOutput;
-    }
-    
-    /**
-     * ?��??��?��????�电??��???????��????��?�类??��??
-     */
-    public int getActualEnergyOutput() {
-        return energyOutput * rodType.getEfficiencyMultiplier();
-    }
-    
-    /**
-     * ?��??�基�???��?��?��?�HU/tick�?
-     */
-    public int getHeatOutput() {
-        return heatOutput;
-    }
-    
-    /**
-     * ?��??��?��????��?��?��???????��????��?�类??��??
-     */
-    public int getActualHeatOutput() {
-        return heatOutput * rodType.getEfficiencyMultiplier();
-    }
-    
-    /**
-     * ?��??��????��?�类???
-     */
-    public FuelRodType getRodType() {
-        return rodType;
-    }
-    
-    /**
-     * ?��?��?��中�?��?��???��
-     */
-    public boolean isNeutronReflector() {
-        return isNeutronReflector;
-    }
-
-    /**
-     * ?��??�枯竭�????��?��?��??
-     * @return ?��竭�?��?��?��??�?�???�未??�置??��?��?�null
-     */
-    @Override
-    @Nullable
-    public Item getDepletedItem() {
-        return depletedItemSupplier != null ? depletedItemSupplier.get() : null;
-    }
-    
-    /**
-     * ?��??�中格子?��?�数据???��?�周??��?????中�?��???��??��??
-     * ??��??棒�??1???�???��?��??棒�??2???�???��?��??棒�??4???
-     */
-    public int getNeutronPulseCount() {
-        return neutronPulseCount;
-    }
-    
-    /**
-     * ?��??�基�???�电系数
-     * ??��??�?1�???��?��??�?4�???��?��??�?12
-     */
-    public int getBaseEnergyMultiplier() {
-        return baseEnergyMultiplier;
-    }
-    
-    // NBT?��??��??已�?��??，改?��DataComponent�?
-    // private static final String TICK_COUNTER_KEY = "FuelRodTickCounter";
-
-    /**
-     * ?��??��?��?? tick 计数据?从DataComponent读�?��??
-     */
-    protected int getTickCounter(ItemStack stack) {
-        FuelRodDurability data = stack.get(mio_icif_data_components.FUEL_ROD_DURABILITY.get());
-        return data != null ? data.tickCounter() : 0;
-    }
-
-    /**
-     * 设置 tick 计数据???��?�DataComponent�?
-     */
-    protected void setTickCounter(ItemStack stack, int tickCounter) {
-        FuelRodDurability data = stack.get(mio_icif_data_components.FUEL_ROD_DURABILITY.get());
-        if (data != null) {
-            stack.set(mio_icif_data_components.FUEL_ROD_DURABILITY.get(), data.withTickCounter(tickCounter));
-        }
-    }
-
-    /**
-     * 当�????��?�在?��家�?��????�中?��，�?�置tick计数?��以�??许�?????
-     * ?��??�相??�remainingUses????????��?��?��?��????��?�tick计数?���?须为0
-     */
-    @Override
-    public void inventoryTick(ItemStack stack, net.minecraft.world.level.Level level, Entity entity, int slotId, boolean isSelected) {
-        if (!level.isClientSide()) {
-            FuelRodDurability data = stack.get(mio_icif_data_components.FUEL_ROD_DURABILITY.get());
-            if (data != null && data.tickCounter() != 0) {
-                stack.set(mio_icif_data_components.FUEL_ROD_DURABILITY.get(), data.withTickCounter(0));
-            }
-        }
-    }
-
-    @Override
-    public void appendHoverText(ItemStack stack, TooltipContext context, java.util.List<Component> tooltipComponents, TooltipFlag tooltipFlag) {
-        super.appendHoverText(stack, context, tooltipComponents, tooltipFlag);
-        FuelRodDurability data = stack.get(mio_icif_data_components.FUEL_ROD_DURABILITY.get());
-        if (data != null) {
-            tooltipComponents.add(Component.translatable("item.mio_icif.reactor.fuel_rod.durability",
-                data.remainingUses(), data.maxUses()).withStyle(ChatFormatting.GRAY));
-        }
-    }
-
-    /**
-     * ?��??��?��?��?�出�??��于�??体模式�?��????��?��??度�????��?��?�翻??��??
-     * ?��?�� IC2 ?��科�?��??体�?��?��?????HU 输出?��??��?��?��?�相??��??法�???��??��?��????? 2 ???
-     * @param stack ?????��?��?��?????
-     * @param receivedPulses ?��??��??中�?��?��?�数据??��?��?��?��?????��?��?�中格子?��???���?
-     * @param selfPulses ?��身�?��?�数据??��于�?��?�计算�??
-     * @return 运�?��?��?��??????��??��?��??翻译?��?��?�是?��??�尽
-     */
-    public OperationResult getHeatOutput(ItemStack stack, int receivedPulses, int selfPulses) {
-        if (isDepleted(stack)) {
-            return new OperationResult(0, 0, true);
-        }
-
-        // ?��??��?��?? tick 计数据?使�??NBT 存�?��??
-        int tickCounter = getTickCounter(stack);
-        tickCounter++;
-
-        // 计算?��?��?��?�数 = ?��身�?��?? + ?��??��?��??
-        int totalPulses = selfPulses + receivedPulses;
-        // 计算?��?��?��?��??翻译?��??
-        int actualHeat = calculateHeatOutput(totalPulses) * 2;
-
-        boolean depleted = false;
-
-        // �?20 tick �???��??次�?��??�?
-        if (tickCounter >= OPERATION_INTERVAL) {
-            tickCounter = 0;
-            // �???��?��??�?
-            depleted = damageItem(stack, 1);
-        }
-
-        // 保�?? tick 计数???NBT
-        if (!stack.isEmpty()) {
-            setTickCounter(stack, tickCounter);
-        }
-
-        return new OperationResult(0, actualHeat, depleted);
-    }
-    
-    /**
-     * 运�?��??�?tick，�?? 20 tick �???��?��??度并返回?��?�电??��????��?��??
-     * 使用 IC2 ???中�?��?��?�机??��??
-     * - ?????��?��???��??��?��?�basePulses = 1 + numberOfCells/2�?
-     * - ??��?��???��?��?��???件接?��额�?��?��??
-     * - ??��??棒�?�电??? = 5 ?? (1 + ?��??��???��??��?��?? EU/t
-     * - ??��?��??棒�?�电??? = 5 ?? (4 + ?��??��???��??��?��?? EU/t
-     * - ??��?��??棒�?�电??? = 5 ?? (12 + ?��??��???��??��?��?? EU/t
-     * @param stack ?????��?��?��?????
-     * @param receivedPulses ?��??��??中�?��?��?�数据??��?��?��?��?????��?��?�中格子?��???���?
-     * @param selfPulses ?��身�?��?�数据??��于�?�电??��?��?�计算�??
-     * @return 运�?��?��?��??????��??�电??��????��?��?��?�是?��??�尽
-     */
-    public OperationResult operate(ItemStack stack, int receivedPulses, int selfPulses) {
-        if (isDepleted(stack)) {
-            return new OperationResult(0, 0, true);
-        }
-
-        // ?��??��?��?? tick 计数据?使用NBT存�?��??
-        int tickCounter = getTickCounter(stack);
-        tickCounter++;
-
-        // 计算?��?��?��?�数 = ?��身�?��?? + ?��??��?��??
-        int totalPulses = selfPulses + receivedPulses;
-        
-        // 使用IC2?????�电??��?��??5EU ?? (?���?系数 + ?��??��???��??��?��??
-        // 注册?��?��?�电??�计算只使�??receivedPulses�?外�?��?��?��?��????�U��?��??��?��?��?? acceptNeutronPulse 已计???
-        int actualEnergy = 5 * (baseEnergyMultiplier + receivedPulses);
-
-        // ??��?��?�计算�??使用??��?��?�数据?
-        int actualHeat = calculateHeatOutput(totalPulses);
-
-        boolean depleted = false;
-
-        // �?20 tick �???��??次�?��??�?
-        if (tickCounter >= OPERATION_INTERVAL) {
-            tickCounter = 0;
-            // �???��?��??�?
-            depleted = damageItem(stack, 1);
-        }
-
-        // 保�?? tick 计数??�NBT
-        if (!stack.isEmpty()) {
-            setTickCounter(stack, tickCounter);
-        }
-
-        return new OperationResult(actualEnergy, actualHeat, depleted);
-    }
-    
-    /**
-     * 计算?��?��?��?��????????IC2??��?��??
-     * 使用三�?�形?��??��?��?�heat = triangularNumber(pulses) * 4
-     * ??�中 triangularNumber(x) = (x * x + x) / 2
-     * @param totalPulses ??��?��?�数据??��身�?��??+ ?��??��?��?��??
-     * @return ??��?��?��?�HU/tick�?
-     */
-    public int calculateHeatOutput(int totalPulses) {
-        return triangularNumber(totalPulses) * 4;
-    }
-    
-    /**
-     * 三�?�形?��计算??
-     * triangularNumber(x) = (x * x + x) / 2
-     */
-    protected static int triangularNumber(int x) {
-        return (x * x + x) / 2;
-    }
-    
-    /**
-     * ?��??�基�??��??��?�数
-     * ??????IC2：basePulses = 1 + numberOfCells / 2
-     * ??��?��??�???��?��??2�???��?��??3
-     */
-    public int getBaseSelfPulses() {
-        return 1 + rodType.getEfficiencyMultiplier() / 2;
-    }
-    
-    /**
-     * ?��??��????��?��?��???���??��于�?��??�?
-     * ??��?��??�???��?��??2�???��?��??4
-     */
-    public int getNumberOfCells() {
-        return rodType.getEfficiencyMultiplier();
-    }
-    
-    /**
-     * ?��??�中格子?��?��??被�?��?��????��?��?��?��???��触�?��??
-     * ??????IC2 acceptUraniumPulse ?��???
-     * @param stack 当�?��????��?��?��?????
-     * @param energyOutput ??�电??��?�出�??��于累??��?�电??��??
-     * @param heatRun ?��?��为�?��?�计算�?��?�true=??��?��?��?�false=??�电??��??
-     * @return ?��?��?��??��?��??
-     */
-    public boolean acceptNeutronPulse(ItemStack stack, java.util.concurrent.atomic.AtomicInteger energyOutput, boolean heatRun) {
-        if (!heatRun) {
-            // ??�电??��?��?�接??��??个�?��?��?��??5 EU
-            energyOutput.addAndGet(5);
-        }
-        return true;
-    }
-    
-    /**
-     * 运�?��?��?��??
-     */
     public static class OperationResult {
-        public final int energyProduced;
-        public final int heatProduced;
-        public final boolean depleted;
-
-        public OperationResult(int energyProduced, int heatProduced, boolean depleted) {
-            this.energyProduced = energyProduced;
-            this.heatProduced = heatProduced;
-            this.depleted = depleted;
-        }
+        public final int energyProduced,heatProduced;public final boolean depleted;
+        public OperationResult(int energy,int heat,boolean depleted){energyProduced=energy;heatProduced=heat;this.depleted=depleted;}
     }
-
 }
-

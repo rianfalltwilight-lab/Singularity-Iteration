@@ -31,9 +31,65 @@ public class CustomEUEnergyStorage implements IEUEnergyStorage, IEnergyStorageAc
     private boolean scexNetworkControlled;
     private dev.scex.energy.NetworkCell scexCell;
     private long scexFraction;
+    private final dev.scex.si.energy.InternalPaymentLedger scexPayments = new dev.scex.si.energy.InternalPaymentLedger();
+
+    /**
+     * Pay from this storage before invoking an effect with foreign callbacks.
+     * Both network modes use the same balance. The caller must settle the token
+     * in the same synchronous server-thread operation, including exceptional paths.
+     */
+    public final InternalPayment scexReserveInternal(long amount) {
+        if (amount <= 0) throw new IllegalArgumentException("Payment must be positive");
+        if (!(level instanceof ServerLevel world) || pos == null) return null;
+        if (!world.getServer().isSameThread()) throw new IllegalStateException("Payment requires server thread");
+        var chunk = world.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4);
+        if (chunk == null || !world.shouldTickBlocksAt(net.minecraft.world.level.ChunkPos.asLong(pos))) return null;
+        var tile = chunk.getBlockEntity(pos, net.minecraft.world.level.chunk.LevelChunk.EntityCreationType.CHECK);
+        boolean owns = tile instanceof com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_Energy_Block machine
+            && machine.getEnergyStorageInternal() == this
+            || tile instanceof dev.scex.si.energy.DemandEnergySource demand && demand.ownedEnergy() == this;
+        if (!owns || tile.isRemoved()) return null;
+        var ticket = scexPayments.reserve(energy, amount);
+        if (ticket == null) return null;
+        scexSetWholePreservingFraction(energy - amount);
+        return new InternalPayment(this, ticket, world);
+    }
+
+    public static final class InternalPayment {
+        private final CustomEUEnergyStorage storage;
+        private final dev.scex.si.energy.InternalPaymentLedger.Ticket ticket;
+        private final ServerLevel world;
+        private InternalPayment(CustomEUEnergyStorage storage, dev.scex.si.energy.InternalPaymentLedger.Ticket ticket, ServerLevel world) {
+            this.storage = storage; this.ticket = ticket; this.world = world;
+        }
+        public long amount() { return ticket.amount(); }
+        public boolean isPending() { return ticket.isPending(); }
+        public boolean commit() {
+            checkThread();
+            return ticket.commit();
+        }
+        public boolean cancel() {
+            checkThread();
+            if (!ticket.isPending()) return false;
+            long restored = Math.addExact(storage.energy, ticket.amount());
+            if (!ticket.cancel()) return false;
+            // Restore only this escrow, preserving every callback credit/debit and fraction.
+            // Capacity shrink never deletes already owned EU, as with setCapacity itself.
+            storage.scexSetWholePreservingFraction(restored);
+            return true;
+        }
+        private void checkThread() {
+            if (!world.getServer().isSameThread()) throw new IllegalStateException("Payment requires original server thread");
+        }
+    }
+
+    private void scexRequireNoPayment(String operation) {
+        if (scexPayments.reserved() != 0) throw new IllegalStateException(operation + " during pending internal payment");
+    }
     public final boolean scexNetworkControlled() { return scexNetworkControlled; }
     public final void scexSetNetworkControlled(boolean controlled) {
         if (controlled == scexNetworkControlled) return;
+        scexRequireNoPayment("Ownership change");
         if (scexCell != null) { scexCell.retire(); scexCell = null; }
         scexNetworkControlled = controlled;
     }
@@ -61,7 +117,7 @@ public class CustomEUEnergyStorage implements IEUEnergyStorage, IEnergyStorageAc
             cellQuote = scexCell.quote();
             if (cellQuote.amount() != energy || cellQuote.fraction() != scexFraction) throw new IllegalStateException("Independent balance mirror diverged");
         }
-        return new NetworkQuote(level, pos == null ? null : pos.immutable(), energy, capacity, maxReceive, maxExtract, powerOutput, isPowerSource, outputEnabled, cellQuote);
+        return new NetworkQuote(level, pos == null ? null : pos.immutable(), energy, getCapacity(), maxReceive, maxExtract, powerOutput, isPowerSource, outputEnabled, cellQuote);
     }
 
     /**
@@ -107,7 +163,8 @@ public class CustomEUEnergyStorage implements IEUEnergyStorage, IEnergyStorageAc
         if (balance.signum() != 0) throw new IllegalArgumentException("Nonconserving network commit");
         if (!current.getAsBoolean()) return false;
         for (var write : writes) {
-            if (!write.storage().scexNetworkControlled || !write.storage().scexNetworkQuote().equals(write.expected())) return false;
+            if (!write.storage().scexNetworkControlled || write.storage().scexPayments.reserved() != 0
+                    || !write.storage().scexNetworkQuote().equals(write.expected())) return false;
             var storage = write.storage(); var world = (ServerLevel) storage.level;
             var chunk = world.getChunkSource().getChunkNow(storage.pos.getX() >> 4, storage.pos.getZ() >> 4);
             if (chunk == null || !world.shouldTickBlocksAt(net.minecraft.world.level.ChunkPos.asLong(storage.pos))) return false;
@@ -154,10 +211,11 @@ public class CustomEUEnergyStorage implements IEUEnergyStorage, IEnergyStorageAc
 
     @Override
     public int getMaxEnergyStored() {
-        return (int) Math.min(capacity, Integer.MAX_VALUE);
+        return (int) Math.min(getCapacity(), Integer.MAX_VALUE);
     }
 
     public void setBlockContext(Level level, BlockPos pos) {
+        if (this.level != level || !java.util.Objects.equals(this.pos, pos)) scexRequireNoPayment("Owner context change");
         this.level = level;
         this.pos = pos;
     }
@@ -295,7 +353,8 @@ public class CustomEUEnergyStorage implements IEUEnergyStorage, IEnergyStorageAc
 
     @Override
     public long getCapacity() {
-        return capacity;
+        // Escrow still occupies capacity; reentrant input cannot steal its refund room.
+        return scexPayments.availableCapacity(capacity);
     }
 
     @Override
@@ -314,26 +373,28 @@ public class CustomEUEnergyStorage implements IEUEnergyStorage, IEnergyStorageAc
     }
 
     public void setEnergy(long energy) {
+        scexRequireNoPayment("Absolute balance replacement");
         long updated = Math.max(0, scexNetworkControlled ? energy : Math.min(capacity, energy));
         scexReplaceEnergy(EnergyAmount.of(updated));
     }
 
     public final EnergyAmount scexExactAmount() { return new EnergyAmount(energy, scexFraction); }
-    public final long scexSavedFraction() { return scexFraction; }
+    public final long scexSavedFraction() { scexRequireNoPayment("Save"); return scexFraction; }
     /** Missing legacy tags mean zero; malformed fractional tags cannot create EU. */
     public final void scexLoadFraction(long fraction) {
+        scexRequireNoPayment("Fraction load");
         scexReplaceEnergy(new EnergyAmount(energy,
             fraction >= 0 && fraction < EnergyAmount.UNITS ? fraction : 0));
     }
     private long scexWholeRoom() {
-        return scexExactAmount().roomBelow(capacity).whole();
+        return scexExactAmount().roomBelow(getCapacity()).whole();
     }
     private void scexSetWholePreservingFraction(long whole) {
         scexReplaceEnergy(new EnergyAmount(whole, scexFraction));
     }
     public final EnergyAmount scexGenerateEnergy(EnergyAmount amount, boolean simulate) {
         if (!scexNetworkControlled) throw new IllegalStateException("Fractional generation requires independent ownership");
-        var generated = amount.min(scexExactAmount().roomBelow(capacity));
+        var generated = amount.min(scexExactAmount().roomBelow(getCapacity()));
         if (!simulate && !generated.isZero()) scexReplaceEnergy(scexExactAmount().add(generated));
         return generated;
     }
@@ -347,9 +408,14 @@ public class CustomEUEnergyStorage implements IEUEnergyStorage, IEnergyStorageAc
     /** Exact standard FE adjustment; the bridge owns admission, rate and sided checks. */
     public final void scexTransferFe(int fe, boolean receive) {
         var value = dev.scex.si.energy.FeLedger.eu(fe);
+        if (receive && scexPayments.reserved() != 0 && value.compareTo(scexExactAmount().roomBelow(getCapacity())) > 0)
+            throw new IllegalStateException("FE input would consume internal payment escrow");
         scexReplaceEnergy(receive ? scexExactAmount().add(value) : scexExactAmount().subtract(value));
     }
     private void scexReplaceEnergy(EnergyAmount updated) {
+        scexPayments.checkPendingThread();
+        if (updated.whole() > Long.MAX_VALUE - scexPayments.reserved())
+            throw new IllegalArgumentException("Balance and internal escrow exceed representable EU");
         if (updated.whole() == energy && updated.fraction() == scexFraction) return;
         if (scexCell != null) scexCell.replace(updated);
         this.energy = updated.whole(); this.scexFraction = updated.fraction();
@@ -371,6 +437,7 @@ public class CustomEUEnergyStorage implements IEUEnergyStorage, IEnergyStorageAc
     }
 
     public void setCapacity(long capacity) {
+        scexPayments.checkPendingThread();
         this.capacity = Math.max(0, capacity);
         scexSetWholePreservingFraction(this.energy);
     }

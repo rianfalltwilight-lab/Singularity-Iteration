@@ -28,7 +28,7 @@ import net.minecraft.world.item.component.CustomData;
 
 /** Real registered item/default-component contracts. No Minecraft world is created. */
 public final class UuMappedCatalogContract {
-    private static final int EXPECTED_ENTRIES=347, EXPECTED_FINITE=147, EXPECTED_DENIED=200;
+    private static final int EXPECTED_ENTRIES=379, EXPECTED_FINITE=165, EXPECTED_DENIED=214;
     private static final String PLAIN = "mio_icif:r100_contract_plain";
     private static final String DEFAULTS = "mio_icif:r100_contract_defaults";
     private static final String OTHER = "mio_icif:r100_contract_other";
@@ -115,7 +115,7 @@ public final class UuMappedCatalogContract {
         for (String field : List.of("legacy_stack", "target_item", "raw_value", "source_row")) {
             var bad = finite(); bad.remove(field); reject(root(bad), "Missing entry field " + field);
         }
-        var bad = root(finite()); bad.addProperty("schema", 3); reject(bad, "Future schema");
+        var bad = root(finite()); bad.addProperty("schema", 4); reject(bad, "Future schema");
         bad = root(finite()); bad.addProperty("data_version", 1342); reject(bad, "Unexpected legacy data version");
         bad = root(finite()); bad.addProperty("schema", "1"); reject(bad, "String schema is not an integer");
         bad = root(finite()); bad.addProperty("schema", 1.0); reject(bad, "Fractional syntax is not an integer schema");
@@ -193,6 +193,136 @@ public final class UuMappedCatalogContract {
         }
     }
 
+    private static JsonObject stateful(String legacy, String target, String raw, int source) {
+        var entry = row(legacy, target, raw, source);
+        entry.addProperty("target_stack", "{id:'" + target + "',count:1,components:{}}");
+        return entry;
+    }
+
+    private static JsonObject schema3(JsonObject... rows) {
+        var document = root(rows); document.addProperty("schema", 3); return document;
+    }
+
+    private static void typedLegacyProfiles(Item plain, Item defaults, Item other) throws IOException {
+        String bareCable = "{id:'ic2:cable',Count:1b,tag:{type:0b,insulation:0b},Damage:0s}";
+        String insulatedCable = "{id:'ic2:cable',Count:1b,tag:{type:0b,insulation:1b},Damage:0s}";
+        String reflector = "{id:'ic2:neutron_reflector',Count:1b,tag:{advDmg:0},Damage:0s}";
+        var bare = stateful(bareCable, DEFAULTS, "30.169289965223484", 203);
+        var insulated = stateful(insulatedCable, PLAIN, "10102.619289965223", 421);
+        var nuclear = stateful(reflector, OTHER, "506.1603544565176", 608);
+        nuclear.addProperty("target_stack", "{id:'" + OTHER + "',count:1,components:{'minecraft:custom_data':{r128:1}}}");
+        var document = schema3(bare, insulated, nuclear);
+        var reviewed = UuMappedCatalog.readReviewed(new StringReader(document.toString()), registries);
+        var result = reviewed.catalog();
+        check(result.entries() == 3 && result.prices().size() == 3 && result.unmapped() == 0,
+                "Same cable id/metadata with different insulation are distinct typed legacy identities");
+        check(result.prices().get(IndependentUuValueIndex.keyOf(new ItemStack(defaults))) == 30.169289965223484 / 100000,
+                "Bare cable retains its reference price and registered default components");
+        check(result.prices().get(IndependentUuValueIndex.keyOf(new ItemStack(plain))) == 10102.619289965223 / 100000,
+                "Insulated cable retains its separate reference price");
+        var prototype = new ItemStack(other); var data = new CompoundTag(); data.putInt("r128", 1);
+        prototype.set(DataComponents.CUSTOM_DATA, CustomData.of(data));
+        check(result.prices().get(IndependentUuValueIndex.keyOf(prototype)) == 506.1603544565176 / 100000,
+                "Legacy zero-damage profile maps only to the explicitly reviewed full target prototype");
+        check(!result.prices().containsKey(IndependentUuValueIndex.keyOf(new ItemStack(other))),
+                "Schema3 does not grant the target's unobserved registered default a quote");
+        check(reviewed.componentScopedItems().equals(java.util.Set.of(PLAIN, DEFAULTS, OTHER))
+                && !reviewed.allowsDerivedOutput(IndependentUuValueIndex.keyOf(new ItemStack(other))),
+                "Stateful mappings retain the component-family derivation guard");
+        nuclear.addProperty("raw_value", "Infinity");
+        check(read(schema3(nuclear)).denied().contains(IndependentUuValueIndex.keyOf(prototype)),
+                "Schema3 Infinity remains exact target denial, independent of scanner eligibility");
+        check(read(schema3(finite())).prices().size() == 1, "Schema3 preserves flat schema1 identities");
+
+        var reordered = stateful("{\"Damage\":0s,tag:{'insulation':0b,\"type\":0b},Count:1b,id:'ic2:cable'}", OTHER, "Infinity", 9000);
+        reject(schema3(bare, reordered), "Reordered and differently quoted nested keys cannot bypass exact identity conflict");
+        reject(schema3(reordered, bare), "Typed legacy finite/denied conflict is order independent");
+        var sameTarget = insulated.deepCopy(); sameTarget.addProperty("target_item", DEFAULTS);
+        sameTarget.addProperty("target_stack", "{id:'" + DEFAULTS + "',count:1,components:{}}");
+        reject(schema3(bare, sameTarget), "Distinct cable states cannot overwrite one target's mapping");
+        var sameSource = insulated.deepCopy(); sameSource.addProperty("source_row", 203);
+        reject(schema3(bare, sameSource), "Typed profiles still require unique provenance rows");
+        for (int schema : List.of(1, 2)) {
+            var old = root(bare); old.addProperty("schema", schema);
+            reject(old, "Schema" + schema + " cannot acquire nonempty legacy NBT semantics");
+        }
+        var missingPrototype = bare.deepCopy(); missingPrototype.remove("target_stack");
+        reject(schema3(missingPrototype), "Stateful mapping requires an explicit target prototype");
+        missingPrototype.addProperty("target_item", "mio_icif:r128_missing");
+        reject(schema3(missingPrototype), "An absent target cannot bypass the explicit-prototype requirement");
+
+        for (String malformed : List.of(
+                reflector.replace("advDmg:0", "advDmg:1"), reflector.replace("advDmg:0", "advDmg:-1"),
+                reflector.replace("advDmg:0", "advDmg:0b"), reflector.replace("advDmg:0", "advDmg:0s"),
+                reflector.replace("advDmg:0", "advDmg:0L"), reflector.replace("advDmg:0", "advDmg:0d"),
+                reflector.replace("advDmg:0", "advDmg:'0'"), reflector.replace("advDmg:0", "advDmg:0,unknown:0"),
+                reflector.replace("advDmg:0", "advDmg:1,advDmg:0"),
+                reflector.replace("advDmg:0", "advDmg:1,'advDmg':0"),
+                reflector.replace("tag:{advDmg:0}", "tag:{advDmg:1},tag:{advDmg:0}"),
+                reflector.replace("advDmg:0", "advDmg:0,extra:{first:1,first:0}"),
+                reflector.replace("advDmg:0", "advDmg:0,"),
+                reflector.replace("neutron_reflector", "component_heat_vent"),
+                reflector.replace("Damage:0s", "Damage:1s"), reflector.replace("Count:1b", "Count:1"),
+                reflector.replace("Count:1b", "Count:true"), reflector.replace("Damage:0s", "Damage:0"),
+                reflector.replace("Count:1b", "Count:2b,Count:1b"),
+                reflector.replace("Damage:0s", "Damage:0s,unknown:0"),
+                bareCable.replace("type:0b", "type:0"), bareCable.replace("insulation:0b", "insulation:0"),
+                bareCable.replace("insulation:0b", "insulation:2b"), bareCable.replace("insulation:0b", "insulation:-1b"),
+                bareCable.replace("insulation:0b", "insulation:1b,insulation:0b"),
+                bareCable.replace("type:0b", "type:1b,type:0b"),
+                bareCable.replace("Damage:0s", "Damage:1s"), bareCable.replace("Damage:0s", "Damage:32768s"),
+                bareCable.replace("type:0b", "type:7b").replace("Damage:0s", "Damage:7s"),
+                bareCable.replace("insulation:0b", "insulation:0b,paint:0b"))) {
+            reject(schema3(stateful(malformed, PLAIN, "15", 1)), "Unreviewed or duplicate typed profile " + malformed);
+        }
+
+        // These 32 positive rows are the fixed R93 candidate surface, not unrestricted NBT support.
+        var allProfiles = schema3(); int source = 10000;
+        for (String id : List.of("heat_storage", "tri_heat_storage", "hex_heat_storage", "advanced_heat_exchanger",
+                "advanced_heat_vent", "component_heat_exchanger", "dual_mox_fuel_rod", "dual_uranium_fuel_rod",
+                "mox_fuel_rod", "uranium_fuel_rod", "heat_exchanger", "heat_vent", "lzh_condensator",
+                "neutron_reflector", "overclocked_heat_vent", "quad_mox_fuel_rod", "quad_uranium_fuel_rod",
+                "rsh_condensator", "reactor_heat_exchanger", "reactor_heat_vent", "thick_neutron_reflector")) {
+            String target = "mio_icif:r128_absent_" + source;
+            allProfiles.getAsJsonArray("entries").add(stateful("{id:'ic2:" + id + "',Count:1b,tag:{advDmg:0},Damage:0s}", target, "Infinity", source++));
+        }
+        for (String tuple : List.of("0:0", "0:1", "1:0", "2:0", "2:1", "3:0", "3:1", "4:0", "4:1", "5:0", "6:0")) {
+            String type = tuple.substring(0, 1), insulation = tuple.substring(2);
+            String target = "mio_icif:r128_absent_" + source;
+            allProfiles.getAsJsonArray("entries").add(stateful("{id:'ic2:cable',Count:1b,tag:{type:" + type + "b,insulation:" + insulation + "b},Damage:" + type + "s}", target, "15", source++));
+        }
+        var absent = read(allProfiles);
+        check(absent.entries() == 32 && absent.unmapped() == 32 && absent.prices().isEmpty() && absent.denied().isEmpty(),
+                "All32 reviewed profiles parse but absent registered targets publish no fabricated values");
+    }
+
+
+    private static void pristineDeniedAdmission(Item defaults) throws IOException {
+        var entry=stateful("{id:'ic2:component_heat_exchanger',Count:1b,tag:{advDmg:0},Damage:0s}",DEFAULTS,"Infinity",186);
+        var mapped=read(schema3(entry));var pristine=new ItemStack(defaults);
+        var key=IndependentUuValueIndex.keyOf(pristine);
+        check(mapped.denied().contains(key)&&mapped.prices().isEmpty(),"R130 pristine Infinity excludes only its full target default");
+        check(pristine.get(DataComponents.CUSTOM_DATA).copyTag().getString("default_marker").equals("retained"),
+                "Explicit empty patch does not erase registered nonempty components");
+        var eligibility=new JsonObject();eligibility.addProperty("schema",2);eligibility.add("denied_scan_items",new JsonArray());
+        var stacks=new JsonArray();eligibility.add("denied_scan_stacks",stacks);
+        check(UuScanEligibility.read(new StringReader(eligibility.toString()),registries,mapped.denied()).isEmpty(),
+                "A known denial alone does not grant paid scan eligibility");
+        var admitted=new JsonObject();admitted.addProperty("target_item",DEFAULTS);admitted.addProperty("target_stack",entry.get("target_stack").getAsString());stacks.add(admitted);
+        check(UuScanEligibility.read(new StringReader(eligibility.toString()),registries,mapped.denied()).equals(java.util.Set.of(key)),
+                "Independent observed admission uses exactly the pristine complete target key");
+        var changed=pristine.copy();var state=pristine.get(DataComponents.CUSTOM_DATA).copyTag();state.putInt("unobserved_heat",1);
+        changed.set(DataComponents.CUSTOM_DATA,CustomData.of(state));
+        check(!mapped.denied().contains(IndependentUuValueIndex.keyOf(changed)),"One additional state cannot inherit default denial");
+        var bad=eligibility.deepCopy();bad.getAsJsonArray("denied_scan_stacks").get(0).getAsJsonObject().addProperty("target_stack",
+                "{id:'"+DEFAULTS+"',count:1,components:{'minecraft:custom_data':{default_marker:'retained',unobserved_heat:1}}}");
+        try{UuScanEligibility.read(new StringReader(bad.toString()),registries,mapped.denied());throw new AssertionError("Changed-state admission accepted");}
+        catch(IllegalArgumentException expected){check(true,"Changed-state eligibility is not inferred from item ID");}
+        entry.addProperty("raw_value","14");var finite=read(schema3(entry));
+        try{UuScanEligibility.read(new StringReader(eligibility.toString()),registries,finite.denied());throw new AssertionError("Finite identity admitted as denial");}
+        catch(IllegalArgumentException expected){check(true,"Finite anchors never become paid-failure identities");}
+    }
+
     public static void main(String[] args) throws Exception {
         net.neoforged.fml.loading.LoadingModList.of(List.of(), List.of(), List.of(), List.of(), Map.of());
         SharedConstants.tryDetectVersion(); Bootstrap.bootStrap();
@@ -207,6 +337,8 @@ public final class UuMappedCatalogContract {
         check(Path.of(UuMappedCatalog.class.getProtectionDomain().getCodeSource().getLocation().toURI()).toRealPath()
                 .equals(Path.of(args[0]).toRealPath()), "Use actual newly compiled mapped catalog class");
         successful(plain, defaults, other); invalidIdentities(); invalidSchemaAndPrices(); bounds(); explicitComponents(defaults);
+        typedLegacyProfiles(plain, defaults, other);
+        pristineDeniedAdmission(defaults);
         if (args.length > 1) {
             var resource = JsonParser.parseString(Files.readString(Path.of(args[1]))).getAsJsonObject();
             int finiteRows=0, deniedRows=0;
@@ -215,7 +347,7 @@ public final class UuMappedCatalogContract {
                 else finiteRows++;
             }
             check(finiteRows==EXPECTED_FINITE && deniedRows==EXPECTED_DENIED,
-                    "Frozen R109 resource has exactly 147 finite and 200 Infinity rows");
+                    "Frozen R133 resource has exactly 165 finite and 214 Infinity rows");
             try (var reader = Files.newBufferedReader(Path.of(args[1]))) {
                 var result = UuMappedCatalog.read(reader, registries);
                 check(result.entries() == EXPECTED_ENTRIES && result.unmapped() == result.entries(), "Actual reviewed resource parses; test registry does not pretend to contain SI items");

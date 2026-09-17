@@ -1,5 +1,5 @@
 {
-  "schema": 2,
+  "schema": 3,
   "data_version": 1343,
   "entries": [
     {
@@ -2105,6 +2105,230 @@
       "raw_value": "Infinity",
       "source_row": 2000061,
       "target_stack": "{count:1,id:\"mio_icif:armor/item_armor_quantum_boots\",components:{}}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:heat_storage\",Count:1b,tag:{advDmg:0},Damage:0s}",
+      "target_item": "mio_icif:reactor/item_reactor_collant_simple",
+      "raw_value": "Infinity",
+      "source_row": 1,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:reactor/item_reactor_collant_simple\"}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:tri_heat_storage\",Count:1b,tag:{advDmg:0},Damage:0s}",
+      "target_item": "mio_icif:reactor/item_reactor_collant_triple",
+      "raw_value": "Infinity",
+      "source_row": 4,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:reactor/item_reactor_collant_triple\"}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:hex_heat_storage\",Count:1b,tag:{advDmg:0},Damage:0s}",
+      "target_item": "mio_icif:reactor/item_reactor_coolant_six",
+      "raw_value": "Infinity",
+      "source_row": 6,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:reactor/item_reactor_coolant_six\"}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:advanced_heat_exchanger\",Count:1b,tag:{advDmg:0},Damage:0s}",
+      "target_item": "mio_icif:reactor/item_reactor_diamond_heat_switch",
+      "raw_value": "246489.87201311995",
+      "source_row": 21,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:reactor/item_reactor_diamond_heat_switch\"}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:advanced_heat_vent\",Count:1b,tag:{advDmg:0},Damage:0s}",
+      "target_item": "mio_icif:reactor/item_reactor_diamond_vent",
+      "raw_value": "Infinity",
+      "source_row": 22,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:reactor/item_reactor_diamond_vent\"}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:component_heat_exchanger\",Count:1b,tag:{advDmg:0},Damage:0s}",
+      "target_item": "mio_icif:reactor/item_reactor_heat_switch_spread",
+      "raw_value": "Infinity",
+      "source_row": 186,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:reactor/item_reactor_heat_switch_spread\"}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:cable\",Count:1b,tag:{type:0b,insulation:0b},Damage:0s}",
+      "target_item": "mio_icif:wiring/cable/block_cable_o",
+      "raw_value": "30.169289965223484",
+      "source_row": 203,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:wiring/cable/block_cable_o\"}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:dual_mox_fuel_rod\",Count:1b,tag:{advDmg:0},Damage:0s}",
+      "target_item": "mio_icif:reactor/item_reactor_mox_dual",
+      "raw_value": "Infinity",
+      "source_row": 281,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:reactor/item_reactor_mox_dual\"}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:dual_uranium_fuel_rod\",Count:1b,tag:{advDmg:0},Damage:0s}",
+      "target_item": "mio_icif:reactor/item_reactor_uranium_dual",
+      "raw_value": "Infinity",
+      "source_row": 282,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:reactor/item_reactor_uranium_dual\"}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:cable\",Count:1b,tag:{type:5b,insulation:0b},Damage:5s}",
+      "target_item": "mio_icif:wiring/block_eu_detector_cable",
+      "raw_value": "Infinity",
+      "source_row": 285,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:wiring/block_eu_detector_cable\"}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:cable\",Count:1b,tag:{type:6b,insulation:0b},Damage:6s}",
+      "target_item": "mio_icif:wiring/block_eu_splitter_cable",
+      "raw_value": "Infinity",
+      "source_row": 287,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:wiring/block_eu_splitter_cable\"}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:mox_fuel_rod\",Count:1b,tag:{advDmg:0},Damage:0s}",
+      "target_item": "mio_icif:reactor/item_reactor_mox_simple",
+      "raw_value": "93200.192643134",
+      "source_row": 344,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:reactor/item_reactor_mox_simple\"}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:uranium_fuel_rod\",Count:1b,tag:{advDmg:0},Damage:0s}",
+      "target_item": "mio_icif:reactor/item_reactor_uranium_simple",
+      "raw_value": "3403.310654298808",
+      "source_row": 345,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:reactor/item_reactor_uranium_simple\"}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:cable\",Count:1b,tag:{type:1b,insulation:0b},Damage:1s}",
+      "target_item": "mio_icif:wiring/cable/block_glass_cable",
+      "raw_value": "1196.0337099699293",
+      "source_row": 352,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:wiring/cable/block_glass_cable\"}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:cable\",Count:1b,tag:{type:2b,insulation:0b},Damage:2s}",
+      "target_item": "mio_icif:wiring/cable/block_gold_cable",
+      "raw_value": "135.62745429776763",
+      "source_row": 357,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:wiring/cable/block_gold_cable\"}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:cable\",Count:1b,tag:{type:3b,insulation:0b},Damage:3s}",
+      "target_item": "mio_icif:wiring/cable/block_iron_cable",
+      "raw_value": "22.159104497159554",
+      "source_row": 402,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:wiring/cable/block_iron_cable\"}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:heat_exchanger\",Count:1b,tag:{advDmg:0},Damage:0s}",
+      "target_item": "mio_icif:reactor/item_reactor_heat_switch",
+      "raw_value": "61516.39915277362",
+      "source_row": 408,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:reactor/item_reactor_heat_switch\"}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:heat_vent\",Count:1b,tag:{advDmg:0},Damage:0s}",
+      "target_item": "mio_icif:reactor/item_reactor_vent",
+      "raw_value": "Infinity",
+      "source_row": 409,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:reactor/item_reactor_vent\"}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:cable\",Count:1b,tag:{type:0b,insulation:1b},Damage:0s}",
+      "target_item": "mio_icif:wiring/cable/block_cable",
+      "raw_value": "10102.619289965223",
+      "source_row": 421,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:wiring/cable/block_cable\"}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:cable\",Count:1b,tag:{type:2b,insulation:1b},Damage:2s}",
+      "target_item": "mio_icif:wiring/cable/block_gold_cable_1",
+      "raw_value": "10208.077454297767",
+      "source_row": 422,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:wiring/cable/block_gold_cable_1\"}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:cable\",Count:1b,tag:{type:3b,insulation:1b},Damage:3s}",
+      "target_item": "mio_icif:wiring/cable/block_iron_cable_1",
+      "raw_value": "10094.609104497158",
+      "source_row": 423,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:wiring/cable/block_iron_cable_1\"}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:cable\",Count:1b,tag:{type:4b,insulation:1b},Damage:4s}",
+      "target_item": "mio_icif:wiring/cable/block_tin_cable_1",
+      "raw_value": "10106.789723625272",
+      "source_row": 424,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:wiring/cable/block_tin_cable_1\"}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:lzh_condensator\",Count:1b,tag:{advDmg:0},Damage:0s}",
+      "target_item": "mio_icif:reactor/item_reactor_condensator_lap",
+      "raw_value": "Infinity",
+      "source_row": 481,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:reactor/item_reactor_condensator_lap\"}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:neutron_reflector\",Count:1b,tag:{advDmg:0},Damage:0s}",
+      "target_item": "mio_icif:reactor/item_reactor_reflector",
+      "raw_value": "506.1603544565176",
+      "source_row": 608,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:reactor/item_reactor_reflector\"}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:overclocked_heat_vent\",Count:1b,tag:{advDmg:0},Damage:0s}",
+      "target_item": "mio_icif:reactor/item_reactor_golden_vent",
+      "raw_value": "Infinity",
+      "source_row": 641,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:reactor/item_reactor_golden_vent\"}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:quad_mox_fuel_rod\",Count:1b,tag:{advDmg:0},Damage:0s}",
+      "target_item": "mio_icif:reactor/item_reactor_mox_quad",
+      "raw_value": "373187.0288996266",
+      "source_row": 714,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:reactor/item_reactor_mox_quad\"}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:quad_uranium_fuel_rod\",Count:1b,tag:{advDmg:0},Damage:0s}",
+      "target_item": "mio_icif:reactor/item_reactor_uranium_quad",
+      "raw_value": "13999.50094428582",
+      "source_row": 715,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:reactor/item_reactor_uranium_quad\"}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:rsh_condensator\",Count:1b,tag:{advDmg:0},Damage:0s}",
+      "target_item": "mio_icif:reactor/item_reactor_condensator",
+      "raw_value": "Infinity",
+      "source_row": 723,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:reactor/item_reactor_condensator\"}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:reactor_heat_exchanger\",Count:1b,tag:{advDmg:0},Damage:0s}",
+      "target_item": "mio_icif:reactor/item_reactor_heat_switch_core",
+      "raw_value": "62142.79544527232",
+      "source_row": 741,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:reactor/item_reactor_heat_switch_core\"}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:reactor_heat_vent\",Count:1b,tag:{advDmg:0},Damage:0s}",
+      "target_item": "mio_icif:reactor/item_reactor_vent_core",
+      "raw_value": "Infinity",
+      "source_row": 742,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:reactor/item_reactor_vent_core\"}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:thick_neutron_reflector\",Count:1b,tag:{advDmg:0},Damage:0s}",
+      "target_item": "mio_icif:reactor/item_reactor_thick_reflector",
+      "raw_value": "2416.514100637756",
+      "source_row": 892,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:reactor/item_reactor_thick_reflector\"}"
+    },
+    {
+      "legacy_stack": "{id:\"ic2:cable\",Count:1b,tag:{type:4b,insulation:0b},Damage:4s}",
+      "target_item": "mio_icif:wiring/cable/block_tin_cable",
+      "raw_value": "34.33972362527249",
+      "source_row": 894,
+      "target_stack": "{components:{},count:1,id:\"mio_icif:wiring/cable/block_tin_cable\"}"
     }
   ]
 }
