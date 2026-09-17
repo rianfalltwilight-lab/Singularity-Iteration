@@ -34,13 +34,12 @@ import org.jetbrains.annotations.Nullable;
     private static final int DATA_MAX_PROGRESS = 1;
     private static final int DATA_IS_WORKING = 2;
     private static final int DATA_ENERGY = 3;
-    private static final int DATA_MAX_ENERGY = 4;
-    private static final int DATA_SCAN_COMPLETE = 5;
-    private static final int DATA_STATE = 6;
-    private static final int DATA_UU_COST_HI = 7;
-    private static final int DATA_UU_COST_LO = 8;
-    private static final int DATA_EU_COST = 9;
-    private static final int DATA_COUNT = 10;
+    private static final int DATA_MAX_ENERGY = 5;
+    private static final int DATA_SCAN_COMPLETE = 7;
+    private static final int DATA_STATE = 8;
+    private static final int DATA_UU_COST = 9;
+    private static final int DATA_EU_COST = 13;
+    private static final int DATA_COUNT = 15;
 
     public ScannerElcMenu(int containerId, Inventory playerInventory) {
         this(containerId, playerInventory, null, null);
@@ -64,13 +63,12 @@ import org.jetbrains.annotations.Nullable;
         this.data.set(DATA_PROGRESS, progress);
         this.data.set(DATA_MAX_PROGRESS, maxProgress);
         this.data.set(DATA_IS_WORKING, isWorking ? 1 : 0);
-        this.data.set(DATA_ENERGY, energy);
-        this.data.set(DATA_MAX_ENERGY, maxEnergy);
+        dev.scex.si.processing.PatternMenuData.write(data,DATA_ENERGY,2,energy);
+        dev.scex.si.processing.PatternMenuData.write(data,DATA_MAX_ENERGY,2,maxEnergy);
         this.data.set(DATA_SCAN_COMPLETE, scanComplete ? 1 : 0);
         this.data.set(DATA_STATE, state);
-        this.data.set(DATA_UU_COST_HI, uuCostHi);
-        this.data.set(DATA_UU_COST_LO, uuCostLo);
-        this.data.set(DATA_EU_COST, euCost);
+        dev.scex.si.processing.PatternMenuData.write(data,DATA_UU_COST,4,((long)uuCostHi<<32)|(uuCostLo&0xFFFFFFFFL));
+        dev.scex.si.processing.PatternMenuData.write(data,DATA_EU_COST,2,euCost);
     }
 
     public int getProgress() {
@@ -86,11 +84,11 @@ import org.jetbrains.annotations.Nullable;
     }
 
     public int getEnergy() {
-        return this.data.get(DATA_ENERGY);
+        return (int)dev.scex.si.processing.PatternMenuData.read(data,DATA_ENERGY,2);
     }
 
     public int getMaxEnergy() {
-        return this.data.get(DATA_MAX_ENERGY);
+        return (int)dev.scex.si.processing.PatternMenuData.read(data,DATA_MAX_ENERGY,2);
     }
 
     public boolean isScanComplete() {
@@ -102,17 +100,18 @@ import org.jetbrains.annotations.Nullable;
     }
 
     public double getUuCost() {
-        long bits = ((long) this.data.get(DATA_UU_COST_HI) << 32) | (this.data.get(DATA_UU_COST_LO) & 0xFFFFFFFFL);
+        long bits = dev.scex.si.processing.PatternMenuData.read(data,DATA_UU_COST,4);
         return Double.longBitsToDouble(bits);
     }
 
     public int getEuCost() {
-        return this.data.get(DATA_EU_COST);
+        return (int)dev.scex.si.processing.PatternMenuData.read(data,DATA_EU_COST,2);
     }
 
     @Override
     public boolean clickMenuButton(Player player, int buttonId) {
-        if (this.blockEntity instanceof mio_icif_scanner_elc scanner) {
+        if (this.blockEntity instanceof mio_icif_scanner_elc scanner
+                && dev.scex.si.processing.MachineMenuAccess.action(player,this,scanner)) {
             switch (buttonId) {
                 case 0: // 删除/取消按钮
                     scanner.discardResult();
@@ -123,7 +122,12 @@ import org.jetbrains.annotations.Nullable;
                     return false;
             }
         }
-        return super.clickMenuButton(player, buttonId);
+        return false;
+    }
+
+    @Override public boolean stillValid(Player player) {
+        return player.level().isClientSide() || this.blockEntity instanceof mio_icif_scanner_elc scanner
+            && dev.scex.si.processing.MachineMenuAccess.valid(player,scanner);
     }
 
     @Override

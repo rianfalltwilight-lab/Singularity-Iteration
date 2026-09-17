@@ -56,6 +56,7 @@ public class mio_icif_Kinetic_Generator_elc extends mio_icif_producer implements
 
     // 动能存储（用于能力系统注册，实际动能直接输出到前方方块）
     private final KineticStorage kineticStorage;
+    private final dev.scex.si.energy.ElectricMotorKinetics scexMotor = new dev.scex.si.energy.ElectricMotorKinetics(this);
 
     /**
      * 构造函
@@ -78,6 +79,23 @@ public class mio_icif_Kinetic_Generator_elc extends mio_icif_producer implements
      * 1 个马= 100 EU/t0 个马= 1000 EU/t
      * 能量转换比例 EU = 1 KU
      */
+    @Override
+    protected com.singularity_iteration.mio_icif.Blocks.entity.slot.MachineItemHandler createItemHandler(SlotLayout layout) {
+        var handler = new com.singularity_iteration.mio_icif.Blocks.entity.slot.MachineItemHandler(layout) {
+            @Override public int getSlotLimit(int slot) {
+                return slot >= MOTOR_SLOT_START && slot < TOTAL_SLOTS ? 1 : super.getSlotLimit(slot);
+            }
+            @Override protected void onContentsChanged(int slot) { mio_icif_Kinetic_Generator_elc.this.setChanged(); }
+        };
+        handler.setValidator(this);
+        return handler;
+    }
+
+    private void scexConvertKinetic() { isWorking = scexMotor.tick(); }
+    public long scexStoredKinetic() { return scexMotor.stored(); }
+    public long scexUncertainKinetic() { return scexMotor.uncertain(); }
+    public boolean scexKineticHeld() { return scexMotor.held(); }
+
     private long getCurrentEnergyConsumption() {
         return getMotorCount() * 100L;
     }
@@ -102,6 +120,8 @@ public class mio_icif_Kinetic_Generator_elc extends mio_icif_producer implements
 
     @Override
     protected boolean canWork() {
+        if (energyStorage.scexNetworkControlled()) return true; // The paid source buffer exists even with zero motors.
+
         // 需要至少一个马达、有电、且前方有需要动能的机器才能工作
         return getMotorCount() > 0 && hasEnoughEnergy() && hasKineticConsumerInFront();
     }
@@ -133,6 +153,7 @@ public class mio_icif_Kinetic_Generator_elc extends mio_icif_producer implements
 
     @Override
     protected void doWork() {
+        if (energyStorage.scexNetworkControlled()) { scexConvertKinetic(); return; }
         // 消耗能
         if (consumeEnergy()) {
             // 根据马达数量计算动能产生
@@ -243,7 +264,7 @@ public class mio_icif_Kinetic_Generator_elc extends mio_icif_producer implements
         for (int i = MOTOR_SLOT_START; i < TOTAL_SLOTS; i++) {
             ItemStack stack = itemHandler.getStackInSlot(i);
             if (stack.getItem() == mio_icif_resources.MOTOR.get()) {
-                count += stack.getCount();
+                count++;
             }
         }
         return count;
@@ -350,11 +371,25 @@ public class mio_icif_Kinetic_Generator_elc extends mio_icif_producer implements
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
+        scexMotor.save(tag);
     }
 
     @Override
     public void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
+        scexMotor.load(tag);
+    }
+
+    @Override
+    public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
+        var tag = super.getUpdateTag(registries);
+        scexMotor.save(tag);
+        return tag;
+    }
+    @Override
+    public void handleUpdateTag(CompoundTag tag, HolderLookup.Provider registries) {
+        super.handleUpdateTag(tag, registries);
+        scexMotor.load(tag);
     }
 
     @Override
@@ -373,6 +408,7 @@ public class mio_icif_Kinetic_Generator_elc extends mio_icif_producer implements
      */
     @Nullable
     public IMioIcifCapabilities.IKineticStorage getKineticStorageCapability(@Nullable Direction side) {
+        if (energyStorage.scexNetworkControlled()) return scexMotor.port(side);
         if (side != null) {
             Direction facing = getBlockState().getValue(com.singularity_iteration.mio_icif.Blocks.mio_icif_entity_block.FACING);
             if (side == facing) {

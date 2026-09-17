@@ -1,5 +1,7 @@
 package com.singularity_iteration.mio_icif.energy.kinetic;
 
+import dev.scex.energy.BoundedUnits;
+
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.LongTag;
 import net.minecraft.nbt.Tag;
@@ -26,11 +28,11 @@ public class KineticStorage implements IKineticStorage, INBTSerializable<Tag> {
     
     public KineticStorage(long capacity, long maxReceive, long maxExtract, 
                           int maxRPM, float frictionFactor) {
-        this.capacity = capacity;
-        this.maxReceive = maxReceive;
-        this.maxExtract = maxExtract;
-        this.maxRPM = maxRPM;
-        this.frictionFactor = frictionFactor;
+        this.capacity = Math.max(0, capacity);
+        this.maxReceive = Math.max(0, maxReceive);
+        this.maxExtract = Math.max(0, maxExtract);
+        this.maxRPM = Math.max(0, maxRPM);
+        this.frictionFactor = BoundedUnits.nonNegativeFactor(frictionFactor);
         this.kinetic = 0;
     }
     
@@ -41,7 +43,7 @@ public class KineticStorage implements IKineticStorage, INBTSerializable<Tag> {
     public KineticStorage(long capacity, long maxReceive, long maxExtract, long kinetic,
                           int maxRPM, float frictionFactor) {
         this(capacity, maxReceive, maxExtract, maxRPM, frictionFactor);
-        this.kinetic = Math.max(0, Math.min(capacity, kinetic));
+        setKinetic(kinetic);
     }
     
     @Override
@@ -105,27 +107,22 @@ public class KineticStorage implements IKineticStorage, INBTSerializable<Tag> {
     
     @Override
     public int getRPM() {
-        if (this.capacity == 0) return 0;
-        long kineticPercent = (this.kinetic * 100) / this.capacity;
-        return (int)((kineticPercent * this.maxRPM) / 100);
+        return BoundedUnits.gauge(this.kinetic, this.capacity, 0, this.maxRPM);
     }
     
     public void setKinetic(long kinetic) {
-        this.kinetic = Math.max(0, Math.min(this.capacity, kinetic));
+        this.kinetic = BoundedUnits.clamp(kinetic, this.capacity);
     }
     
     public void applyFrictionLoss() {
-        if (this.kinetic > 0) {
-            long loss = (long)(this.kinetic * this.frictionFactor);
-            if (loss < 1 && this.kinetic > 0) {
-                loss = 1;
-            }
-            this.kinetic = Math.max(0, this.kinetic - loss);
-        }
+        this.kinetic -= getKineticLossPerTick();
     }
 
+    @Override
+    public long getKineticLossPerTick() { return BoundedUnits.friction(this.kinetic, this.frictionFactor); }
+
     public long generateKineticInternal(long amount, boolean simulate) {
-        long kineticGenerated = Math.min(this.capacity - this.kinetic, amount);
+        long kineticGenerated = BoundedUnits.receive(this.kinetic, this.capacity, amount, Long.MAX_VALUE);
         if (!simulate) {
             this.kinetic += kineticGenerated;
         }
@@ -140,9 +137,9 @@ public class KineticStorage implements IKineticStorage, INBTSerializable<Tag> {
     @Override
     public void deserializeNBT(HolderLookup.Provider provider, Tag nbt) {
         if (nbt instanceof LongTag longNbt) {
-            this.kinetic = longNbt.getAsLong();
+            setKinetic(longNbt.getAsLong());
         } else if (nbt instanceof net.minecraft.nbt.IntTag intNbt) {
-            this.kinetic = intNbt.getAsInt();
+            setKinetic(intNbt.getAsInt());
         }
     }
 }

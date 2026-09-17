@@ -63,6 +63,7 @@ public class mio_icif_Semifluid_generator extends mio_icif_Energy_Generator {
 
     // 流体存储
     protected final FluidTank fuelTank;
+    private long scexFuelCredit;
 
     // 当前正在发电的燃料量（mb）
     private int currentFuelBurning = 0;
@@ -85,7 +86,12 @@ public class mio_icif_Semifluid_generator extends mio_icif_Energy_Generator {
 
         // 初始化燃料存储，只接受沼气
         this.fuelTank = new FluidTank(FUEL_CAPACITY, fluidStack ->
-            fluidStack.getFluid() == mio_icif_fluids.BIOGAS.get());
+            fluidStack.getFluid() == mio_icif_fluids.BIOGAS.get()) {
+            @Override protected void onContentsChanged() {
+                if (energyStorage.scexNetworkControlled()) dev.scex.si.energy.ContainerToTank.markUnsaved(mio_icif_Semifluid_generator.this);
+                else mio_icif_Semifluid_generator.this.setChanged();
+            }
+        };
     }
 
     /**
@@ -114,6 +120,7 @@ public class mio_icif_Semifluid_generator extends mio_icif_Energy_Generator {
      * 将燃料桶/单元中的燃料转移到流体存储，空桶/空单元放入空桶输出槽
      */
     private void handleFuelBucketSlot() {
+        if (energyStorage.scexNetworkControlled()) { scexFillFuelContainer(); return; }
         ItemStack fuelBucketStack = itemHandler.getStackInSlot(FUEL_BUCKET_SLOT);
         if (fuelBucketStack.isEmpty() || !isFuelBucket(fuelBucketStack)) {
             return;
@@ -231,6 +238,10 @@ public class mio_icif_Semifluid_generator extends mio_icif_Energy_Generator {
      */
     @Override
     protected void chargeItems() {
+        if (energyStorage.scexNetworkControlled()) {
+            if (dev.scex.si.energy.SolarItemCharging.chargeRange(itemHandler, BATTERY_SLOT, 1, energyStorage, getItemAPI())) setChanged();
+            return;
+        }
         ItemStack chargeStack = itemHandler.getStackInSlot(BATTERY_SLOT);
         if (chargeStack.isEmpty()) {
             return;
@@ -272,6 +283,7 @@ public class mio_icif_Semifluid_generator extends mio_icif_Energy_Generator {
         if (level.isClientSide()) {
             return;
         }
+        if (blockEntity.energyStorage.scexNetworkControlled()) { blockEntity.scexTickFuel(level, pos); return; }
 
         // 记录之前的燃烧状态
         boolean wasBurning = blockEntity.isBurning();
@@ -443,6 +455,7 @@ public class mio_icif_Semifluid_generator extends mio_icif_Energy_Generator {
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
+        if (energyStorage.scexNetworkControlled() || scexFuelCredit > 0) tag.putLong("scex_fuel_credit_eu", scexFuelCredit);
         // 保存燃料数据
         tag.put("FuelTank", fuelTank.writeToNBT(registries, new CompoundTag()));
         tag.putInt("CurrentFuelBurning", currentFuelBurning);
@@ -458,6 +471,7 @@ public class mio_icif_Semifluid_generator extends mio_icif_Energy_Generator {
         }
         currentFuelBurning = tag.getInt("CurrentFuelBurning");
         currentFuelEnergyGenerated = tag.getInt("CurrentFuelEnergyGenerated");
+        scexReadFuelCredit(tag);
     }
 
     @Nullable
@@ -469,6 +483,7 @@ public class mio_icif_Semifluid_generator extends mio_icif_Energy_Generator {
     @Override
     public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
         CompoundTag tag = super.getUpdateTag(registries);
+        if (energyStorage.scexNetworkControlled() || scexFuelCredit > 0) tag.putLong("scex_fuel_credit_eu", scexFuelCredit);
         tag.put("FuelTank", fuelTank.writeToNBT(registries, new CompoundTag()));
         tag.putInt("CurrentFuelBurning", currentFuelBurning);
         tag.putInt("CurrentFuelEnergyGenerated", currentFuelEnergyGenerated);
@@ -483,6 +498,7 @@ public class mio_icif_Semifluid_generator extends mio_icif_Energy_Generator {
         }
         currentFuelBurning = tag.getInt("CurrentFuelBurning");
         currentFuelEnergyGenerated = tag.getInt("CurrentFuelEnergyGenerated");
+        scexReadFuelCredit(tag);
     }
 
     // ==================== MenuProvider 接口实现 ====================
@@ -509,5 +525,46 @@ public class mio_icif_Semifluid_generator extends mio_icif_Energy_Generator {
             mio_icif_block_entities.SEMIFLUID_GENERATOR_ENTITY_TYPE.get(),
             (be, side) -> be.getFuelHandlerCapability(side)
         );
+    }
+
+    private void scexFillFuelContainer() {
+        var input = itemHandler.getStackInSlot(FUEL_BUCKET_SLOT);
+        if (input.isEmpty() || !isFuelBucket(input)) return;
+        var api = getItemAPI();
+        boolean cell = api.isFluidCell(input);
+        var fluid = mio_icif_fluids.BIOGAS.get();
+        if (fluid == null) return;
+        var contents = cell ? api.getFluidCellContent(input.copyWithCount(1)).copy()
+            : new FluidStack(fluid, FUEL_PER_BUCKET);
+        var empty = cell ? api.getFluidCellEmptyContainer(input.copyWithCount(1)) : new ItemStack(Items.BUCKET);
+        if (contents.isEmpty() || contents.getFluid() != fluid || empty.isEmpty()) return;
+        if (dev.scex.si.energy.ContainerToTank.transfer(itemHandler, FUEL_BUCKET_SLOT, EMPTY_BUCKET_SLOT, fuelTank, contents, empty)) setChanged();
+    }
+
+    private void scexTickFuel(Level level, BlockPos pos) {
+        boolean wasBurning = burnTime > 0;
+        handleFuelBucketSlot();
+        chargeItems();
+        var step = dev.scex.si.energy.FluidFuelGeneration.tick(fuelTank, energyStorage,
+            scexFuelCredit, 1, ENERGY_PER_BUCKET / FUEL_PER_BUCKET, ENERGY_GENERATION_RATE);
+        scexFuelCredit = step.bufferedEnergy();
+        burnTime = step.generated() > 0 ? 1 : 0;
+        burnDuration = 1;
+        if (wasBurning != (burnTime > 0)) {
+            var state = level.getBlockState(pos);
+            if (state.hasProperty(mio_icif_Block_Semifluid_Generator.ACTIVE)) level.setBlock(pos, state.setValue(mio_icif_Block_Semifluid_Generator.ACTIVE, burnTime > 0), 3);
+        }
+        setChanged();
+    }
+
+    private void scexReadFuelCredit(CompoundTag tag) {
+        if (tag.contains("scex_fuel_credit_eu", net.minecraft.nbt.Tag.TAG_LONG)) {
+            scexFuelCredit = Math.clamp(tag.getLong("scex_fuel_credit_eu"), 0L, ENERGY_PER_BUCKET);
+        } else if (energyStorage.scexNetworkControlled()) {
+            scexFuelCredit = dev.scex.energy.ConsumableGeneration.legacyCredit(currentFuelBurning,
+                currentFuelEnergyGenerated, ENERGY_PER_BUCKET / FUEL_PER_BUCKET, FUEL_PER_BUCKET);
+            currentFuelBurning = 0;
+            currentFuelEnergyGenerated = 0;
+        }
     }
 }

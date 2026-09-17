@@ -5,6 +5,7 @@ import com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_producer;
 import com.singularity_iteration.mio_icif.Blocks.entity.slot.SlotLayout;
 import com.singularity_iteration.mio_icif.Items.Normal.mio_icif_normal;
 import com.singularity_iteration.mio_icif.energy.EnergyUnit.CableTier;
+import dev.scex.si.processing.RecipeSlots;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
@@ -48,6 +49,7 @@ public class mio_icif_recycler_elc extends mio_icif_producer {
     public static final long DEFAULT_ENERGY_PER_TICK = 1L; // 每tick耗电（1 EU），对应 IC2 原版
 
     private static final double RECYCLE_CHANCE = 0.125;
+    private int scexRecycleOutcome = -1;
 
     private final ContainerData containerData = new ContainerData() {
         @Override
@@ -142,7 +144,7 @@ public class mio_icif_recycler_elc extends mio_icif_producer {
             return false;
         }
 
-        if (!hasEnoughEnergy()) {
+        if (getEffectiveEnergyPerTick() <= 0 || progress < maxProgress && !hasEnoughEnergy()) {
             return false;
         }
 
@@ -154,75 +156,39 @@ public class mio_icif_recycler_elc extends mio_icif_producer {
     }
 
     private boolean hasOutputSpace() {
-        ItemStack scrap = new ItemStack(mio_icif_normal.SCRAP.get());
-        
-        ItemStack output = itemHandler.getStackInSlot(OUTPUT_SLOT);
-        if (output.isEmpty()) {
-            return true;
-        }
-        if (ItemStack.isSameItem(output, scrap) && output.getCount() < output.getMaxStackSize()) {
-            return true;
-        }
-        return false;
+        return RecipeSlots.prepare(itemHandler, INPUT_SLOT, 1, new int[]{OUTPUT_SLOT},
+            java.util.List.of(new ItemStack(mio_icif_normal.SCRAP.get()))).isPresent();
     }
 
     @Override
     protected void doWork() {
-        if (!consumeEnergy()) {
-            stopWork();
-            return;
+        if (!canWork()) { stopWork(); return; }
+        if (progress < maxProgress) {
+            if (!consumeEnergy()) { stopWork(); return; }
+            progress = (int) Math.min(maxProgress, (long) progress + getProgressPerTick());
         }
-
         isWorking = true;
-
-        if (progress >= maxProgress) {
-            finishRecycling();
-        }
+        if (progress >= maxProgress) finishRecycling();
     }
+
+    @Override
+    protected void updateProgress() { /* doWork owns the paid increment. */ }
 
     private void finishRecycling() {
-        ItemStack input = itemHandler.getStackInSlot(INPUT_SLOT);
-        if (input.isEmpty()) {
-            stopWork();
-            return;
-        }
-
-        if (level == null) {
-            stopWork();
-            return;
-        }
-
-        RandomSource random = level.random;
-        boolean success = random.nextDouble() < RECYCLE_CHANCE;
-
-        if (success) {
-            ItemStack scrap = new ItemStack(mio_icif_normal.SCRAP.get());
-            insertScrap(scrap);
-        }
-
-        input.shrink(1);
+        if (level == null || !hasOutputSpace()) { stopWork(); return; }
+        if (scexRecycleOutcome < 0) scexRecycleOutcome = level.random.nextDouble() < RECYCLE_CHANCE ? 1 : 0;
+        var operation = scexRecycleOutcome == 1 ? RecipeSlots.prepare(itemHandler, INPUT_SLOT, 1,
+            new int[]{OUTPUT_SLOT}, java.util.List.of(new ItemStack(mio_icif_normal.SCRAP.get())))
+            : RecipeSlots.consumeOnly(itemHandler, INPUT_SLOT, 1);
+        if (operation.isEmpty()) { stopWork(); return; }
+        int completed = progress, outcome = scexRecycleOutcome;
+        progress = 0; scexRecycleOutcome = -1;
+        if (!operation.get().commit()) { progress = completed; scexRecycleOutcome = outcome; stopWork(); return; }
         finishWork();
-
-        if (canWork()) {
-            isWorking = true;
-        }
+        setChanged();
     }
 
-    private void insertScrap(ItemStack scrap) {
-        ItemStack output = itemHandler.getStackInSlot(OUTPUT_SLOT);
-        if (output.isEmpty()) {
-            itemHandler.setStackInSlot(OUTPUT_SLOT, scrap.copy());
-            return;
-        }
-        if (ItemStack.isSameItem(output, scrap)) {
-            int newCount = output.getCount() + scrap.getCount();
-            if (newCount <= output.getMaxStackSize()) {
-                output.grow(scrap.getCount());
-                itemHandler.setStackInSlot(OUTPUT_SLOT, output);
-                return;
-            }
-        }
-    }
+
 
     @Override
     public Component getDisplayName() {
@@ -242,13 +208,17 @@ public class mio_icif_recycler_elc extends mio_icif_producer {
         super.saveAdditional(tag, registries);
         tag.put("Items", itemHandler.serializeNBT(registries));
         tag.putInt("Progress", progress);
+        tag.putInt("scex_recycle_outcome", scexRecycleOutcome);
     }
 
     @Override
     public void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
-        itemHandler.deserializeNBT(registries, tag.getCompound("Items"));
-        progress = tag.getInt("Progress");
+        if (!tag.contains("inventory") && tag.contains("Items")) itemHandler.deserializeNBT(registries, tag.getCompound("Items"));
+        if (!tag.contains("progress") && tag.contains("Progress")) progress = tag.getInt("Progress");
+        progress = Math.max(0, Math.min(maxProgress, progress));
+        int outcome = tag.contains("scex_recycle_outcome") ? tag.getInt("scex_recycle_outcome") : -1;
+        scexRecycleOutcome = outcome >= 0 && outcome <= 1 ? outcome : -1;
     }
 
     public static void tick(Level level, BlockPos pos, BlockState state, mio_icif_recycler_elc blockEntity) {

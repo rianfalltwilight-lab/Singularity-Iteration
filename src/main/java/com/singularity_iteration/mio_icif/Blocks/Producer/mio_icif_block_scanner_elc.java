@@ -66,6 +66,10 @@ public class mio_icif_block_scanner_elc extends mio_icif_entity_block {
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hitResult) {
         if (!level.isClientSide()) {
             BlockEntity blockEntity = level.getBlockEntity(pos);
+            if(blockEntity instanceof mio_icif_scanner_elc scanner&&scanner.hasHeldScanData()) {
+                player.displayClientMessage(Component.literal("扫描机已暂停：存档或扣费记录需要核对，拆除会保留完整数据。"),false);
+                return InteractionResult.CONSUME;
+            }
             if (blockEntity instanceof MenuProvider) {
                 player.openMenu((MenuProvider) blockEntity);
             } else {
@@ -79,17 +83,24 @@ public class mio_icif_block_scanner_elc extends mio_icif_entity_block {
     protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
         if (state.getBlock() != newState.getBlock()) {
             BlockEntity blockEntity = level.getBlockEntity(pos);
-            if (blockEntity instanceof mio_icif_scanner_elc scanner) {
-                // 掉落物品栏中的物�
-            for (int i = 0; i < scanner.getItemHandler().getSlots(); i++) {
-                    ItemStack stack = scanner.getItemHandler().getStackInSlot(i);
-                    if (!stack.isEmpty()) {
-                        Containers.dropItemStack(level, pos.getX(), pos.getY(), pos.getZ(), stack);
-                    }
+            if (blockEntity instanceof mio_icif_scanner_elc scanner&&scanner.hasStoredScanData()) {
+                if(!level.isClientSide()) {
+                    var packed=new ItemStack(this);
+                    packed.set(net.minecraft.core.component.DataComponents.BLOCK_ENTITY_DATA,
+                        net.minecraft.world.item.component.CustomData.of(scanner.saveWithId(level.registryAccess())));
+                    level.addFreshEntity(new net.minecraft.world.entity.item.ItemEntity(level,pos.getX()+.5,pos.getY()+.5,pos.getZ()+.5,packed));
                 }
+                level.removeBlockEntity(pos);
             }
             super.onRemove(state, level, pos, newState, movedByPiston);
         }
+    }
+
+    @Override
+    public java.util.List<ItemStack> getDrops(BlockState state,net.minecraft.world.level.storage.loot.LootParams.Builder params) {
+        var tile=params.getOptionalParameter(net.minecraft.world.level.storage.loot.parameters.LootContextParams.BLOCK_ENTITY);
+        if(tile instanceof mio_icif_scanner_elc scanner&&scanner.hasStoredScanData())return java.util.List.of();
+        return super.getDrops(state,params);
     }
 
     @Override

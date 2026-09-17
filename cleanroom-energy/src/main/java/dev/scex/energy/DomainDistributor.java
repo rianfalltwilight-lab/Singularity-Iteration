@@ -32,10 +32,12 @@ public final class DomainDistributor {
 
     /** Sources use global IDs in registration order; route/receiver IDs are shared. */
     public static final class Domain {
-        private final int[] sources;
-        private final List<RouteCosts> routes;
-        private final int[][] priorities;
-        private final boolean sharedContacts;
+        // Package access for the independently owned fractional planner. The
+        // public constructor still copies every caller-owned array.
+        final int[] sources;
+        final List<RouteCosts> routes;
+        final int[][] priorities;
+        final boolean sharedContacts;
 
         public Domain(int[] sourceIds, List<? extends RouteCosts> sourceRoutes, int[][] receiverPriorities) {
             this(sourceIds, sourceRoutes, receiverPriorities, false);

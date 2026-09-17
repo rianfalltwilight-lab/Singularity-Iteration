@@ -53,6 +53,8 @@ public class mio_icif_solid_heat_generator extends com.singularity_iteration.mio
 
     // 燃烧时间
     private int burnTime;
+    private long scexHeatCredit;
+    private boolean scexAshPending;
     // 最大燃烧时间
     private int maxBurnTime;
 
@@ -162,7 +164,55 @@ public class mio_icif_solid_heat_generator extends com.singularity_iteration.mio
     /**
      * 处理燃烧逻辑
      */
+    private boolean scexStoreAsh(boolean simulate) {
+        var before = itemHandler.getStackInSlot(ASH_SLOT).copy();
+        var ash = new ItemStack(mio_icif_resources.ASH.get());
+        int limit = Math.min(itemHandler.getSlotLimit(ASH_SLOT), ash.getMaxStackSize());
+        if (limit < 1 || !before.isEmpty() && (!ItemStack.isSameItemSameComponents(before, ash) || before.getCount() >= limit)) return false;
+        if (simulate) return true;
+        var after = before.isEmpty() ? ash : before.copyWithCount(before.getCount() + 1);
+        scexAshPending = false;
+        if (!itemHandler.scexCommitSlots(new int[]{ASH_SLOT}, new ItemStack[]{before}, new ItemStack[]{after})) {
+            scexAshPending = true; return false;
+        }
+        return true;
+    }
+
+    private void scexBurnSolid() {
+        boolean previousWorking = isWorking;
+        long previousCredit = scexHeatCredit;
+        boolean previousAsh = scexAshPending;
+        isWorking = false;
+        if (scexHeatCredit == 0 && scexAshPending && !scexStoreAsh(false)) {
+            if (previousWorking) setChanged();
+            return;
+        }
+        var receiver = dev.scex.si.energy.ThermalOutput.front(this);
+        if (scexHeatCredit == 0 && dev.scex.si.energy.ThermalOutput.room(receiver) > 0 && scexStoreAsh(true)) {
+            var before = itemHandler.getStackInSlot(FUEL_SLOT).copy();
+            int duration = getBurnTime(before);
+            if (duration > 0) {
+                var container = before.copyWithCount(1).getCraftingRemainingItem();
+                if (container.isEmpty() || before.getCount() == 1 && container.getCount() <= itemHandler.getSlotLimit(FUEL_SLOT)) {
+                    var after = before.getCount() == 1 ? container : before.copyWithCount(before.getCount() - 1);
+                    scexHeatCredit = (long) duration * HEAT_GENERATION_RATE;
+                    scexAshPending = true;
+                    if (itemHandler.scexCommitSlots(new int[]{FUEL_SLOT}, new ItemStack[]{before}, new ItemStack[]{after})) {
+                        maxBurnTime = duration;
+                    } else { scexHeatCredit = 0; scexAshPending = false; }
+                }
+            }
+        }
+        long accepted = dev.scex.si.energy.ThermalOutput.offer(receiver, Math.min(HEAT_GENERATION_RATE, scexHeatCredit));
+        scexHeatCredit -= accepted;
+        burnTime = (int) Math.min(Integer.MAX_VALUE, (scexHeatCredit + HEAT_GENERATION_RATE - 1) / HEAT_GENERATION_RATE);
+        isWorking = accepted > 0;
+        if (scexHeatCredit == 0 && scexAshPending) scexStoreAsh(false);
+        if (previousCredit != scexHeatCredit || previousAsh != scexAshPending || previousWorking != isWorking) setChanged();
+    }
+
     private void handleBurning() {
+        if (dev.scex.si.energy.ThermalOutput.enabled()) { scexBurnSolid(); return; }
         // 如果正在燃烧
         if (burnTime > 0) {
             // 检查前面是否还有方块需要热能
@@ -299,6 +349,22 @@ public class mio_icif_solid_heat_generator extends com.singularity_iteration.mio
         tag.putInt("burnTime", burnTime);
         tag.putInt("maxBurnTime", maxBurnTime);
         tag.putBoolean("isWorking", isWorking);
+        if (dev.scex.si.energy.ThermalOutput.enabled() || scexHeatCredit > 0 || scexAshPending) {
+            tag.putLong("scex_heat_credit_hu", scexHeatCredit);
+            tag.putBoolean("scex_ash_pending", scexAshPending);
+        }
+    }
+
+    @Override
+    public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
+        var tag = super.getUpdateTag(registries);
+        saveAdditional(tag, registries);
+        return tag;
+    }
+
+    @Override
+    public void handleUpdateTag(CompoundTag tag, HolderLookup.Provider registries) {
+        loadAdditional(tag, registries);
     }
 
     @Override
@@ -307,8 +373,12 @@ public class mio_icif_solid_heat_generator extends com.singularity_iteration.mio
         if (tag.contains("Items")) {
             itemHandler.deserializeNBT(registries, tag.getCompound("Items"));
         }
-        burnTime = tag.getInt("burnTime");
-        maxBurnTime = tag.getInt("maxBurnTime");
+        burnTime = Math.max(0, tag.getInt("burnTime"));
+        scexHeatCredit = tag.contains("scex_heat_credit_hu", net.minecraft.nbt.Tag.TAG_LONG)
+            ? dev.scex.energy.BoundedUnits.clamp(tag.getLong("scex_heat_credit_hu"), (long) Integer.MAX_VALUE * HEAT_GENERATION_RATE)
+            : (dev.scex.si.energy.ThermalOutput.enabled() ? (long) burnTime * HEAT_GENERATION_RATE : 0);
+        scexAshPending = tag.contains("scex_ash_pending") ? tag.getBoolean("scex_ash_pending") : burnTime > 0;
+        maxBurnTime = Math.max(0, tag.getInt("maxBurnTime"));
         isWorking = tag.getBoolean("isWorking");
     }
 
@@ -341,7 +411,7 @@ public class mio_icif_solid_heat_generator extends com.singularity_iteration.mio
         if (maxBurnTime <= 0) {
             return 0;
         }
-        return ((maxBurnTime - burnTime) * 100) / maxBurnTime;
+        return (int) (Math.max(0L, (long) maxBurnTime - burnTime) * 100 / maxBurnTime);
     }
 
     /**
@@ -388,6 +458,7 @@ public class mio_icif_solid_heat_generator extends com.singularity_iteration.mio
 
     @Override
     public ItemStack removeItem(int slot, int amount) {
+        if (amount <= 0 || slot < 0 || slot >= itemHandler.getSlots()) return ItemStack.EMPTY;
         return itemHandler.extractItem(slot, amount, false);
     }
 
@@ -553,7 +624,11 @@ public class mio_icif_solid_heat_generator extends com.singularity_iteration.mio
 
     @Override
     public void setBurnTime(int ticks) {
-        this.burnTime = ticks;
+        this.burnTime = Math.max(0, ticks);
+        if (dev.scex.si.energy.ThermalOutput.enabled()) {
+            scexHeatCredit = (long) this.burnTime * HEAT_GENERATION_RATE;
+            scexAshPending |= this.burnTime > 0;
+        }
         setChanged();
     }
 }

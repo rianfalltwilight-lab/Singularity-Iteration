@@ -31,22 +31,28 @@ public class mio_icif_KineticU_Block extends BlockEntity implements MenuProvider
                                    int capacity, int maxReceive, int maxExtract,
                                    int maxRPM, float frictionFactor) {
         super(type, pos, state);
-        this.kineticStorage = MioIcifAPI.instance().getCapabilities().createKineticStorage(
+        this.kineticStorage = dev.scex.si.energy.ThermalOutput.enabled()
+            ? new dev.scex.si.energy.PlatformKineticStorage(capacity, maxReceive, maxExtract, maxRPM, frictionFactor)
+            : MioIcifAPI.instance().getCapabilities().createKineticStorage(
             capacity, maxReceive, maxExtract, maxRPM, frictionFactor);
     }
     
     public IMioIcifCapabilities.IKineticStorage getKineticStorage() {
-        return kineticStorage;
+        return this;
     }
 
     @Override
     public long receiveKinetic(long toReceive, boolean simulate) {
-        return kineticStorage.receiveKinetic(toReceive, simulate);
+        long received = kineticStorage.receiveKinetic(toReceive, simulate);
+        if (!simulate && received > 0) setChanged();
+        return received;
     }
 
     @Override
     public long extractKinetic(long toExtract, boolean simulate) {
-        return kineticStorage.extractKinetic(toExtract, simulate);
+        long extracted = kineticStorage.extractKinetic(toExtract, simulate);
+        if (!simulate && extracted > 0) setChanged();
+        return extracted;
     }
 
     @Override
@@ -96,17 +102,23 @@ public class mio_icif_KineticU_Block extends BlockEntity implements MenuProvider
 
     @Override
     public void setKinetic(long kinetic) {
+        long before = kineticStorage.getKineticStored();
         kineticStorage.setKinetic(kinetic);
+        if (kineticStorage.getKineticStored() != before) setChanged();
     }
 
     @Override
     public void applyFrictionLoss() {
+        long before = kineticStorage.getKineticStored();
         kineticStorage.applyFrictionLoss();
+        if (kineticStorage.getKineticStored() != before) setChanged();
     }
 
     @Override
     public long generateKineticInternal(long amount, boolean simulate) {
-        return kineticStorage.generateKineticInternal(amount, simulate);
+        long generated = kineticStorage.generateKineticInternal(amount, simulate);
+        if (!simulate && generated > 0) setChanged();
+        return generated;
     }
     
     public static void tick(Level level, BlockPos pos, BlockState state, mio_icif_KineticU_Block blockEntity) {
@@ -125,7 +137,7 @@ public class mio_icif_KineticU_Block extends BlockEntity implements MenuProvider
     }
     
     protected void distributeKinetic() {
-        if (kineticStorage.getKineticStored() <= 0) {
+        if (level == null || level.isClientSide || isRemoved() || kineticStorage.getKineticStored() <= 0) {
             return;
         }
 
@@ -133,6 +145,7 @@ public class mio_icif_KineticU_Block extends BlockEntity implements MenuProvider
 
         for (Direction direction : Direction.values()) {
             BlockPos adjacentPos = worldPosition.relative(direction);
+            if (!level.hasChunkAt(adjacentPos)) continue;
 
             IMioIcifCapabilities.IKineticStorage adjacentKinetic = level.getCapability(
                 IMioIcifCapabilities.KINETIC_STORAGE_BLOCK, adjacentPos, direction.getOpposite());
@@ -146,7 +159,7 @@ public class mio_icif_KineticU_Block extends BlockEntity implements MenuProvider
                 int adjacentRPM = adjacentKinetic.getRPM();
 
                 if (myRPM > adjacentRPM) {
-                    int rpmDiff = myRPM - adjacentRPM;
+                    long rpmDiff = (long) myRPM - adjacentRPM;
 
                     long maxTransfer = Math.min(kineticStorage.getMaxExtract(),
                                                adjacentKinetic.getMaxKineticStored() - adjacentKinetic.getKineticStored());
@@ -157,7 +170,12 @@ public class mio_icif_KineticU_Block extends BlockEntity implements MenuProvider
                         if (extracted > 0) {
                             long received = adjacentKinetic.receiveKinetic(extracted, false);
                             if (received < extracted) {
-                                kineticStorage.receiveKinetic(extracted - received, false);
+                                // Returning our reserved units must bypass the external input limit.
+                                kineticStorage.generateKineticInternal(extracted - Math.max(0, received), false);
+                            }
+                            if (received > 0) {
+                                var target = level.getBlockEntity(adjacentPos);
+                                if (target != null) target.setChanged();
                             }
                             setChanged();
                         }
@@ -170,7 +188,7 @@ public class mio_icif_KineticU_Block extends BlockEntity implements MenuProvider
     
     @Nullable
     public IMioIcifCapabilities.IKineticStorage getKineticStorageCapability(@Nullable Direction side) {
-        return kineticStorage;
+        return this;
     }
     
     @Override

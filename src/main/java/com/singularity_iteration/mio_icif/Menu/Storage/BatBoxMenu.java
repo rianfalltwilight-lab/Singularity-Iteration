@@ -165,11 +165,13 @@ public class BatBoxMenu extends mio_icif_base_menu {
     protected boolean isBattery(ItemStack stack) {
         return MioIcifAPI.instance().getItemAPI().isBattery(stack)
             || MioIcifAPI.instance().getItemAPI().isElectricArmor(stack)
-            || stack.getItem() == net.minecraft.world.item.Items.REDSTONE;
+            || stack.getItem() == net.minecraft.world.item.Items.REDSTONE
+            || dev.scex.si.energy.FeMachineBridge.dischargeable(stack);
     }
 
     @Override
     protected boolean isChargeable(ItemStack stack) {
+        if (dev.scex.si.energy.FeMachineBridge.chargeable(stack)) return true;
         IItemAPI api = MioIcifAPI.instance().getItemAPI();
         if (api.isBattery(stack)) {
             return !api.isBatteryFull(stack);

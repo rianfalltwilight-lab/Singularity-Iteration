@@ -325,7 +325,10 @@ tasks.register('contractTest', JavaExec) {
     dependsOn tasks.named('contractClasses')
     if (!project.hasProperty('baselineArtifact')) dependsOn tasks.named('jar')
     def targetJar = project.findProperty('baselineArtifact') ?: tasks.named('jar').get().archiveFile.get().asFile
-    classpath = files(targetJar) + sourceSets.contract.output + sourceSets.main.compileClasspath
+    // Include the reviewed implementation output when a scoped overlay is tested
+    // against the frozen baseline artifact.  The baseline JAR intentionally stays
+    // unchanged and cannot contain newly authored clean-room classes.
+    classpath = files(targetJar) + sourceSets.contract.output + sourceSets.main.output + sourceSets.main.compileClasspath
     mainClass = 'dev.scex.si.UpgradeContract'
     args(project.findProperty('contractMode') ?: 'regression')
     jvmArgs '-XX:ActiveProcessorCount=2', '-Xms256m', '-Xmx512m'
@@ -400,3 +403,5 @@ if (project.hasProperty('withSmoke')) {
         }
     }
 }
+
+apply from: 'gradle/retired-uu-classpath-guard.gradle'

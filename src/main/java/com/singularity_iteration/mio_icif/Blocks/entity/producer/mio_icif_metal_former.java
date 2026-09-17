@@ -14,6 +14,7 @@ import com.singularity_iteration.mio_icif.recipe.metal_former.extruding.mio_icif
 import com.singularity_iteration.mio_icif.recipe.metal_former.rolling.mio_icif_RollingRecipe;
 import com.singularity_iteration.mio_icif.recipe.metal_former.rolling.mio_icif_RollingRecipeInput;
 import com.singularity_iteration.mio_icif.recipe.metal_former.rolling.mio_icif_RollingRecipes;
+import dev.scex.si.processing.RecipeSlots;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
@@ -166,7 +167,7 @@ public enum MetalFormerMode {
         }
 
         // �??��?��?��??�足够�?��??
-        if (!hasEnoughEnergy()) {
+        if (getEffectiveEnergyPerTick() <= 0 || progress < Math.max(1, getRecipeProcessingTime()) && !hasEnoughEnergy()) {
             return false;
         }
 
@@ -200,44 +201,27 @@ public enum MetalFormerMode {
 
     private boolean canWorkRolling(ItemStack input) {
         var recipe = getRollingRecipe();
-        if (recipe == null) return false;
-        if (input.getCount() < recipe.getIngredientCount()) return false;
-        return canOutputRecipeResult(recipe.getResultItem(level.registryAccess()));
+        return recipe != null && RecipeSlots.prepare(itemHandler, INPUT_SLOT, recipe.getIngredientCount(),
+            new int[]{OUTPUT_SLOT}, java.util.List.of(recipe.getResultItem(level.registryAccess()))).isPresent();
     }
 
     private boolean canWorkCutting(ItemStack input) {
         var recipe = getCuttingRecipe();
-        if (recipe == null) return false;
-        if (input.getCount() < recipe.getIngredientCount()) return false;
-        return canOutputRecipeResult(recipe.getResultItem(level.registryAccess()));
+        return recipe != null && RecipeSlots.prepare(itemHandler, INPUT_SLOT, recipe.getIngredientCount(),
+            new int[]{OUTPUT_SLOT}, java.util.List.of(recipe.getResultItem(level.registryAccess()))).isPresent();
     }
 
     private boolean canWorkExtruding(ItemStack input) {
         var recipe = getExtrudingRecipe();
-        if (recipe == null) return false;
-        if (input.getCount() < recipe.getIngredientCount()) return false;
-        return canOutputRecipeResult(recipe.getResultItem(level.registryAccess()));
+        return recipe != null && RecipeSlots.prepare(itemHandler, INPUT_SLOT, recipe.getIngredientCount(),
+            new int[]{OUTPUT_SLOT}, java.util.List.of(recipe.getResultItem(level.registryAccess()))).isPresent();
     }
 
-    private boolean canOutputRecipeResult(ItemStack result) {
-        if (result.isEmpty()) return false;
 
-        ItemStack currentOutput = itemHandler.getStackInSlot(OUTPUT_SLOT);
-        if (currentOutput.isEmpty()) return true;
-        if (!ItemStack.isSameItem(currentOutput, result)) return false;
-
-        int newCount = currentOutput.getCount() + result.getCount();
-        return newCount <= currentOutput.getMaxStackSize();
-    }
 
     @Override
     protected void doWork() {
-        // �???��?��??
-        if (!consumeEnergy()) {
-            stopWork();
-            return;
-        }
-
+        if (progress < Math.max(1, getRecipeProcessingTime()) && !consumeEnergy()) { stopWork(); return; }
         isWorking = true;
     }
 
@@ -247,10 +231,10 @@ public enum MetalFormerMode {
     @Override
     protected void updateProgress() {
         if (isWorking) {
-            int recipeMaxProgress = getRecipeProcessingTime();
+            int recipeMaxProgress = Math.max(1, getRecipeProcessingTime());
             int progressPerTick = getProgressPerTick();
             if (progress < recipeMaxProgress) {
-                progress = Math.min(recipeMaxProgress, progress + progressPerTick);
+                progress = (int) Math.min(recipeMaxProgress, (long) progress + progressPerTick);
             }
             // 检查是否完成
             if (progress >= recipeMaxProgress) {
@@ -305,30 +289,13 @@ public enum MetalFormerMode {
     }
 
     private void processRecipeResult(ItemStack result, int ingredientCount, ItemStack input) {
-        if (result.isEmpty()) {
-            stopWork();
-            return;
-        }
-
-        ItemStack currentOutput = itemHandler.getStackInSlot(OUTPUT_SLOT);
-
-        // 添�?��?��?��?��?�出�?
-        if (currentOutput.isEmpty()) {
-            itemHandler.setStackInSlot(OUTPUT_SLOT, result.copy());
-        } else {
-            currentOutput.grow(result.getCount());
-        }
-
-        // �???��?��?��?��??
-        input.shrink(ingredientCount);
-
-        // ??�置进度
+        var operation = RecipeSlots.prepare(itemHandler, INPUT_SLOT, ingredientCount, new int[]{OUTPUT_SLOT}, java.util.List.of(result));
+        if (operation.isEmpty()) { stopWork(); return; }
+        int completed = progress;
+        progress = 0;
+        if (!operation.get().commit()) { progress = completed; stopWork(); return; }
         finishWork();
-
-        // �??��?��?��还可以继续工�?
-        if (canWork()) {
-            isWorking = true;
-        }
+        setChanged();
     }
 
     /**
@@ -417,10 +384,12 @@ public enum MetalFormerMode {
      * 设置加工模式
      */
     public void setMode(MetalFormerMode mode) {
+        if (mode == null) return;
+        stopWork();
         this.currentMode = mode;
         this.progress = 0;
         if (getLevel() != null && !getLevel().isClientSide) {
-            getLevel().setBlockAndUpdate(getBlockPos(), getBlockState().setValue(mio_icif_block_metal_former.MODE, 
+            getLevel().setBlockAndUpdate(getBlockPos(), getBlockState().setValue(mio_icif_block_metal_former.MODE,
                 mio_icif_block_metal_former.MetalFormerMode.valueOf(mode.name())));
         }
         setChanged();

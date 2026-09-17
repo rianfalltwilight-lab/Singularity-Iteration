@@ -10,6 +10,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
@@ -31,8 +32,8 @@ import org.jetbrains.annotations.Nullable;
  * 通过燃烧岩浆发电，每桶岩浆（1000mb）发电量10,000EU
  * 槽位结构：1岩浆桶输入槽 + 1空桶输出槽 + 1电池充电槽 = 3
  * 岩浆槽容量：8000mb
- * 输出等级：LV，2 EU/t
- * 周围岩浆方块额外发电：1 EU/t/面
+ * 输出等级：LV，20 EU/t
+ * 未接管的旧路径保留周围岩浆方块额外发电：1 EU/t/面
  */
 @SuppressWarnings("null")
 public class mio_icif_geo_generator extends mio_icif_Energy_Generator {
@@ -65,7 +66,7 @@ public class mio_icif_geo_generator extends mio_icif_Energy_Generator {
     // 当前正在发电的岩浆量（mb）
     private int currentLavaBurning = 0;
     // 当前岩浆已发电量
-    private int currentLavaEnergyGenerated = 0;
+    private long currentLavaEnergyGenerated = 0L;
 
     /**
      * 构造函数（用于 BlockEntityType.Builder）
@@ -136,8 +137,12 @@ public class mio_icif_geo_generator extends mio_icif_Energy_Generator {
             }
         }
 
-        // 转移岩浆（1000mb = 1桶）
-        int filled = lavaTank.fill(new FluidStack(Fluids.LAVA, LAVA_PER_BUCKET), IFluidHandler.FluidAction.EXECUTE);
+        // 容器只能整桶转移；容量不足时不能先写入部分岩浆。
+        FluidStack bucketFluid = new FluidStack(Fluids.LAVA, LAVA_PER_BUCKET);
+        if (lavaTank.fill(bucketFluid, IFluidHandler.FluidAction.SIMULATE) != LAVA_PER_BUCKET) {
+            return;
+        }
+        int filled = lavaTank.fill(bucketFluid, IFluidHandler.FluidAction.EXECUTE);
         if (filled >= LAVA_PER_BUCKET) {
             // 消耗岩浆桶/单元
             lavaBucketStack.shrink(1);
@@ -193,7 +198,7 @@ public class mio_icif_geo_generator extends mio_icif_Energy_Generator {
      */
     @Override
     protected void generateEnergy() {
-        int totalEnergyGenerated = 0;
+        long totalEnergyGenerated = 0L;
         
         // 1. 基于岩浆桶的发电
         if (currentLavaBurning > 0) {
@@ -206,7 +211,8 @@ public class mio_icif_geo_generator extends mio_icif_Energy_Generator {
                 currentLavaEnergyGenerated += lavaBucketEnergy;
                 
                 // 每生成10EU，减1mb岩浆（10000EU对应1000mb）
-                int mbToRemove = currentLavaEnergyGenerated / (ENERGY_PER_BUCKET / LAVA_PER_BUCKET);
+                int mbToRemove = (int) Math.min((long) currentLavaBurning,
+                    currentLavaEnergyGenerated / (ENERGY_PER_BUCKET / LAVA_PER_BUCKET));
                 if (mbToRemove > 0) {
                     currentLavaBurning -= mbToRemove;
                     currentLavaEnergyGenerated = currentLavaEnergyGenerated % (ENERGY_PER_BUCKET / LAVA_PER_BUCKET);
@@ -220,8 +226,8 @@ public class mio_icif_geo_generator extends mio_icif_Energy_Generator {
         
         // 2. 基于周围岩浆方块的发电
         if (nearbyLavaBlocks > 0) {
-            int lavaBlockEnergy = Math.min(nearbyLavaBlocks * LAVA_BLOCK_ENERGY_RATE,
-                (int)(getEnergyStorage().getCapacity() - getEnergyStorage().getAmount() - totalEnergyGenerated));
+            long lavaBlockEnergy = Math.min((long) nearbyLavaBlocks * LAVA_BLOCK_ENERGY_RATE,
+                Math.max(0L, getEnergyStorage().getCapacity() - getEnergyStorage().getAmount() - totalEnergyGenerated));
             
             if (lavaBlockEnergy > 0) {
                 totalEnergyGenerated += lavaBlockEnergy;
@@ -279,6 +285,10 @@ public class mio_icif_geo_generator extends mio_icif_Energy_Generator {
      */
     public static void tick(Level level, BlockPos pos, BlockState state, mio_icif_geo_generator blockEntity) {
         if (level.isClientSide()) {
+            return;
+        }
+        if (blockEntity.energyStorage.scexNetworkControlled()) {
+            blockEntity.tickControlledGeothermal(level, pos);
             return;
         }
 
@@ -352,6 +362,36 @@ public class mio_icif_geo_generator extends mio_icif_Energy_Generator {
 
         // 标记方块实体已更新
         blockEntity.setChanged();
+    }
+
+    /** Public-game R28 contract: 2 mB pays for a complete 20 EU step. */
+    private void tickControlledGeothermal(Level level, BlockPos pos) {
+        chargeItems();
+        boolean generated = false;
+        if (energyStorage.scexExactAmount().roomBelow(energyStorage.getCapacity()).whole() >= ENERGY_GENERATION_RATE) {
+            // Older SI saves may already hold drained lava, including a partially
+            // paid mB. Keep that exact remaining energy; elapsed ticks never expire it.
+            long credit = Math.max(0L, 10L * currentLavaBurning - currentLavaEnergyGenerated);
+            int needed = (int) ((Math.max(0L, ENERGY_GENERATION_RATE - credit) + 9L) / 10L);
+            if (lavaTank.getFluidAmount() >= needed) {
+                if (needed > 0) lavaTank.drain(needed, IFluidHandler.FluidAction.EXECUTE);
+                credit += needed * 10L - ENERGY_GENERATION_RATE;
+                currentLavaBurning = (int) ((credit + 9L) / 10L);
+                currentLavaEnergyGenerated = currentLavaBurning * 10L - credit;
+                apiGenerateEnergy(ENERGY_GENERATION_RATE, false);
+                generated = true;
+            }
+        }
+        // A bucket becomes available for generation on the following natural tick.
+        handleLavaBucketSlot();
+        burnDuration = 1;
+        burnTime = generated ? 1 : 0;
+        BlockState current = level.getBlockState(pos);
+        if (current.hasProperty(mio_icif_Block_Geo_Generator.ACTIVE)
+            && current.getValue(mio_icif_Block_Geo_Generator.ACTIVE) != generated) {
+            level.setBlock(pos, current.setValue(mio_icif_Block_Geo_Generator.ACTIVE, generated), 3);
+        }
+        setChanged();
     }
 
     /**
@@ -476,7 +516,7 @@ public class mio_icif_geo_generator extends mio_icif_Energy_Generator {
         // 保存岩浆数据
         tag.put("LavaTank", lavaTank.writeToNBT(registries, new CompoundTag()));
         tag.putInt("CurrentLavaBurning", currentLavaBurning);
-        tag.putInt("CurrentLavaEnergyGenerated", currentLavaEnergyGenerated);
+        tag.putLong("CurrentLavaEnergyGenerated", currentLavaEnergyGenerated);
     }
 
     @Override
@@ -487,7 +527,9 @@ public class mio_icif_geo_generator extends mio_icif_Energy_Generator {
             lavaTank.readFromNBT(registries, tag.getCompound("LavaTank"));
         }
         currentLavaBurning = tag.getInt("CurrentLavaBurning");
-        currentLavaEnergyGenerated = tag.getInt("CurrentLavaEnergyGenerated");
+        currentLavaEnergyGenerated = tag.contains("CurrentLavaEnergyGenerated", Tag.TAG_LONG)
+            ? tag.getLong("CurrentLavaEnergyGenerated")
+            : tag.getInt("CurrentLavaEnergyGenerated");
     }
 
     @Override
@@ -495,7 +537,7 @@ public class mio_icif_geo_generator extends mio_icif_Energy_Generator {
         CompoundTag tag = super.getUpdateTag(registries);
         tag.put("LavaTank", lavaTank.writeToNBT(registries, new CompoundTag()));
         tag.putInt("CurrentLavaBurning", currentLavaBurning);
-        tag.putInt("CurrentLavaEnergyGenerated", currentLavaEnergyGenerated);
+        tag.putLong("CurrentLavaEnergyGenerated", currentLavaEnergyGenerated);
         return tag;
     }
 
@@ -506,7 +548,9 @@ public class mio_icif_geo_generator extends mio_icif_Energy_Generator {
             lavaTank.readFromNBT(registries, tag.getCompound("LavaTank"));
         }
         currentLavaBurning = tag.getInt("CurrentLavaBurning");
-        currentLavaEnergyGenerated = tag.getInt("CurrentLavaEnergyGenerated");
+        currentLavaEnergyGenerated = tag.contains("CurrentLavaEnergyGenerated", Tag.TAG_LONG)
+            ? tag.getLong("CurrentLavaEnergyGenerated")
+            : tag.getInt("CurrentLavaEnergyGenerated");
     }
 
     // ==================== MenuProvider 接口实现 ====================

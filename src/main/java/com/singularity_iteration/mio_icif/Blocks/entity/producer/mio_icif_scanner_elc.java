@@ -1,16 +1,27 @@
+// SPDX-License-Identifier: Apache-2.0
 package com.singularity_iteration.mio_icif.Blocks.entity.producer;
 
 import com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_block_entities;
 import com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_producer;
+import com.singularity_iteration.mio_icif.Blocks.entity.slot.MachineItemHandler;
 import com.singularity_iteration.mio_icif.Blocks.entity.slot.SlotLayout;
-import com.singularity_iteration.mio_icif.Singularity_Iteration_Config;
+import com.singularity_iteration.mio_icif.Items.Resource.mio_icif_memory;
+import com.singularity_iteration.mio_icif.Menu.Producer.ScannerElcMenu;
 import com.singularity_iteration.mio_icif.energy.EnergyUnit.CableTier;
-import com.singularity_iteration.mio_icif.uu.UuIndex;
+import dev.scex.si.energy.ContainerToTank;
+import dev.scex.si.processing.IndependentScanSession;
+import dev.scex.si.processing.PatternMenuData;
+import dev.scex.si.processing.StoredPattern;
+import dev.scex.si.processing.UuQuoteBook;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.RegistryAccess;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -19,512 +30,229 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
+import net.neoforged.neoforge.items.IItemHandler;
+import net.neoforged.neoforge.items.IItemHandlerModifiable;
 import org.jetbrains.annotations.Nullable;
-import org.slf4j.Logger;
-import com.mojang.logging.LogUtils;
 
-/**
- * 模式扫描机方块实体类
- * 用于扫描物品的蓝图数据，该数据存储模式所需的UU流体和电力消耗
- *
- * 槽位布局说明:
- * - 0: 扫描物品槽位：放置被扫描物品的位置
- * - 1: 电池槽位：提供能量
- * - 2: 记忆水晶槽位：用于存储扫描结果数据
- *
- * 工作机机制:
- * - 每个被扫描物品需要 900000 EU 能量才能完成扫描
- * - 消耗功率 256 EU/t，扫描时间 165 秒（3515 ticks）
- * - 最大能量存储 512000 EU
- * - 记忆水晶槽位必须放置空的记忆水晶
- * - 点击保存按钮后数据写入记忆水晶
- *
- * UU价值计算:
- * - 基于IC2 1.12.2的UuIndex/UuGraph算法
- * - 通过合成图推导物品配方计算所需UU价值
- * - 无法合成推导的物品判定为无UU价值
- */
-@SuppressWarnings("null")
+/** Independent adapter from observed scan work to owned progress, inventory and authoritative prices. */
 public class mio_icif_scanner_elc extends mio_icif_producer {
-    private static final Logger LOGGER = LogUtils.getLogger();
-
-    private static final SlotLayout LAYOUT = SlotLayout.builder()
-        .scanner()
-        .battery()
-        .memory()
-        .build();
-
-    // 槽位总数: 3个（扫描槽位 + 电池槽 + 记忆水晶槽位）
-    public static final int SLOT_COUNT = 3;
-    // 扫描槽索引：放置被扫描物品的位置
-    public static final int SCANNER_SLOT = 0;
-    // 电池槽索引
-    public static final int BATTERY_SLOT = 1;
-    // 记忆水晶槽索引
-    public static final int MEMORY_SLOT = 2;
-
-    // 默认配置
-    public static final long DEFAULT_CAPACITY = 512000L;  // 512k EU（对比IC2原版）
-    public static final long DEFAULT_MAX_RECEIVE = 512L;  // HV级输入
-    public static final long DEFAULT_MAX_EXTRACT = 0L; // 不输出电力
-    public static final int DEFAULT_SCAN_TIME = 3515; // ~165秒（3515 ticks）
-    public static final long DEFAULT_ENERGY_PER_TICK = 256L; // 每tick消耗256 EU
-    public static final long TOTAL_ENERGY_COST = 900000L; // 每次扫描需要的总能量
-
-    // 扫描结果缓存
-    private ScanResult scanResult = null;
-    // 扫描是否已完成
-    private boolean scanComplete = false;
-    // 当前被扫描物品，用于检测物品变化
-    private ItemStack currentStack = ItemStack.EMPTY;
-    // 状态机状态
-    private State state = State.IDLE;
-
-    /**
-     * 扫描机状态枚举
-     * 注册时通过ordinal索引在Screen中必须使用switch case保持一致!
-     * 0=IDLE, 1=SCANNING, 2=NO_ENERGY, 3=NO_STORAGE, 4=COMPLETED, 5=FAILED
-     */
-    public enum State {
-        IDLE,           // 0: 空闲
-        SCANNING,       // 1: 正在扫描
-        NO_ENERGY,      // 2: 能量不足
-        NO_STORAGE,     // 3: 无记忆水晶
-        COMPLETED,      // 4: 扫描完成
-        FAILED,         // 5: 扫描失败（无法推导UU价值）
-        TRANSFER_ERROR, // 6: 保存失败
-        ALREADY_RECORDED // 7: 该物品已被记录
-    }
-
-    private final ContainerData dataAccess = new ContainerData() {
-        @Override
-        public int get(int index) {
-            return switch (index) {
-                case 0 -> progress;
-                case 1 -> maxProgress;
-                case 2 -> isWorking ? 1 : 0;
-                case 3 -> (int) energyStorage.getAmount();
-                case 4 -> (int) energyStorage.getCapacity();
-                case 5 -> scanComplete ? 1 : 0;
-                case 6 -> getStateOrdinal();
-                case 7 -> (int) (Double.doubleToRawLongBits(getUUMatterCost()) >> 32);
-                case 8 -> (int) Double.doubleToRawLongBits(getUUMatterCost());
-                case 9 -> (int) getEnergyCost();
-                default -> 0;
-            };
-        }
-
-        @Override
-        public void set(int index, int value) {}
-
-        @Override
-        public int getCount() {
-            return 10;
-        }
-    };
-
-    /**
-     * 扫描结果数据类
-     */
+    public static final int SLOT_COUNT=3,SCANNER_SLOT=0,BATTERY_SLOT=1,MEMORY_SLOT=2;
+    public static final long DEFAULT_CAPACITY=512000,DEFAULT_MAX_RECEIVE=512,DEFAULT_MAX_EXTRACT=0;
+    public static final int DEFAULT_SCAN_TIME=3300;
+    public static final long DEFAULT_ENERGY_PER_TICK=256,TOTAL_ENERGY_COST=844800;
+    public enum State { IDLE,SCANNING,NO_ENERGY,NO_STORAGE,COMPLETED,FAILED,TRANSFER_ERROR,ALREADY_RECORDED }
     public static class ScanResult {
         public final ItemStack item;
         public final double uuMatterCostBuckets;
         public final long energyCost;
-
-        public ScanResult(ItemStack item, double uuMatterCostBuckets, long energyCost) {
-            this.item = item.copy();
-            this.uuMatterCostBuckets = uuMatterCostBuckets;
-            this.energyCost = energyCost;
+        public ScanResult(ItemStack item,double buckets,long energy){
+            if(!StoredPattern.valid(item,buckets,energy))throw new IllegalArgumentException("Invalid scan result");
+            this.item=item.copy();uuMatterCostBuckets=buckets;energyCost=energy;
         }
-
-        public long getUuMatterCostMB() {
-            return (long) (uuMatterCostBuckets * 1000.0);
-        }
-
-        public CompoundTag serializeNBT() {
-            CompoundTag tag = new CompoundTag();
-            tag.put("item", item.saveOptional(net.minecraft.core.RegistryAccess.EMPTY));
-            tag.putDouble("uu_matter_cost_buckets", uuMatterCostBuckets);
-            tag.putLong("energy_cost", energyCost);
-            return tag;
-        }
-
-        public static ScanResult deserializeNBT(CompoundTag tag) {
-            ItemStack item = ItemStack.parseOptional(net.minecraft.core.RegistryAccess.EMPTY, tag.getCompound("item"));
-            double uuMatterCostBuckets = tag.getDouble("uu_matter_cost_buckets");
-            long energyCost = tag.getLong("energy_cost");
-            return new ScanResult(item, uuMatterCostBuckets, energyCost);
+        public long getUuMatterCostMB(){return (long)Math.ceil(uuMatterCostBuckets*1000);}
+        /** Compatibility only. Machine persistence always supplies its actual registry provider. */
+        public CompoundTag serializeNBT(){return new StoredPattern(item,uuMatterCostBuckets,energyCost).save(compatRegistries());}
+        public static ScanResult deserializeNBT(CompoundTag tag){var value=StoredPattern.load(tag,compatRegistries());return value==null?null:value.legacyView();}
+        private static HolderLookup.Provider compatRegistries(){
+            var server=net.neoforged.neoforge.server.ServerLifecycleHooks.getCurrentServer();
+            return server==null?RegistryAccess.fromRegistryOfRegistries(BuiltInRegistries.REGISTRY):server.registryAccess();
         }
     }
-
-    /**
-     * 构造 BlockEntityType.Builder 注册用参数构造函数
-     */
-    public mio_icif_scanner_elc(BlockPos pos, BlockState state) {
-        this(pos, state, mio_icif_block_entities.SCANNER_ELC_ENTITY_TYPE.get());
-    }
-
-    public mio_icif_scanner_elc(BlockPos pos, BlockState state, BlockEntityType<?> type) {
-        super(pos, state, type,
-            DEFAULT_CAPACITY,
-            DEFAULT_MAX_RECEIVE,
-            DEFAULT_MAX_EXTRACT,
-            DEFAULT_SCAN_TIME,
-            LAYOUT,
-            DEFAULT_ENERGY_PER_TICK,
-            CableTier.HV);
-    }
-
-    @Override
-    public boolean isItemValidForSlot(int slot, ItemStack stack) {
-        if (slot == SCANNER_SLOT) {
-            return !isBattery(stack) && !(stack.getItem() instanceof com.singularity_iteration.mio_icif.Items.Resource.mio_icif_memory);
-        } else if (slot == BATTERY_SLOT) {
-            return isBattery(stack);
-        } else if (slot == MEMORY_SLOT) {
-            return stack.getItem() instanceof com.singularity_iteration.mio_icif.Items.Resource.mio_icif_memory;
+    private static final String SAVE_KEY="scex_scanner_v1";
+    private static final SlotLayout LAYOUT=SlotLayout.builder().scanner().battery().memory().build();
+    private IndependentScanSession session;
+    private StoredPattern result;
+    private CompoundTag held;
+    private boolean changing;
+    private long lastTick=Long.MIN_VALUE;
+    private State state=State.IDLE;
+    private final int[] clientData=new int[15];
+    private final IItemHandlerModifiable guardedItems=new IItemHandlerModifiable(){
+        public int getSlots(){return itemHandler.getSlots();}
+        public ItemStack getStackInSlot(int slot){return itemHandler.getStackInSlot(slot).copy();}
+        public int getSlotLimit(int slot){return itemHandler.getSlotLimit(slot);}
+        public boolean isItemValid(int slot,ItemStack stack){return !locked(slot)&&itemHandler.isItemValid(slot,stack);}
+        public ItemStack insertItem(int slot,ItemStack stack,boolean simulate){return locked(slot)?stack:itemHandler.insertItem(slot,stack,simulate);}
+        public ItemStack extractItem(int slot,int count,boolean simulate){return locked(slot)?ItemStack.EMPTY:itemHandler.extractItem(slot,count,simulate);}
+        public void setStackInSlot(int slot,ItemStack stack){
+            if(locked(slot))return;var before=itemHandler.getStackInSlot(slot);
+            boolean taking=stack.isEmpty()||ItemStack.isSameItemSameComponents(before,stack)&&stack.getCount()<=before.getCount();
+            if(taking||isItemValid(slot,stack)&&stack.getCount()<=Math.min(getSlotLimit(slot),stack.getMaxStackSize()))itemHandler.setStackInSlot(slot,stack.copy());
         }
-        return false;
+    };
+    public mio_icif_scanner_elc(BlockPos pos,BlockState state){this(pos,state,mio_icif_block_entities.SCANNER_ELC_ENTITY_TYPE.get());}
+    public mio_icif_scanner_elc(BlockPos pos,BlockState state,BlockEntityType<?> type){
+        super(pos,state,type,DEFAULT_CAPACITY,DEFAULT_MAX_RECEIVE,0,DEFAULT_SCAN_TIME,LAYOUT,DEFAULT_ENERGY_PER_TICK,CableTier.HV);
+        session=newSession();
     }
-
-    @Override
-    protected int[] getSlotsForDirection(Direction side) {
-        return new int[]{SCANNER_SLOT, BATTERY_SLOT, MEMORY_SLOT};
+    private IndependentScanSession newSession(){return new IndependentScanSession(()->level==null||serverThread(),DEFAULT_SCAN_TIME,DEFAULT_ENERGY_PER_TICK,()->ContainerToTank.markUnsaved(this));}
+    protected boolean serverThread(){return level instanceof ServerLevel s&&s.getServer().isSameThread();}
+    protected long gameTime(){return level.getGameTime();}
+    protected UuQuoteBook.Quote trustedQuote(ItemStack item){return level instanceof ServerLevel s?UuQuoteBook.quote(s.getServer(),item):null;}
+    protected UuQuoteBook.Assessment trustedAssessment(ItemStack item) {
+        // Preserve the finite quote port used by existing machine contracts and public adapters.
+        var finite = trustedQuote(item);
+        if (finite != null) return new UuQuoteBook.Assessment(UuQuoteBook.Disposition.FINITE, finite, finite.generation(), false);
+        return level instanceof ServerLevel s ? UuQuoteBook.classify(s.getServer(), item)
+                : new UuQuoteBook.Assessment(UuQuoteBook.Disposition.UNAVAILABLE, null, -1, false);
     }
-
-    @Override
-    protected int getBatterySlot() {
-        return BATTERY_SLOT;
+    public boolean isDeniedScanComplete() {
+        return session != null && session.completionKind() == IndependentScanSession.CompletionKind.KNOWN_DENIED
+                && session.state() == IndependentScanSession.State.COMPLETED;
     }
-
-    @Override
-    protected boolean canExtractItem(int slot, @Nullable Direction side) {
-        return slot == BATTERY_SLOT;
+    public boolean hasHeldScanData(){return held!=null||session!=null&&session.state()==IndependentScanSession.State.FAILED;}
+    public boolean hasStoredScanData(){return hasHeldScanData()||result!=null||session!=null&&(session.progress()>0||session.paidTick()>0||session.pendingPayment()>0);}
+    private boolean active(){return session!=null&&!session.sourceStack().isEmpty()&&session.state()!=IndependentScanSession.State.CANCELLED;}
+    private boolean locked(int slot){return changing||hasHeldScanData()||slot==SCANNER_SLOT&&(active()||result!=null);}
+    @Override protected MachineItemHandler createItemHandler(SlotLayout layout){
+        var handler=new MachineItemHandler(layout){@Override protected void onContentsChanged(int slot){ContainerToTank.markUnsaved(mio_icif_scanner_elc.this);}};
+        handler.setValidator(this);return handler;
     }
-
-    @Override
-    protected boolean hasValidRecipe() {
-        ItemStack input = itemHandler.getStackInSlot(SCANNER_SLOT);
-        return !input.isEmpty();
+    @Override public boolean isItemValidForSlot(int slot,ItemStack item){
+        if(item.isEmpty())return false;
+        return slot==SCANNER_SLOT?item.getCount()==1:slot==MEMORY_SLOT?item.getCount()==1&&item.getItem() instanceof mio_icif_memory:slot==BATTERY_SLOT&&apiIsBattery(item);
     }
-
-    /**
-     * 检查机器是否可以工作
-     * 对比IC2原版扫描机:
-     */
-    @Override
-    protected boolean canWork() {
-        ItemStack input = itemHandler.getStackInSlot(SCANNER_SLOT);
-        if (input.isEmpty()) {
+    @Override protected int getBatterySlot(){return BATTERY_SLOT;}
+    @Override protected int[] getSlotsForDirection(Direction side){return new int[]{SCANNER_SLOT};}
+    @Override protected boolean canInsertItem(int slot,ItemStack stack,@Nullable Direction side){return !locked(slot)&&super.canInsertItem(slot,stack,side);}
+    @Override protected boolean canExtractItem(int slot,@Nullable Direction side){return !locked(slot)&&slot==SCANNER_SLOT;}
+    @Override public IItemHandler getItemHandler(){return guardedItems;}
+    @Override public ItemStack getItem(int slot){return guardedItems.getStackInSlot(slot);}
+    @Override public ItemStack removeItem(int slot,int amount){return guardedItems.extractItem(slot,amount,false);}
+    @Override public ItemStack removeItemNoUpdate(int slot){return guardedItems.extractItem(slot,Integer.MAX_VALUE,false);}
+    @Override public void setItem(int slot,ItemStack stack){guardedItems.setStackInSlot(slot,stack);}
+    @Override public void clearContent(){if(!changing&&!hasStoredScanData())super.clearContent();}
+    protected java.util.List<mio_icif_pattern_storage> nearbyStorage(){
+        var found=new java.util.ArrayList<mio_icif_pattern_storage>();
+        if(level instanceof ServerLevel s)for(var side:Direction.values()){
+            var pos=worldPosition.relative(side);var chunk=s.getChunkSource().getChunkNow(pos.getX()>>4,pos.getZ()>>4);
+            if(chunk!=null&&chunk.getBlockEntity(pos) instanceof mio_icif_pattern_storage storage&&!storage.hasUnresolvedPatterns())found.add(storage);
+        }
+        return found;
+    }
+    private boolean storageAvailable(ItemStack item){
+        var crystal=itemHandler.getStackInSlot(MEMORY_SLOT);
+        if(!crystal.isEmpty()){
+            if(crystal.getCount()==1&&crystal.getItem() instanceof mio_icif_memory memory){
+                if(!memory.hasData(crystal)&&!crystal.has(net.minecraft.core.component.DataComponents.CONTAINER))return true;
+                state=ItemStack.isSameItemSameComponents(item,memory.getStoredItemStack(crystal))?State.ALREADY_RECORDED:State.TRANSFER_ERROR;
+            }else state=State.TRANSFER_ERROR;
             return false;
         }
-
-        // 检查记忆水晶槽位
-        ItemStack memoryStack = itemHandler.getStackInSlot(MEMORY_SLOT);
-        if (memoryStack.isEmpty()) {
-            state = State.NO_STORAGE;
-            return false;
+        var storage=nearbyStorage();
+        for(var library:storage)if(library.hasPattern(item)){state=State.ALREADY_RECORDED;return false;}
+        for(var library:storage)if(!library.isFull())return true;
+        state=State.NO_STORAGE;return false;
+    }
+    @Override protected void tickProduction(){
+        isWorking=false;
+        if(!serverThread()||changing||gameTime()==lastTick)return;
+        lastTick=gameTime();
+        if(hasHeldScanData()){state=State.FAILED;return;}
+        if(result!=null){state=State.COMPLETED;return;}
+        if(isDeniedScanComplete()){state=State.FAILED;return;}
+        var input=itemHandler.getStackInSlot(SCANNER_SLOT);
+        if(active()&&(input.isEmpty()||!ItemStack.isSameItemSameComponents(input,session.sourceStack()))){hold("Paid input identity changed");return;}
+        if(input.isEmpty()){state=State.IDLE;return;}
+        var assessment=trustedAssessment(input.copyWithCount(1));
+        boolean denied=assessment.disposition()==UuQuoteBook.Disposition.KNOWN_DENIED && assessment.deniedScanEligible();
+        var quote=assessment.finite();
+        if(quote==null&&!denied){state=State.FAILED;return;}
+        // A valid new generation can resume matching work; it cannot reinterpret a paid completion kind.
+        if(active()&&denied!=(session.completionKind()==IndependentScanSession.CompletionKind.KNOWN_DENIED)){state=State.FAILED;return;}
+        if(!storageAvailable(input))return;
+        if(!active()&&!(denied?session.beginDenied(input.copyWithCount(1)):session.begin(input.copyWithCount(1),quote.buckets(),TOTAL_ENERGY_COST))){state=State.FAILED;return;}
+        changing=true;
+        try{
+            long debit=session.tick(lastTick,new IndependentScanSession.EnergyPort(){
+                public long available(){return energyStorage.getAmount();}
+                public long consume(long amount){return energyStorage.consumeEnergyInternal(amount,false);}
+            });
+            isWorking=debit>0;updateProgress();
+            state=session.state()==IndependentScanSession.State.WAITING_ENERGY?State.NO_ENERGY:session.state()==IndependentScanSession.State.FAILED?State.FAILED:State.SCANNING;
+            if(session.state()==IndependentScanSession.State.COMPLETED){
+                if(session.completionKind()==IndependentScanSession.CompletionKind.KNOWN_DENIED){
+                    // Expected paid negative result: keep the input and terminal work, never create a StoredPattern.
+                    state=State.FAILED;progress=DEFAULT_SCAN_TIME;ContainerToTank.markUnsaved(this);return;
+                }
+                var before=input.copy();var after=input.copy();after.shrink(1);
+                var completed=new StoredPattern(session.sourceStack(),quote.buckets(),TOTAL_ENERGY_COST);
+                if(!itemHandler.scexCommitSlots(new int[]{SCANNER_SLOT},new ItemStack[]{before},new ItemStack[]{after},()->{
+                    result=completed;session.takeStoredPattern();state=State.COMPLETED;progress=DEFAULT_SCAN_TIME;
+                }))hold("Completed scan could not commit its input");
+            }
+            ContainerToTank.markUnsaved(this);
+        }finally{changing=false;}
+    }
+    public boolean storeResult(){
+        if(!serverThread()||changing||hasHeldScanData()||result==null)return false;
+        var quote=trustedQuote(result.item());if(quote==null)return false;
+        var updated=new StoredPattern(result.item(),quote.buckets(),TOTAL_ENERGY_COST);
+        changing=true;
+        try{
+            var before=itemHandler.getStackInSlot(MEMORY_SLOT).copy();
+            if(!before.isEmpty()){
+                if(before.getCount()!=1||!(before.getItem() instanceof mio_icif_memory memory)||memory.hasData(before)){state=State.TRANSFER_ERROR;return false;}
+                var after=before.copy();
+                if(!memory.tryStoreData(after,updated.item(),updated.buckets(),updated.energy())){state=State.TRANSFER_ERROR;return false;}
+                return itemHandler.scexCommitSlots(new int[]{MEMORY_SLOT},new ItemStack[]{before},new ItemStack[]{after},this::finishStorage);
+            }
+            for(var storage:nearbyStorage())if(storage.storePattern(updated.legacyView())){finishStorage();return true;}
+            state=State.TRANSFER_ERROR;return false;
+        }finally{changing=false;ContainerToTank.markUnsaved(this);}
+    }
+    private void finishStorage(){result=null;session=newSession();progress=0;state=State.IDLE;}
+    public void discardResult(){if(serverThread()&&!changing&&!hasHeldScanData()){finishStorage();isWorking=false;ContainerToTank.markUnsaved(this);}}
+    public void clearScanResult(){discardResult();}
+    public void reset(){discardResult();}
+    public boolean isScanComplete(){return result!=null;}
+    public ScanResult getScanResult(){return result==null?null:result.legacyView();}
+    public ItemStack getScannedItem(){return result==null?session.sourceStack():result.item();}
+    public double getUUMatterCost(){var quote=trustedQuote(getScannedItem());return quote==null?0:quote.buckets();}
+    public long getEnergyCost(){return getScannedItem().isEmpty()?0:TOTAL_ENERGY_COST;}
+    public State getScanState(){return state;}
+    public int getStateOrdinal(){return state.ordinal();}
+    public int getPercentageDone(){return getProgress()*100/DEFAULT_SCAN_TIME;}
+    public boolean isDone(){return isScanComplete();}
+    @Override protected void checkInputChanged(){/* Session owns the input until explicit cancellation or completion. */}
+    @Override protected boolean shouldResetProgress(){return false;}
+    @Override protected void doWork(){tickProduction();}
+    @Override protected boolean canWork(){return !hasHeldScanData()&&result==null;}
+    @Override protected void updateProgress(){progress=result==null?session.progress():DEFAULT_SCAN_TIME;maxProgress=DEFAULT_SCAN_TIME;}
+    @Override public int getMaxProgress(){return DEFAULT_SCAN_TIME;}
+    private void hold(String reason){held=new CompoundTag();held.putString("reason",reason);state=State.FAILED;isWorking=false;ContainerToTank.markUnsaved(this);}
+    @Override public void saveAdditional(CompoundTag tag,HolderLookup.Provider registries){
+        super.saveAdditional(tag,registries);var own=new CompoundTag();own.putInt("version",1);own.put("session",session.save(registries));
+        if(result!=null)own.put("result",result.save(registries));if(held!=null)own.put("held",held.copy());tag.put(SAVE_KEY,own);
+    }
+    @Override public void loadAdditional(CompoundTag tag,HolderLookup.Provider registries){
+        super.loadAdditional(tag,registries);session=newSession();result=null;held=null;isWorking=false;state=State.IDLE;lastTick=Long.MIN_VALUE;
+        if(!tag.contains(SAVE_KEY,Tag.TAG_COMPOUND)){if(!tag.isEmpty())held=tag.copy();state=held==null?State.IDLE:State.FAILED;updateProgress();return;}
+        var own=tag.getCompound(SAVE_KEY);
+        boolean valid=java.util.Set.of("version","session","result","held").containsAll(own.getAllKeys())
+            &&own.contains("version",Tag.TAG_INT)&&own.getInt("version")==1&&own.contains("session",Tag.TAG_COMPOUND)
+            &&(!own.contains("result")||own.contains("result",Tag.TAG_COMPOUND))&&(!own.contains("held")||own.contains("held",Tag.TAG_COMPOUND));
+        if(!valid){held=tag.copy();state=State.FAILED;updateProgress();return;}
+        session.load(own.getCompound("session"),registries);
+        if(own.contains("result")){result=StoredPattern.load(own.getCompound("result"),registries);if(result==null||session.state()!=IndependentScanSession.State.IDLE){held=tag.copy();result=null;}}
+        if(own.contains("held")&&held==null)held=own.getCompound("held").copy();
+        if(active()&&(itemHandler.getStackInSlot(SCANNER_SLOT).isEmpty()||!ItemStack.isSameItemSameComponents(itemHandler.getStackInSlot(SCANNER_SLOT),session.sourceStack())))held=tag.copy();
+        state=hasHeldScanData()||isDeniedScanComplete()?State.FAILED:result!=null?State.COMPLETED:active()?State.NO_ENERGY:State.IDLE;updateProgress();
+    }
+    public ContainerData getContainerData(){return new ContainerData(){
+        public int getCount(){return 15;}
+        public void set(int index,int value){clientData[index]=value;}
+        public int get(int i){
+            if(i<0||i>=15)throw new IndexOutOfBoundsException(i);if(level!=null&&level.isClientSide())return clientData[i];
+            if(i<3)return i==0?progress:i==1?DEFAULT_SCAN_TIME:isWorking?1:0;
+            if(i<5)return PatternMenuData.word(energyStorage.getAmount(),i-3);
+            if(i<7)return PatternMenuData.word(energyStorage.getCapacity(),i-5);
+            if(i==7)return isScanComplete()?1:0;if(i==8)return state.ordinal();
+            if(i<13)return PatternMenuData.word(Double.doubleToRawLongBits(getUUMatterCost()),i-9);
+            return PatternMenuData.word(getEnergyCost(),i-13);
         }
-        if (!(memoryStack.getItem() instanceof com.singularity_iteration.mio_icif.Items.Resource.mio_icif_memory memoryItem)) {
-            state = State.NO_STORAGE;
-            return false;
-        }
-        if (memoryItem.hasData(memoryStack)) {
-            state = State.NO_STORAGE;
-            return false;
-        }
-
-        // 检查扫描是否已完成
-        if (scanComplete) {
-            return false;
-        }
-
-        // 检查能量
-        if (!hasEnoughEnergy()) {
-            state = State.NO_ENERGY;
-            return false;
-        }
-
-        return true;
-    }
-
-    @Override
-    protected void doWork() {
-        isWorking = true;
-        state = State.SCANNING;
-
-        if (progress >= maxProgress) {
-            finishScan();
-        }
-    }
-
-    /**
-     * 完成扫描
-     * 对比IC2原版 TileEntityScanner finishScan
-     */
-    private void finishScan() {
-        ItemStack input = itemHandler.getStackInSlot(SCANNER_SLOT);
-        if (input.isEmpty()) {
-            stopWork();
-            return;
-        }
-
-        // 使用UU Graph计算被扫描物品的UU价值
-        double uuValue = calculateUuValue(input);
-
-        if (uuValue == Double.POSITIVE_INFINITY) {
-            // 扫描失败：无法推导出UU价值
-            state = State.FAILED;
-            scanComplete = true;
-            // 消耗所有能量
-            apiUseEnergy(TOTAL_ENERGY_COST, false);
-            // 重置进度
-            progress = 0;
-            isWorking = false;
-            setChanged();
-            return;
-        }
-
-        // 计算UU流体成本（以桶为单位，转换为mB，1桶=1000mB）
-        double uuMatterCostBuckets = uuValue * Singularity_Iteration_Config.SCANNER_UU_MULTIPLIER.get();
-        // 计算电力成本
-        long energyCost = calculateEnergyCost(uuValue);
-
-        // 保存扫描结果
-        scanResult = new ScanResult(input, uuMatterCostBuckets, energyCost);
-        scanComplete = true;
-        state = State.COMPLETED;
-
-        // 消耗能量
-        apiUseEnergy(TOTAL_ENERGY_COST, false);
-
-        // 移除扫描物品
-        input.shrink(1);
-        if (input.isEmpty()) {
-            itemHandler.setStackInSlot(SCANNER_SLOT, ItemStack.EMPTY);
-        }
-
-        // 重置进度
-        progress = 0;
-        isWorking = false;
-        setChanged();
-    }
-
-    /**
-     * 计算被扫描物品的UU价值（以桶为单位）
-     * 基于UU Graph系统
-     * IC2原版中 uu_scan_values.ini 中的数值是以µB（微桶）为单位的，需要转换
-     * 1 桶 = 1,000,000 µB
-     */
-    private double calculateUuValue(ItemStack stack) {
-        if (stack.isEmpty()) return Double.POSITIVE_INFINITY;
-
-        // 检查是否有自定义配置覆盖
-        String itemId = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(stack.getItem()).toString();
-        java.util.Map<String, Singularity_Iteration_Config.CostConfig> customCosts = Singularity_Iteration_Config.getCustomCostConfigs();
-        if (customCosts.containsKey(itemId)) {
-            return customCosts.get(itemId).getUuCost();
-        }
-
-        // 使用UU Index查询，返回值以桶为单位
-        if (UuIndex.INSTANCE.isInitialized()) {
-            return UuIndex.INSTANCE.getInBuckets(stack.copyWithCount(1));
-        }
-
-        // UU系统未初始化或无法推导返回正无穷大，扫描会失败
-        return Double.POSITIVE_INFINITY;
-    }
-
-    /**
-     * 计算电力消耗成本
-     * 对比IC2原版：原版中TileEntityScanner的patternEu 始终为512000，还没有被设置过
-     * 本机器通过自身的消耗功率（256 EU/tick）来模拟，本方法暂时返回固定值
-     */
-    private long calculateEnergyCost(double uuValue) {
-        // 对比IC2原版：patternEu 始终为512000
-        return 0L;
-    }
-
-    /**
-     * 将扫描结果写入记忆水晶
-     * @return 是否成功保存
-     */
-    public boolean storeResult() {
-        LOGGER.info("[Scanner] storeResult() called, scanComplete: {}, scanResult: {}", scanComplete, scanResult != null);
-
-        if (!scanComplete || scanResult == null) {
-            LOGGER.info("[Scanner] Store failed: scan not complete or no result");
-            return false;
-        }
-
-        ItemStack memoryStack = itemHandler.getStackInSlot(MEMORY_SLOT);
-        if (memoryStack.isEmpty()) {
-            LOGGER.info("[Scanner] Store failed: memory slot empty");
-            state = State.TRANSFER_ERROR;
-            return false;
-        }
-
-        if (!(memoryStack.getItem() instanceof com.singularity_iteration.mio_icif.Items.Resource.mio_icif_memory memoryItem)) {
-            LOGGER.info("[Scanner] Store failed: item is not memory crystal");
-            state = State.TRANSFER_ERROR;
-            return false;
-        }
-
-        if (memoryItem.hasData(memoryStack)) {
-            LOGGER.info("[Scanner] Store failed: memory already has data");
-            state = State.TRANSFER_ERROR;
-            return false;
-        }
-
-        LOGGER.info("[Scanner] Storing scan result to memory crystal...");
-        memoryItem.storeData(memoryStack,
-            scanResult.item,
-            scanResult.uuMatterCostBuckets,
-            scanResult.energyCost);
-
-        LOGGER.info("[Scanner] Store successful, clearing scan result");
-        clearScanResult();
-        return true;
-    }
-
-    /**
-     * 丢弃扫描结果
-     */
-    public void discardResult() {
-        clearScanResult();
-    }
-
-    /**
-     * 清除扫描结果
-     */
-    public void clearScanResult() {
-        scanResult = null;
-        scanComplete = false;
-        progress = 0;
-        currentStack = ItemStack.EMPTY;
-        state = State.IDLE;
-        setChanged();
-    }
-
-    /**
-     * 重置扫描状态
-     */
-    public void reset() {
-        progress = 0;
-        currentStack = ItemStack.EMPTY;
-        scanResult = null;
-        scanComplete = false;
-        state = State.IDLE;
-        setChanged();
-    }
-
-    @Override
-    protected boolean shouldResetProgress() {
-        if (scanComplete) {
-            return false;
-        }
-        ItemStack input = itemHandler.getStackInSlot(SCANNER_SLOT);
-        return input.isEmpty();
-    }
-
-    // ==================== Getters ====================
-
-    public boolean isScanComplete() {
-        return scanComplete;
-    }
-
-    @Nullable
-    public ScanResult getScanResult() {
-        return scanResult;
-    }
-
-    public ItemStack getScannedItem() {
-        return scanResult != null ? scanResult.item : ItemStack.EMPTY;
-    }
-
-    public double getUUMatterCost() {
-        return scanResult != null ? scanResult.uuMatterCostBuckets : 0;
-    }
-
-    public long getEnergyCost() {
-        return scanResult != null ? scanResult.energyCost : 0;
-    }
-
-    public State getScanState() {
-        return state;
-    }
-
-    public int getPercentageDone() {
-        return 100 * progress / maxProgress;
-    }
-
-    public boolean isDone() {
-        return progress >= maxProgress;
-    }
-
-    // ==================== NBT ====================
-
-    @Override
-    protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
-        super.saveAdditional(tag, registries);
-        tag.putBoolean("scan_complete", scanComplete);
-        tag.putInt("state", state.ordinal());
-        if (!currentStack.isEmpty()) {
-            tag.put("current_stack", currentStack.saveOptional(registries));
-        }
-        if (scanResult != null) {
-            tag.put("scan_result", scanResult.serializeNBT());
-        }
-    }
-
-    @Override
-    public void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
-        super.loadAdditional(tag, registries);
-        scanComplete = tag.getBoolean("scan_complete");
-        int stateIdx = tag.getInt("state");
-        state = (stateIdx >= 0 && stateIdx < State.values().length) ? State.values()[stateIdx] : State.IDLE;
-        if (tag.contains("current_stack")) {
-            currentStack = ItemStack.parseOptional(registries, tag.getCompound("current_stack"));
-        }
-        if (tag.contains("scan_result")) {
-            scanResult = ScanResult.deserializeNBT(tag.getCompound("scan_result"));
-        }
-    }
-
-    // ==================== MenuProvider ====================
-
-    @Override
-    public Component getDisplayName() {
-        return Component.translatable("container.mio_icif.scanner_elc");
-    }
-
-    public ContainerData getContainerData() {
-        return dataAccess;
-    }
-
-    @Nullable
-    @Override
-    public AbstractContainerMenu createMenu(int containerId, Inventory playerInventory, Player player) {
-        return new com.singularity_iteration.mio_icif.Menu.Producer.ScannerElcMenu(
-            containerId, playerInventory, this);
-    }
-
-    /**
-     * 获取机器状态ordinal
-     * 0=Idle, 1=Scanning, 2=Completed, 3=Failed, 4=No Storage, 5=No Energy, 6=Transfer Error, 7=Already Recorded
-     */
-    public int getStateOrdinal() {
-        return state.ordinal();
-    }
-
-    // ==================== Tick ====================
-
-    public static void tick(Level level, BlockPos pos, BlockState state, mio_icif_scanner_elc blockEntity) {
-        if (level.isClientSide()) {
-            return;
-        }
-
-        // 调用父类tick方法处理工作逻辑
-        mio_icif_producer.tick(level, pos, state, blockEntity);
-    }
+    };}
+    @Override public Component getDisplayName(){return Component.translatable("container.mio_icif.scanner_elc");}
+    @Override public AbstractContainerMenu createMenu(int id,Inventory inventory,Player player){return new ScannerElcMenu(id,inventory,this);}
+    public static void tick(Level level,BlockPos pos,BlockState state,mio_icif_scanner_elc machine){if(!level.isClientSide())mio_icif_producer.tick(level,pos,state,machine);}
 }

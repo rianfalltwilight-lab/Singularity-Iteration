@@ -83,13 +83,13 @@ public class ItemAPIImpl implements IItemAPI {
     @Override
     public long getBatteryCapacity(ItemStack stack) {
         if (stack.getItem() instanceof IElectricArmorItem armor) {
-            return armor.getMaxEnergy();
+            return armor.getMaxEnergy(stack);
         }
         if (stack.getItem() instanceof IElectricToolItem tool) {
-            return tool.getMaxEnergy();
+            return tool.getMaxEnergy(stack);
         }
         if (stack.getItem() instanceof IBatteryItem bat) {
-            return bat.getMaxEnergy();
+            return bat.getMaxEnergy(stack);
         }
         return 0L;
     }
@@ -110,66 +110,14 @@ public class ItemAPIImpl implements IItemAPI {
 
     @Override
     public long chargeBattery(ItemStack stack, long amount, boolean simulate) {
-        if (stack.getItem() instanceof IElectricArmorItem armor) {
-            long stored = armor.getEnergy(stack);
-            long capacity = armor.getMaxEnergy();
-            long space = capacity - stored;
-            long accepted = Math.min(amount, space);
-            if (!simulate && accepted > 0) {
-                armor.addEnergy(stack, accepted);
-            }
-            return accepted;
-        }
-        if (stack.getItem() instanceof IElectricToolItem tool) {
-            long stored = tool.getEnergy(stack);
-            long capacity = tool.getMaxEnergy();
-            long space = capacity - stored;
-            long accepted = Math.min(amount, space);
-            if (!simulate && accepted > 0) {
-                tool.addEnergy(stack, accepted);
-            }
-            return accepted;
-        }
-        if (stack.getItem() instanceof IBatteryItem bat) {
-            long stored = bat.getEnergy(stack);
-            long capacity = bat.getMaxEnergy();
-            long space = capacity - stored;
-            long accepted = Math.min(amount, space);
-            if (!simulate && accepted > 0) {
-                bat.addEnergy(stack, accepted);
-            }
-            return accepted;
-        }
-        return 0L;
+        return stack.getItem() instanceof IBatteryItem battery
+            ? dev.scex.si.energy.BatteryTransfer.transfer(stack, battery, amount, true, simulate) : 0L;
     }
 
     @Override
     public long dischargeBattery(ItemStack stack, long amount, boolean simulate) {
-        if (stack.getItem() instanceof IElectricArmorItem armor) {
-            long stored = armor.getEnergy(stack);
-            long extracted = Math.min(amount, stored);
-            if (!simulate && extracted > 0) {
-                armor.extractEnergy(stack, extracted);
-            }
-            return extracted;
-        }
-        if (stack.getItem() instanceof IElectricToolItem tool) {
-            long stored = tool.getEnergy(stack);
-            long extracted = Math.min(amount, stored);
-            if (!simulate && extracted > 0) {
-                tool.extractEnergy(stack, extracted);
-            }
-            return extracted;
-        }
-        if (stack.getItem() instanceof IBatteryItem bat) {
-            long stored = bat.getEnergy(stack);
-            long extracted = Math.min(amount, stored);
-            if (!simulate && extracted > 0) {
-                bat.extractEnergy(stack, extracted);
-            }
-            return extracted;
-        }
-        return 0L;
+        return stack.getItem() instanceof IBatteryItem battery
+            ? dev.scex.si.energy.BatteryTransfer.transfer(stack, battery, amount, false, simulate) : 0L;
     }
 
     // ========== 电动工具 API ==========
@@ -177,7 +125,7 @@ public class ItemAPIImpl implements IItemAPI {
     @Override
     public long getElectricToolMaxEnergy(ItemStack stack) {
         if (stack.getItem() instanceof IElectricToolItem tool) {
-            return tool.getMaxEnergy();
+            return tool.getMaxEnergy(stack);
         }
         return 0L;
     }
@@ -208,30 +156,14 @@ public class ItemAPIImpl implements IItemAPI {
 
     @Override
     public long chargeElectricTool(ItemStack stack, long amount, boolean simulate) {
-        if (!(stack.getItem() instanceof IElectricToolItem tool)) return 0L;
-        long stored = tool.getEnergy(stack);
-        long capacity = tool.getMaxEnergy();
-        long space = capacity - stored;
-        long accepted = Math.min(amount, space);
-        if (!simulate && accepted > 0) {
-            tool.addEnergy(stack, accepted);
-        }
-        return accepted;
+        return stack.getItem() instanceof IElectricToolItem battery
+            ? dev.scex.si.energy.BatteryTransfer.transfer(stack, battery, amount, true, simulate) : 0L;
     }
 
     @Override
     public long dischargeElectricTool(ItemStack stack, long amount, boolean simulate) {
-        if (!(stack.getItem() instanceof IElectricToolItem tool)) return 0L;
-        long stored = tool.getEnergy(stack);
-        long extracted = Math.min(amount, stored);
-        if (!simulate && extracted > 0) {
-            if (extracted > Integer.MAX_VALUE) {
-                LOGGER.warn("Tool energy extraction truncated from {} to {} for item {}", 
-                    extracted, Integer.MAX_VALUE, stack.getItem().getDescriptionId());
-            }
-            tool.extractEnergy(stack, Math.min(extracted, Integer.MAX_VALUE));
-        }
-        return extracted;
+        return stack.getItem() instanceof IElectricToolItem battery
+            ? dev.scex.si.energy.BatteryTransfer.transfer(stack, battery, amount, false, simulate) : 0L;
     }
 
     @Override
@@ -247,7 +179,7 @@ public class ItemAPIImpl implements IItemAPI {
     @Override
     public long getElectricArmorMaxEnergy(ItemStack stack) {
         if (stack.getItem() instanceof IElectricArmorItem armor) {
-            return armor.getMaxEnergy();
+            return armor.getMaxEnergy(stack);
         }
         return 0L;
     }
@@ -278,30 +210,14 @@ public class ItemAPIImpl implements IItemAPI {
 
     @Override
     public long chargeElectricArmor(ItemStack stack, long amount, boolean simulate) {
-        if (!(stack.getItem() instanceof IElectricArmorItem armor)) return 0L;
-        long stored = armor.getEnergy(stack);
-        long capacity = armor.getMaxEnergy();
-        long space = capacity - stored;
-        long accepted = Math.min(amount, space);
-        if (!simulate && accepted > 0) {
-            armor.addEnergy(stack, accepted);
-        }
-        return accepted;
+        return stack.getItem() instanceof IElectricArmorItem battery
+            ? dev.scex.si.energy.BatteryTransfer.transfer(stack, battery, amount, true, simulate) : 0L;
     }
 
     @Override
     public long dischargeElectricArmor(ItemStack stack, long amount, boolean simulate) {
-        if (!(stack.getItem() instanceof IElectricArmorItem armor)) return 0L;
-        long stored = armor.getEnergy(stack);
-        long extracted = Math.min(amount, stored);
-        if (!simulate && extracted > 0) {
-            if (extracted > Integer.MAX_VALUE) {
-                LOGGER.warn("Armor energy extraction truncated from {} to {} for item {}", 
-                    extracted, Integer.MAX_VALUE, stack.getItem().getDescriptionId());
-            }
-            armor.extractEnergy(stack, Math.min(extracted, Integer.MAX_VALUE));
-        }
-        return extracted;
+        return stack.getItem() instanceof IElectricArmorItem battery
+            ? dev.scex.si.energy.BatteryTransfer.transfer(stack, battery, amount, false, simulate) : 0L;
     }
 
     @Override
@@ -411,7 +327,7 @@ public class ItemAPIImpl implements IItemAPI {
             return armor.isFull(stack);
         }
         if (stack.getItem() instanceof IElectricToolItem tool) {
-            return tool.getEnergy(stack) >= tool.getMaxEnergy();
+            return tool.getEnergy(stack) >= tool.getMaxEnergy(stack);
         }
         if (stack.getItem() instanceof IBatteryItem bat) {
             return bat.isFull(stack);

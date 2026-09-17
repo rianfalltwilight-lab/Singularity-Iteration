@@ -1,0 +1,33 @@
+// SPDX-License-Identifier: Apache-2.0
+// Inspect entry names only. Legacy class bodies are never parsed.
+gradle.taskGraph.whenReady { graph ->
+    def policy = new groovy.json.JsonSlurper().parse(file('gradle/source-provenance-policy.json'))
+    if (!(policy.retired_source_groups ?: []).any { it.id == 'uu-index-and-replicator-internal-mapping' }) return
+    def prefix = 'com/singularity_iteration/mio_icif/uu/'
+    def seen = new LinkedHashSet<File>()
+    graph.allTasks.findAll { it instanceof JavaCompile || it instanceof JavaExec }.each { task ->
+        if (task instanceof JavaCompile) {
+            task.source.files.each { input ->
+                if (input.absolutePath.replace('\\', '/').contains('/' + prefix)) {
+                    throw new GradleException('Retired UU source remains in ' + task.path + ': ' + input)
+                }
+            }
+        }
+        seen.addAll(task.classpath.files)
+    }
+    seen.each { entry ->
+        if (entry.isDirectory()) {
+            def legacy = new File(entry, prefix)
+            if (legacy.exists() && !fileTree(legacy).matching { include '**/*.class' }.files.empty) {
+                throw new GradleException('Retired UU class remains in classpath directory: ' + entry)
+            }
+        } else if (entry.isFile() && entry.name.endsWith('.jar')) {
+            new java.util.zip.ZipFile(entry).withCloseable { zip ->
+                if (zip.entries().toList().any { it.name.startsWith(prefix) && it.name.endsWith('.class') }) {
+                    throw new GradleException('Retired UU class remains in classpath archive: ' + entry)
+                }
+            }
+        }
+    }
+    println('SCEX_RETIRED_UU_CLASSPATH checked_roots=' + seen.size() + ' legacy_classes=0 source_entries=0')
+}

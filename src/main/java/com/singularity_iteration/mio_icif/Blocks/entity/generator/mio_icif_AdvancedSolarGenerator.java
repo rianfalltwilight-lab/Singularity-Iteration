@@ -2,6 +2,12 @@ package com.singularity_iteration.mio_icif.Blocks.entity.generator;
 
 import com.singularity_iteration.mio_icif.energy.EnergyUnit.CableTier;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.nbt.CompoundTag;
+import dev.scex.energy.SolarGeneratorProfile;
+import dev.scex.si.energy.SolarItemCharging;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -19,6 +25,7 @@ public class mio_icif_AdvancedSolarGenerator extends mio_icif_solar_generator {
     protected final int dayPower;      // 白天发电功率 (EU/t)
     protected final int nightPower;    // 夜晚发电功率 (EU/t)
     protected final int tier;          // 电压等级
+    private final SolarGeneratorProfile scexProfile;
 
     // 发电状态
     protected GenerationState generationState = GenerationState.NONE;
@@ -53,13 +60,17 @@ public class mio_icif_AdvancedSolarGenerator extends mio_icif_solar_generator {
                                            long capacity, int tier,
                                            BlockEntityType<?> type) {
         super(pos, state, type, getCableTierFromIndexStatic(tier - 1));
-        this.dayPower = dayPower;
-        this.nightPower = nightPower;
+        this.scexProfile = energyStorage.scexNetworkControlled()
+            ? SolarGeneratorProfile.find(BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString())
+                .filter(SolarGeneratorProfile::discrete).orElseThrow() : null;
+        this.dayPower = scexProfile != null ? scexProfile.dayPower() : dayPower;
+        this.nightPower = scexProfile != null ? scexProfile.nightPower() : nightPower;
         this.tier = tier;
         // 重新初始化能量存储
-        this.energyStorage.setCapacity(capacity);
+        this.energyStorage.setCapacity(scexProfile != null ? scexProfile.capacity() : capacity);
         // 设置正确的最大输出速率（根据电压等级）
-        this.energyStorage.setMaxExtract(getCableTierFromIndexStatic(tier - 1).powerRating);
+        this.energyStorage.setMaxExtract(scexProfile != null ? scexProfile.outputPacket() : getCableTierFromIndexStatic(tier - 1).powerRating);
+        if (scexProfile != null) setAsPowerSource(this.dayPower);
     }
 
     /**
@@ -113,6 +124,7 @@ public class mio_icif_AdvancedSolarGenerator extends mio_icif_solar_generator {
      */
     @Override
     public boolean canGenerate(Level level, BlockPos pos) {
+        generationState = GenerationState.NONE;
         // 检查是否在主世界
         if (!isOverworld(level)) {
             return false;
@@ -127,7 +139,8 @@ public class mio_icif_AdvancedSolarGenerator extends mio_icif_solar_generator {
         boolean isRaining = level.isRaining() || level.isThundering();
         
         // 检查时间
-        long timeOfDay = level.getDayTime() % 24000;
+        // Dawn/dusk cutoffs retain the SI candidate policy until the full-day batch.
+        long timeOfDay = Math.floorMod(level.getDayTime(), 24000L);
         boolean isDay = timeOfDay >= GENERATION_START_TIME && timeOfDay <= GENERATION_END_TIME;
 
         if (isDay && !isRaining) {
@@ -138,6 +151,21 @@ public class mio_icif_AdvancedSolarGenerator extends mio_icif_solar_generator {
 
         return true;
     }
+
+    @Override
+    protected float scexIndependentRate(Level level, BlockPos pos) {
+        var before = generationState;
+        boolean clear = canGenerate(level, pos);
+        long rate = scexProfile.discreteOutput(clear, generationState == GenerationState.DAY, false);
+        if (before != generationState) level.sendBlockUpdated(pos, getBlockState(), getBlockState(), 3);
+        return rate;
+    }
+
+    @Override
+    protected int scexRefreshTicks() { return scexProfile.refreshTicks(); }
+
+    @Override
+    protected boolean scexClampBasicBuffer() { return false; }
 
     /**
      * 获取当前发电功率
@@ -199,6 +227,10 @@ public class mio_icif_AdvancedSolarGenerator extends mio_icif_solar_generator {
      */
     @Override
     protected void chargeItems() {
+        if (scexProfile != null) {
+            if (SolarItemCharging.charge(itemHandler, scexProfile.chargeSlots(), energyStorage, getItemAPI())) setChanged();
+            return;
+        }
         // 遍历所有4个槽位
         for (int i = 0; i < 4; i++) {
             ItemStack chargeStack = itemHandler.getStackInSlot(i);
@@ -231,5 +263,48 @@ public class mio_icif_AdvancedSolarGenerator extends mio_icif_solar_generator {
                 setChanged();
             }
         }
+    }
+
+    @Override
+    public int[] getSlotsForFace(Direction side) { return new int[]{0, 1, 2, 3}; }
+
+    @Override
+    public boolean canPlaceItemThroughFace(int slot, ItemStack stack, @org.jetbrains.annotations.Nullable Direction side) {
+        return slot >= 0 && slot < Math.min(4, itemHandler.getSlots()) && isBattery(stack);
+    }
+
+    @Override
+    public boolean canTakeItemThroughFace(int slot, ItemStack stack, Direction side) {
+        return slot >= 0 && slot < Math.min(4, itemHandler.getSlots());
+    }
+
+    @Override
+    protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+        super.saveAdditional(tag, registries);
+        tag.putInt("scex_solar_state", generationState.ordinal());
+    }
+
+    private void scexReadState(CompoundTag tag) {
+        int value = tag.getInt("scex_solar_state");
+        generationState = value >= 0 && value < GenerationState.values().length ? GenerationState.values()[value] : GenerationState.NONE;
+    }
+
+    @Override
+    public void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+        super.loadAdditional(tag, registries);
+        scexReadState(tag);
+    }
+
+    @Override
+    public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
+        var tag = super.getUpdateTag(registries);
+        tag.putInt("scex_solar_state", generationState.ordinal());
+        return tag;
+    }
+
+    @Override
+    public void handleUpdateTag(CompoundTag tag, HolderLookup.Provider registries) {
+        super.handleUpdateTag(tag, registries);
+        scexReadState(tag);
     }
 }

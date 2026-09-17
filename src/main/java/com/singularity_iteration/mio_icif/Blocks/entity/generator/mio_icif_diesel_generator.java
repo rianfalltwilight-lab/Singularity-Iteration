@@ -53,6 +53,7 @@ public class mio_icif_diesel_generator extends GenericGeneratorBlockEntity {
     private static final ResourceLocation ENTITY_TYPE_ID = ResourceLocation.fromNamespaceAndPath("mio_icif", "diesel_generator");
 
     protected final FluidTank fuelTank;
+    private long scexFuelCredit;
 
     public mio_icif_diesel_generator(BlockPos pos, BlockState state) {
         this(pos, state, resolveEntityType());
@@ -65,7 +66,12 @@ public class mio_icif_diesel_generator extends GenericGeneratorBlockEntity {
 
         Fluid dieselFluid = resolveDieselFluid();
         this.fuelTank = new FluidTank(FUEL_CAPACITY, fluidStack ->
-            dieselFluid != null && fluidStack.getFluid() == dieselFluid);
+            dieselFluid != null && fluidStack.getFluid() == dieselFluid) {
+            @Override protected void onContentsChanged() {
+                if (energyStorage.scexNetworkControlled()) dev.scex.si.energy.ContainerToTank.markUnsaved(mio_icif_diesel_generator.this);
+                else mio_icif_diesel_generator.this.setChanged();
+            }
+        };
     }
 
     private static BlockEntityType<?> resolveEntityType() {
@@ -105,6 +111,7 @@ public class mio_icif_diesel_generator extends GenericGeneratorBlockEntity {
     }
 
     private void handleFuelBucketSlot() {
+        if (energyStorage.scexNetworkControlled()) { scexFillFuelContainer(); return; }
         ItemStack fuelBucketStack = itemHandler.getStackInSlot(FUEL_BUCKET_SLOT);
         if (fuelBucketStack.isEmpty() || !isFuelBucket(fuelBucketStack)) return;
 
@@ -158,6 +165,10 @@ public class mio_icif_diesel_generator extends GenericGeneratorBlockEntity {
 
     @Override
     protected void chargeItems() {
+        if (energyStorage.scexNetworkControlled()) {
+            if (dev.scex.si.energy.SolarItemCharging.chargeRange(itemHandler, BATTERY_SLOT, 1, energyStorage, getItemAPI())) setChanged();
+            return;
+        }
         ItemStack chargeStack = itemHandler.getStackInSlot(BATTERY_SLOT);
         if (chargeStack.isEmpty()) return;
 
@@ -184,6 +195,7 @@ public class mio_icif_diesel_generator extends GenericGeneratorBlockEntity {
 
     public static void tick(Level level, BlockPos pos, BlockState state, mio_icif_diesel_generator blockEntity) {
         if (level.isClientSide()) return;
+        if (blockEntity.energyStorage.scexNetworkControlled()) { blockEntity.scexTickFuel(level, pos); return; }
 
         boolean wasBurning = blockEntity.burnTime > 0;
 
@@ -227,6 +239,7 @@ public class mio_icif_diesel_generator extends GenericGeneratorBlockEntity {
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
+        if (energyStorage.scexNetworkControlled() || scexFuelCredit > 0) tag.putLong("scex_fuel_credit_eu", scexFuelCredit);
         if (itemHandler != null) {
             tag.put("Items", itemHandler.serializeNBT(registries));
         }
@@ -248,11 +261,13 @@ public class mio_icif_diesel_generator extends GenericGeneratorBlockEntity {
         if (fuelTank != null && tag.contains("FuelTank")) {
             fuelTank.readFromNBT(registries, tag.getCompound("FuelTank"));
         }
+        scexReadFuelCredit(tag);
     }
 
     @Override
     public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
         CompoundTag tag = super.getUpdateTag(registries);
+        if (energyStorage.scexNetworkControlled() || scexFuelCredit > 0) tag.putLong("scex_fuel_credit_eu", scexFuelCredit);
         if (itemHandler != null) {
             tag.put("Items", itemHandler.serializeNBT(registries));
         }
@@ -275,6 +290,7 @@ public class mio_icif_diesel_generator extends GenericGeneratorBlockEntity {
         if (fuelTank != null && tag.contains("FuelTank")) {
             fuelTank.readFromNBT(registries, tag.getCompound("FuelTank"));
         }
+        scexReadFuelCredit(tag);
     }
 
     public FluidTank getFuelTank() {
@@ -379,5 +395,43 @@ public class mio_icif_diesel_generator extends GenericGeneratorBlockEntity {
     @Override
     public AbstractContainerMenu createMenu(int containerId, Inventory inventory, Player player) {
         return new com.singularity_iteration.mio_icif.Menu.Generator.DieselGeneratorMenu(containerId, inventory, this, this.getItemHandler(), null);
+    }
+
+    private void scexFillFuelContainer() {
+        var input = itemHandler.getStackInSlot(FUEL_BUCKET_SLOT);
+        if (input.isEmpty() || !isFuelBucket(input)) return;
+        var api = getItemAPI();
+        boolean cell = api.isFluidCell(input);
+        var fluid = resolveDieselFluid();
+        if (fluid == null) return;
+        var contents = cell ? api.getFluidCellContent(input.copyWithCount(1)).copy()
+            : new FluidStack(fluid, FUEL_PER_BUCKET);
+        var empty = cell ? api.getFluidCellEmptyContainer(input.copyWithCount(1)) : new ItemStack(Items.BUCKET);
+        if (contents.isEmpty() || contents.getFluid() != fluid || empty.isEmpty()) return;
+        if (dev.scex.si.energy.ContainerToTank.transfer(itemHandler, FUEL_BUCKET_SLOT, EMPTY_BUCKET_SLOT, fuelTank, contents, empty)) setChanged();
+    }
+
+    private void scexTickFuel(Level level, BlockPos pos) {
+        boolean wasBurning = burnTime > 0;
+        handleFuelBucketSlot();
+        chargeItems();
+        var step = dev.scex.si.energy.FluidFuelGeneration.tick(fuelTank, energyStorage,
+            scexFuelCredit, FUEL_CONSUME_PER_TICK, ENERGY_GENERATION_RATE, ENERGY_GENERATION_RATE);
+        scexFuelCredit = step.bufferedEnergy();
+        burnTime = step.generated() > 0 ? 1 : 0;
+        burnDuration = 1;
+        if (wasBurning != (burnTime > 0)) {
+            var state = level.getBlockState(pos);
+            if (state.hasProperty(mio_icif_Block_Diesel_Generator.ACTIVE)) level.setBlock(pos, state.setValue(mio_icif_Block_Diesel_Generator.ACTIVE, burnTime > 0), 3);
+        }
+        setChanged();
+    }
+
+    private void scexReadFuelCredit(CompoundTag tag) {
+        if (tag.contains("scex_fuel_credit_eu", net.minecraft.nbt.Tag.TAG_LONG)) {
+            scexFuelCredit = Math.clamp(tag.getLong("scex_fuel_credit_eu"), 0L, ENERGY_GENERATION_RATE);
+        } else if (energyStorage.scexNetworkControlled()) {
+            scexFuelCredit = 0;
+        }
     }
 }

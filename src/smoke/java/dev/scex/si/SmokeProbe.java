@@ -18,7 +18,13 @@ import net.neoforged.neoforge.items.ItemStackHandler;
 @Mod("scex_si_smoke")
 public final class SmokeProbe {
     private int assertions;
-    public SmokeProbe() {
+    public SmokeProbe(net.neoforged.bus.api.IEventBus modBus) {
+        if (Files.exists(Path.of("interop-world.json"))) modBus.addListener(InteropWorldProbe::register);
+        if (Files.exists(Path.of("pipe-failure-world.json")) || Files.exists(Path.of("pipe-recovery-world.json"))) modBus.addListener(PipeFailureWorldProbe::register);
+        if (Files.exists(Path.of("item-equipment-world.json")) || Files.exists(Path.of("mixed-output-world.json"))) {
+            modBus.addListener(ItemEquipmentWorldProbe::registerItems);
+            modBus.addListener(ItemEquipmentWorldProbe::registerCapabilities);
+        }
         NeoForge.EVENT_BUS.addListener(this::started);
         if ("topology".equals(System.getProperty("scex.smoke.mode"))) {
             NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.server.ServerAboutToStartEvent event) -> {

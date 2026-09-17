@@ -9,6 +9,9 @@ import com.singularity_iteration.mio_icif.Items.Cell.mio_icif_cells;
 import com.singularity_iteration.mio_icif.Items.Upgrade.MachineUpgradeStats;
 import com.singularity_iteration.mio_icif.api.MioIcifAPI;
 import com.singularity_iteration.mio_icif.api.machine.ISlotLayout;
+import dev.scex.si.processing.FluidTransferBuffer;
+import dev.scex.si.processing.OwnedFluidConversion;
+import dev.scex.si.energy.ContainerToTank;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
@@ -47,6 +50,9 @@ import org.jetbrains.annotations.Nullable;
  */
 @SuppressWarnings("null")
 public class mio_icif_solar_distiller extends BlockEntity implements MenuProvider, com.singularity_iteration.mio_icif.api.machine.IProducerBlock {
+    private final FluidTransferBuffer scexFluidOutput = new FluidTransferBuffer(() -> ContainerToTank.markUnsaved(this));
+    private final FluidTransferBuffer scexFluidInput = new FluidTransferBuffer(() -> ContainerToTank.markUnsaved(this));
+
 
     private static final SlotLayout LAYOUT = SlotLayout.builder()
         .extra(2)
@@ -125,12 +131,16 @@ public class mio_icif_solar_distiller extends BlockEntity implements MenuProvide
         this.waterTank = new FluidTank(WATER_TANK_CAPACITY, fluidStack -> {
             if (fluidStack.isEmpty()) return true;
             return fluidStack.getFluid() == Fluids.WATER;
-        });
+        }) {
+            @Override protected void onContentsChanged() { ContainerToTank.markUnsaved(mio_icif_solar_distiller.this); }
+        };
 
         this.distilledTank = new FluidTank(DISTILLED_TANK_CAPACITY, fluidStack -> {
             if (fluidStack.isEmpty()) return true;
             return fluidStack.getFluid() == mio_icif_fluids.DISTILLEDWATER.get();
-        });
+        }) {
+            @Override protected void onContentsChanged() { ContainerToTank.markUnsaved(mio_icif_solar_distiller.this); }
+        };
 
         this.itemHandler = new MachineItemHandler(LAYOUT) {
             @Override
@@ -166,7 +176,8 @@ public class mio_icif_solar_distiller extends BlockEntity implements MenuProvide
      * 每tick 更新逻辑
      */
     public static void tick(Level level, BlockPos pos, BlockState state, mio_icif_solar_distiller blockEntity) {
-        if (level.isClientSide()) return;
+        if (!(level instanceof net.minecraft.server.level.ServerLevel server)
+                || !server.getServer().isSameThread() || blockEntity.isRemoved()) return;
 
         blockEntity.recalculateUpgradeStats();
 
@@ -177,9 +188,8 @@ public class mio_icif_solar_distiller extends BlockEntity implements MenuProvide
         blockEntity.isWorking = blockEntity.canWork(level, pos);
 
         if (blockEntity.isWorking) {
-            blockEntity.progress++;
+            blockEntity.progress = Math.min(PRODUCTION_INTERVAL, blockEntity.progress + 1);
             if (blockEntity.progress >= PRODUCTION_INTERVAL) {
-                blockEntity.progress = 0;
                 blockEntity.produceDistilledWater();
             }
         } else {
@@ -199,8 +209,7 @@ public class mio_icif_solar_distiller extends BlockEntity implements MenuProvide
      * 检查是否可以工作
      */
     private boolean canWork(Level level, BlockPos pos) {
-        if (waterTank.getFluidAmount() < FLUID_PER_CYCLE) return false;
-        if (distilledTank.getFluidAmount() + FLUID_PER_CYCLE > distilledTank.getCapacity()) return false;
+        if (prepareDistillation().isEmpty()) return false;
 
         // 检查维度
         if (level.dimension() != Level.OVERWORLD) return false;
@@ -219,87 +228,51 @@ public class mio_icif_solar_distiller extends BlockEntity implements MenuProvide
     /**
      * 产出蒸馏水
      */
+    private java.util.Optional<OwnedFluidConversion.Prepared> prepareDistillation() {
+        return OwnedFluidConversion.prepare(waterTank, new FluidStack(Fluids.WATER, FLUID_PER_CYCLE),
+            distilledTank, new FluidStack(mio_icif_fluids.DISTILLEDWATER.get(), FLUID_PER_CYCLE), itemHandler, -1, ItemStack.EMPTY);
+    }
+
     private void produceDistilledWater() {
-        FluidStack drained = waterTank.drain(FLUID_PER_CYCLE, IFluidHandler.FluidAction.EXECUTE);
-        if (drained.getAmount() >= FLUID_PER_CYCLE) {
-            distilledTank.fill(new FluidStack(mio_icif_fluids.DISTILLEDWATER.get(), FLUID_PER_CYCLE), IFluidHandler.FluidAction.EXECUTE);
-        }
+        var operation = prepareDistillation();
+        if (operation.isEmpty()) return;
+        int before = progress;
+        progress = 0;
+        if (!operation.get().commit()) progress = before;
     }
 
     /**
      * 处理水桶输入：将水从水单元中的水转入水槽，空容器移到水输出槽
      */
     private void handleWaterBucketSlot() {
-        ItemStack input = itemHandler.getStackInSlot(WATER_INPUT_SLOT);
+        var input = itemHandler.getStackInSlot(WATER_INPUT_SLOT);
         if (input.isEmpty()) return;
-
-        int fillAmount = 1000;
-        if (input.is(Items.WATER_BUCKET)) {
-            if (waterTank.getFluidAmount() + fillAmount > waterTank.getCapacity()) return;
-            if (!canInsertOrMerge(WATER_OUTPUT_SLOT, new ItemStack(Items.BUCKET))) return;
-
-            waterTank.fill(new FluidStack(Fluids.WATER, fillAmount), IFluidHandler.FluidAction.EXECUTE);
-            input.shrink(1);
-            insertOrMerge(WATER_OUTPUT_SLOT, new ItemStack(Items.BUCKET));
-            setChanged();
-        } else if (mio_icif_cells.isCellContainingFluid(input, Fluids.WATER)) {
-            if (waterTank.getFluidAmount() + fillAmount > waterTank.getCapacity()) return;
-            ItemStack emptyCell = mio_icif_cells.getEmptyCellForStack(input);
-            if (emptyCell.isEmpty()) emptyCell = new ItemStack(mio_icif_cells.CELL_EMPTY.get());
-            if (!canInsertOrMerge(WATER_OUTPUT_SLOT, emptyCell)) return;
-
-            waterTank.fill(new FluidStack(Fluids.WATER, fillAmount), IFluidHandler.FluidAction.EXECUTE);
-            input.shrink(1);
-            insertOrMerge(WATER_OUTPUT_SLOT, emptyCell);
-            setChanged();
-        }
+        boolean cell = mio_icif_cells.isCellContainingFluid(input, Fluids.WATER);
+        if (!cell && !input.is(Items.WATER_BUCKET)) return;
+        var single = input.copyWithCount(1);
+        var content = cell ? mio_icif_cells.getCellFluid(single) : new FluidStack(Fluids.WATER, 1000);
+        var empty = cell ? mio_icif_cells.getEmptyCellForStack(single) : new ItemStack(Items.BUCKET);
+        if (ContainerToTank.transfer(itemHandler, WATER_INPUT_SLOT, WATER_OUTPUT_SLOT, waterTank, content, empty)) setChanged();
     }
 
     /**
      * 处理蒸馏水桶输入：用空单元/空桶从蒸馏水槽取水，移到蒸馏水输出槽
      */
     private void handleDistilledBucketSlot() {
-        ItemStack input = itemHandler.getStackInSlot(DISTILLED_INPUT_SLOT);
+        var input = itemHandler.getStackInSlot(DISTILLED_INPUT_SLOT);
         if (input.isEmpty()) return;
-
-        int drainAmount = 1000;
-        if (input.is(Items.BUCKET)) {
-            if (distilledTank.getFluidAmount() < drainAmount) return;
-            if (!canInsertOrMerge(DISTILLED_OUTPUT_SLOT, new ItemStack(mio_icif_fluids.DISTILLEDWATER_BUCKET.get()))) return;
-
-            distilledTank.drain(drainAmount, IFluidHandler.FluidAction.EXECUTE);
-            input.shrink(1);
-            insertOrMerge(DISTILLED_OUTPUT_SLOT, new ItemStack(mio_icif_fluids.DISTILLEDWATER_BUCKET.get()));
-            setChanged();
-        } else if (mio_icif_cells.isEmptyCell(input)) {
-            if (distilledTank.getFluidAmount() < drainAmount) return;
-            ItemStack filledCell = mio_icif_cells.getFilledCellForFluidStack(mio_icif_fluids.DISTILLEDWATER.get());
-            if (!canInsertOrMerge(DISTILLED_OUTPUT_SLOT, filledCell)) return;
-
-            distilledTank.drain(drainAmount, IFluidHandler.FluidAction.EXECUTE);
-            input.shrink(1);
-            insertOrMerge(DISTILLED_OUTPUT_SLOT, filledCell);
-            setChanged();
-        }
+        boolean cell = mio_icif_cells.isEmptyCell(input);
+        if (!cell && !input.is(Items.BUCKET)) return;
+        var filled = cell ? mio_icif_cells.getFilledCellForFluidStack(mio_icif_fluids.DISTILLEDWATER.get())
+            : new ItemStack(mio_icif_fluids.DISTILLEDWATER_BUCKET.get());
+        if (filled.isEmpty()) return;
+        var content = cell ? mio_icif_cells.getCellFluid(filled.copyWithCount(1)) : new FluidStack(mio_icif_fluids.DISTILLEDWATER.get(), 1000);
+        if (ContainerToTank.drainToContainer(itemHandler, DISTILLED_INPUT_SLOT, DISTILLED_OUTPUT_SLOT, distilledTank, content, filled)) setChanged();
     }
 
-    private boolean canInsertOrMerge(int slot, ItemStack stack) {
-        ItemStack current = itemHandler.getStackInSlot(slot);
-        if (current.isEmpty()) return true;
-        if (ItemStack.isSameItemSameComponents(current, stack)) {
-            return current.getCount() + stack.getCount() <= itemHandler.getSlotLimit(slot);
-        }
-        return false;
-    }
 
-    private void insertOrMerge(int slot, ItemStack stack) {
-        ItemStack current = itemHandler.getStackInSlot(slot);
-        if (current.isEmpty()) {
-            itemHandler.setStackInSlot(slot, stack);
-        } else if (ItemStack.isSameItemSameComponents(current, stack)) {
-            current.grow(stack.getCount());
-        }
-    }
+
+
 
     private void updateBlockState(boolean working) {
         if (level == null || level.isClientSide()) return;
@@ -339,6 +312,8 @@ public class mio_icif_solar_distiller extends BlockEntity implements MenuProvide
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
+        tag.put("scex_fluid_output_pending", scexFluidOutput.save(registries));
+        tag.put("scex_fluid_input_pending", scexFluidInput.save(registries));
         tag.put("waterTank", waterTank.writeToNBT(registries, new CompoundTag()));
         tag.put("distilledTank", distilledTank.writeToNBT(registries, new CompoundTag()));
         tag.put("inventory", itemHandler.serializeNBT(registries));
@@ -349,12 +324,22 @@ public class mio_icif_solar_distiller extends BlockEntity implements MenuProvide
     @Override
     public void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
+        scexFluidOutput.load(registries, tag.getCompound("scex_fluid_output_pending"));
+        scexFluidInput.load(registries, tag.getCompound("scex_fluid_input_pending"));
         if (tag.contains("waterTank")) waterTank.readFromNBT(registries, tag.getCompound("waterTank"));
         if (tag.contains("distilledTank")) distilledTank.readFromNBT(registries, tag.getCompound("distilledTank"));
         if (tag.contains("inventory")) itemHandler.deserializeNBT(registries, tag.getCompound("inventory"));
-        progress = tag.getInt("progress");
+        progress = Math.max(0, Math.min(PRODUCTION_INTERVAL, tag.getInt("progress")));
         isWorking = tag.getBoolean("isWorking");
     }
+
+    @Override
+    public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
+        CompoundTag tag = new CompoundTag(); saveAdditional(tag, registries); return tag;
+    }
+
+    @Override
+    public void handleUpdateTag(CompoundTag tag, HolderLookup.Provider registries) { loadAdditional(tag, registries); }
 
     // ==================== Capability ====================
 
@@ -394,7 +379,7 @@ public class mio_icif_solar_distiller extends BlockEntity implements MenuProvide
      */
     @Nullable
     private IFluidHandler getAdjacentFluidHandler(BlockPos pos, @Nullable Direction side) {
-        if (level == null) {
+        if (level == null || !level.getChunkSource().hasChunk(pos.getX() >> 4, pos.getZ() >> 4)) {
             return null;
         }
         BlockEntity target = level.getBlockEntity(pos);
@@ -408,29 +393,21 @@ public class mio_icif_solar_distiller extends BlockEntity implements MenuProvide
      * 流体弹出升级
      */
     private void ejectFluids(IFluidHandler own, int upgradeCount) {
-        int maxPerTick = Math.max(1, upgradeCount * 1000);
-        for (int tank = own.getTanks() - 1; tank >= 0; tank--) {
-            FluidStack fluid = own.getFluidInTank(tank);
-            if (fluid.isEmpty()) {
-                continue;
-            }
-            FluidStack toMove = fluid.copyWithAmount(Math.min(fluid.getAmount(), maxPerTick));
-            if (toMove.isEmpty()) {
-                continue;
-            }
-            for (Direction dir : Direction.values()) {
-                IFluidHandler target = getAdjacentFluidHandler(worldPosition.relative(dir), dir.getOpposite());
-                if (target == null) {
-                    continue;
-                }
-                int filled = target.fill(toMove, IFluidHandler.FluidAction.EXECUTE);
-                if (filled > 0) {
-                    own.drain(fluid.copyWithAmount(filled), IFluidHandler.FluidAction.EXECUTE);
-                    toMove.setAmount(toMove.getAmount() - filled);
-                    if (toMove.isEmpty()) {
-                        break;
-                    }
-                }
+        int budget = (int) Math.min(Integer.MAX_VALUE, Math.max(0L, (long) upgradeCount * 1000));
+        var configured = upgradeStats.getFluidEjectorDirections();
+        Iterable<Direction> directions = configured.isEmpty() ? java.util.Arrays.asList(Direction.values()) : configured;
+        for (Direction direction : directions) {
+            if (budget <= 0) break;
+            BlockPos adjacentPos = worldPosition.relative(direction);
+            var adjacent = getAdjacentFluidHandler(adjacentPos, direction.getOpposite());
+            if (adjacent == null) continue;
+            var before = scexFluidOutput.pending();
+            int moved = scexFluidOutput.move(own, adjacent, budget);
+            budget -= moved;
+            if (moved > 0 || !FluidStack.matches(before, scexFluidOutput.pending())) {
+                ContainerToTank.markUnsaved(this);
+                var neighbor = level.getBlockEntity(adjacentPos);
+                if (neighbor != null) ContainerToTank.markUnsaved(neighbor);
             }
         }
     }
@@ -439,39 +416,21 @@ public class mio_icif_solar_distiller extends BlockEntity implements MenuProvide
      * 流体抽入升级
      */
     private void pullFluids(IFluidHandler own, int upgradeCount) {
-        int maxPerTick = Math.max(1, upgradeCount * 1000);
-        for (int tank = 0; tank < own.getTanks(); tank++) {
-            int capacity = own.getTankCapacity(tank);
-            FluidStack current = own.getFluidInTank(tank);
-            if (current.getAmount() >= capacity) {
-                continue;
-            }
-            boolean inputTank = tank == 0 || current.isEmpty();
-            if (!inputTank) {
-                continue;
-            }
-            for (Direction dir : Direction.values()) {
-                IFluidHandler source = getAdjacentFluidHandler(worldPosition.relative(dir), dir.getOpposite());
-                if (source == null) {
-                    continue;
-                }
-                int space = capacity - current.getAmount();
-                int maxDrain = Math.min(space, maxPerTick);
-                FluidStack available = source.drain(maxDrain, IFluidHandler.FluidAction.SIMULATE);
-                if (available.isEmpty()) {
-                    continue;
-                }
-                if (!current.isEmpty() && !FluidStack.isSameFluid(available, current)) {
-                    continue;
-                }
-                if (!own.isFluidValid(tank, available)) {
-                    continue;
-                }
-                int filled = own.fill(available, IFluidHandler.FluidAction.EXECUTE);
-                if (filled > 0) {
-                    source.drain(filled, IFluidHandler.FluidAction.EXECUTE);
-                    break;
-                }
+        int budget = (int) Math.min(Integer.MAX_VALUE, Math.max(0L, (long) upgradeCount * 1000));
+        var configured = upgradeStats.getFluidPullingDirections();
+        Iterable<Direction> directions = configured.isEmpty() ? java.util.Arrays.asList(Direction.values()) : configured;
+        for (Direction direction : directions) {
+            if (budget <= 0) break;
+            BlockPos adjacentPos = worldPosition.relative(direction);
+            var adjacent = getAdjacentFluidHandler(adjacentPos, direction.getOpposite());
+            if (adjacent == null) continue;
+            var before = scexFluidInput.pending();
+            int moved = scexFluidInput.move(adjacent, own, budget);
+            budget -= moved;
+            if (moved > 0 || !FluidStack.matches(before, scexFluidInput.pending())) {
+                ContainerToTank.markUnsaved(this);
+                var neighbor = level.getBlockEntity(adjacentPos);
+                if (neighbor != null) ContainerToTank.markUnsaved(neighbor);
             }
         }
     }
@@ -575,17 +534,17 @@ public class mio_icif_solar_distiller extends BlockEntity implements MenuProvide
 
         @Override
         public FluidStack getFluidInTank(int tank) {
-            return tank == 0 ? waterTank.getFluid() : distilledTank.getFluid();
+            return tank == 0 ? waterTank.getFluid().copy() : tank == 1 ? distilledTank.getFluid().copy() : FluidStack.EMPTY;
         }
 
         @Override
         public int getTankCapacity(int tank) {
-            return tank == 0 ? waterTank.getCapacity() : distilledTank.getCapacity();
+            return tank == 0 ? waterTank.getCapacity() : tank == 1 ? distilledTank.getCapacity() : 0;
         }
 
         @Override
         public boolean isFluidValid(int tank, FluidStack stack) {
-            return tank == 0 ? waterTank.isFluidValid(stack) : distilledTank.isFluidValid(stack);
+            return tank == 0 && waterTank.isFluidValid(stack);
         }
 
         @Override

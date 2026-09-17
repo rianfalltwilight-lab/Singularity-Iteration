@@ -36,6 +36,17 @@ public abstract class mio_icif_Energy_Block extends BlockEntity implements MenuP
         IUpgradableBlock, IWrenchable {
     
     protected final CustomEUEnergyStorage energyStorage;
+    private dev.scex.si.energy.FeMachineBridge scexFe;
+    public final dev.scex.si.energy.FeMachineBridge scexFeBridge() {
+        if (scexFe == null) scexFe = new dev.scex.si.energy.FeMachineBridge(this);
+        return scexFe;
+    }
+    public net.neoforged.neoforge.energy.IEnergyStorage scexFeCapability(@Nullable Direction side) {
+        // Conductors, transformers and converter/multiblock proxy ports retain their own interfaces.
+        if (!(this instanceof mio_icif_producer) && !(this instanceof mio_icif_Energy_Container)
+                && !(this instanceof com.singularity_iteration.mio_icif.Blocks.entity.producer.mio_icif_pattern_storage)) return null;
+        return scexFeBridge().port(side);
+    }
     
     protected boolean isPowerSource = false;
     protected long powerOutput = 0;
@@ -62,6 +73,7 @@ public abstract class mio_icif_Energy_Block extends BlockEntity implements MenuP
     
     @Override
     public void setLevel(Level level) {
+        if (scexFe != null) scexFe.clear();
         super.setLevel(level);
         if (energyStorage != null) {
             energyStorage.setBlockContext(level, worldPosition);
@@ -73,7 +85,9 @@ public abstract class mio_icif_Energy_Block extends BlockEntity implements MenuP
         super.onLoad();
         boolean isClient = level != null && level.isClientSide;
         if (level != null && !isClient) {
-            if (!registered && !energyStorage.scexNetworkControlled()) {
+            if (energyStorage.scexNetworkControlled()) {
+                dev.scex.si.energy.IndependentSiEnergy.changed(this);
+            } else if (!registered) {
                 NeoForge.EVENT_BUS.post(new EnergyTileLoadEvent(this, level));
                 registered = true;
             }
@@ -86,6 +100,7 @@ public abstract class mio_icif_Energy_Block extends BlockEntity implements MenuP
             NeoForge.EVENT_BUS.post(new EnergyTileUnloadEvent(this, level));
             registered = false;
         }
+        if (scexFe != null) scexFe.clear();
         super.setRemoved();
     }
     
@@ -93,11 +108,13 @@ public abstract class mio_icif_Energy_Block extends BlockEntity implements MenuP
     public void clearRemoved() {
         super.clearRemoved();
         boolean isClient = level != null && level.isClientSide;
-        if (level == null) {
-            System.out.println("[EnergyNet] WARNING: level is null in clearRemoved!");
-        } else if (!isClient && !registered && !energyStorage.scexNetworkControlled()) {
-            NeoForge.EVENT_BUS.post(new EnergyTileLoadEvent(this, level));
-            registered = true;
+        if (level != null && !isClient) {
+            if (energyStorage.scexNetworkControlled()) {
+                dev.scex.si.energy.IndependentSiEnergy.changed(this);
+            } else if (!registered) {
+                NeoForge.EVENT_BUS.post(new EnergyTileLoadEvent(this, level));
+                registered = true;
+            }
         }
     }
 
@@ -297,6 +314,8 @@ public abstract class mio_icif_Energy_Block extends BlockEntity implements MenuP
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
         tag.putLong("energy", apiGetStoredEnergy());
+        tag.putLong("scex_energy_fraction", energyStorage.scexSavedFraction());
+        if (scexFe != null) tag.putInt("scex_fe_uncertain_output", scexFe.uncertainOutput());
         tag.putString("cable_tier", apiGetCableTier().name);
         tag.putBoolean("is_power_source", isPowerSource);
         tag.putLong("power_output", powerOutput);
@@ -310,6 +329,9 @@ public abstract class mio_icif_Energy_Block extends BlockEntity implements MenuP
         } else if (tag.contains("energy", net.minecraft.nbt.Tag.TAG_INT)) {
             apiSetEnergy(tag.getInt("energy"));
         }
+        energyStorage.scexLoadFraction(tag.getLong("scex_energy_fraction"));
+        int uncertainFe = tag.getInt("scex_fe_uncertain_output");
+        if (uncertainFe != 0 || scexFe != null) scexFeBridge().loadUncertainOutput(uncertainFe);
         if (tag.contains("is_power_source")) {
             isPowerSource = tag.getBoolean("is_power_source");
         }
@@ -322,6 +344,7 @@ public abstract class mio_icif_Energy_Block extends BlockEntity implements MenuP
     public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
         CompoundTag tag = super.getUpdateTag(registries);
         tag.putLong("energy", apiGetStoredEnergy());
+        if (energyStorage.scexNetworkControlled()) tag.putLong("scex_energy_fraction", energyStorage.scexSavedFraction());
         tag.putString("cable_tier", apiGetCableTier().name);
         tag.putBoolean("is_power_source", isPowerSource);
         tag.putLong("power_output", powerOutput);
@@ -334,6 +357,7 @@ public abstract class mio_icif_Energy_Block extends BlockEntity implements MenuP
         if (tag.contains("energy", net.minecraft.nbt.Tag.TAG_LONG)) {
             apiSetEnergy(tag.getLong("energy"));
         }
+        energyStorage.scexLoadFraction(tag.getLong("scex_energy_fraction"));
         if (tag.contains("is_power_source")) {
             isPowerSource = tag.getBoolean("is_power_source");
         }
@@ -406,10 +430,7 @@ public abstract class mio_icif_Energy_Block extends BlockEntity implements MenuP
     public double injectEnergy(Direction direction, double amount, double voltage) {
         if (!canTransferGridEnergy()) return amount;
         if (isPowerSource) return amount;
-        long toAdd = (long) amount;
-        long spaceAvailable = getEffectiveCapacity() - energyStorage.getAmount();
-        long accepted = Math.min(toAdd, spaceAvailable);
-        energyStorage.setEnergy(energyStorage.getAmount() + accepted);
+        long accepted = energyStorage.generateEnergyInternal((long) amount, false);
         return amount - accepted;
     }
 

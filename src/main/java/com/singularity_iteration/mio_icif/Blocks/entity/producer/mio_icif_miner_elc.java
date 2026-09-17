@@ -6,6 +6,14 @@ import com.singularity_iteration.mio_icif.Blocks.entity.slot.SlotLayout;
 import com.singularity_iteration.mio_icif.Blocks.mio_icif_blocks;
 import com.singularity_iteration.mio_icif.Items.Tools.*;
 import com.singularity_iteration.mio_icif.energy.EnergyUnit.CableTier;
+import dev.scex.si.processing.PendingDrops;
+import dev.scex.si.processing.MiningLoot;
+import dev.scex.si.processing.MiningRoute;
+import dev.scex.si.processing.MiningPayment;
+import dev.scex.si.processing.PipeAdvance;
+import dev.scex.si.processing.MiningPlacement;
+import dev.scex.si.processing.RecipeSlots;
+import dev.scex.si.energy.ContainerToTank;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
@@ -35,6 +43,12 @@ import java.util.concurrent.ThreadLocalRandom;
 
 @SuppressWarnings("null")
 public class mio_icif_miner_elc extends mio_icif_producer {
+    private final MiningRoute scexRoute = new MiningRoute(() -> ContainerToTank.markUnsaved(this));
+    private final MiningPayment scexMiningPayment = new MiningPayment(() -> ContainerToTank.markUnsaved(this));
+    private final PipeAdvance scexPipeAdvance = new PipeAdvance(() -> ContainerToTank.markUnsaved(this));
+    private boolean scexLayerReady;
+    private final PendingDrops scexPendingDrops = new PendingDrops(() -> ContainerToTank.markUnsaved(this));
+
 
     private static final SlotLayout LAYOUT = SlotLayout.builder()
         .battery()
@@ -55,9 +69,9 @@ public class mio_icif_miner_elc extends mio_icif_producer {
     public static final int SLOT_SCANNER = 19;
     public static final int TOTAL_SLOTS = 20;
 
-    public static final long DEFAULT_CAPACITY = 10000L;    public static final long DEFAULT_MAX_RECEIVE = 128L;   
-    public static final long DEFAULT_MAX_EXTRACT = 1600L;     public static final int DEFAULT_WORK_TIME = 20; 
-    public static final long DEFAULT_ENERGY_PER_TICK = 0L; 
+    public static final long DEFAULT_CAPACITY = 10000L;    public static final long DEFAULT_MAX_RECEIVE = 128L;
+    public static final long DEFAULT_MAX_EXTRACT = 1600L;     public static final int DEFAULT_WORK_TIME = 20;
+    public static final long DEFAULT_ENERGY_PER_TICK = 0L;
 
     public static final int ENERGY_IRON_DRILL_MIN = 450;
     public static final int ENERGY_IRON_DRILL_MAX = 470;
@@ -70,20 +84,20 @@ public class mio_icif_miner_elc extends mio_icif_producer {
     public static final int ENERGY_OV_SCANNER_MIN = 165;
     public static final int ENERGY_OV_SCANNER_MAX = 190;
 
-    public static final int SCAN_RADIUS_OD = 3; 
-    public static final int SCAN_RADIUS_OV = 6; 
+    public static final int SCAN_RADIUS_OD = 3;
+    public static final int SCAN_RADIUS_OV = 6;
 
     public static final int DURABILITY_COST_IRON = 1;
     public static final int DURABILITY_COST_DIAMOND = 1;
     public static final int DURABILITY_COST_IRIDIUM = 1;
 
-    private int currentDepth = 0; 
-    private BlockPos tipPos = null; 
-    private boolean isPaused = false; 
-    private List<BlockPos> oresInCurrentLayer = new ArrayList<>(); 
-    private int currentOreIndex = 0; 
+    private int currentDepth = 0;
+    private BlockPos tipPos = null;
+    private boolean isPaused = false;
+    private List<BlockPos> oresInCurrentLayer = new ArrayList<>();
+    private int currentOreIndex = 0;
     @SuppressWarnings("unused")
-    private boolean waitingForNextLayer = false; 
+    private boolean waitingForNextLayer = false;
 
     public mio_icif_miner_elc(BlockPos pos, BlockState state) {
         this(pos, state, mio_icif_block_entities.MINER_ELC_ENTITY_TYPE.get());
@@ -164,7 +178,7 @@ public class mio_icif_miner_elc extends mio_icif_producer {
 
     @Override
     protected int[] getSlotsForDirection(Direction side) {
-        int[] slots = new int[TOTAL_SLOTS - 1]; 
+        int[] slots = new int[TOTAL_SLOTS - 1];
         for (int i = 0; i < SLOT_UPGRADE; i++) {
             slots[i] = i;
         }
@@ -187,42 +201,16 @@ public class mio_icif_miner_elc extends mio_icif_producer {
 
     @Override
     protected boolean canWork() {
-        if (level == null || level.isClientSide) {
-            return false;
-        }
-
-        DrillType drillType = getDrillType();
-        if (drillType == DrillType.NONE) {
-            return false;
-        }
-
-        ScannerType scannerType = getScannerType();
-        if (scannerType == ScannerType.NONE) {
-            return false;
-        }
-
-        boolean needsPipe = false;
-        if (currentDepth == 0 && tipPos == null) {
-            needsPipe = true;
-        } else if (oresInCurrentLayer.isEmpty() || currentOreIndex >= oresInCurrentLayer.size()) {
-            needsPipe = true;
-        }
-        if (needsPipe) {
-            ItemStack pipeStack = itemHandler.getStackInSlot(SLOT_PIPE);
-            if (pipeStack.isEmpty()) {
-                return false;
-            }
-        }
-
-        if (isStorageFull()) {
-            return false;
-        }
-
-        if (tipPos != null && checkAndExtractLayerFluid()) {
-            return false;
-        }
-
-        return true;
+        if (!(level instanceof ServerLevel server) || !server.getServer().isSameThread()
+                || scexPendingDrops.isBusy() || !scexPendingDrops.isEmpty() || scexMiningPayment.isBusy()
+                || scexPipeAdvance.isBusy() || scexRoute.invalid() || scexPipeAdvance.uncertain()) return false;
+        if (!scexRoute.belongsTo(worldPosition, level.getMinBuildHeight(), level.getMaxBuildHeight())
+                || !scexPipeAdvance.belongsTo(worldPosition, level.getMinBuildHeight(), level.getMaxBuildHeight())) return false;
+        if (scexPipeAdvance.active()) return true;
+        if (getDrillType() == DrillType.NONE || getScannerType() == ScannerType.NONE) return false;
+        if (scexRoute.active()) return true;
+        boolean needsPipe = tipPos == null || scexLayerReady && currentOreIndex >= oresInCurrentLayer.size();
+        return !needsPipe || isMiningPipe(itemHandler.getStackInSlot(SLOT_PIPE));
     }
 
     private boolean isStorageFull() {
@@ -259,6 +247,7 @@ public class mio_icif_miner_elc extends mio_icif_producer {
         }
 
         currentEnergyCost = drillCost + scannerCost;
+        ContainerToTank.markUnsaved(this);
         return currentEnergyCost;
     }
 
@@ -273,23 +262,20 @@ public class mio_icif_miner_elc extends mio_icif_producer {
         }
 
         BlockPos[] checkPositions = {
-            worldPosition.above(),  
-            worldPosition.north(),  
-            worldPosition.south(),  
-            worldPosition.east(),   
-            worldPosition.west()   
+            worldPosition.above(),
+            worldPosition.north(),
+            worldPosition.south(),
+            worldPosition.east(),
+            worldPosition.west()
         };
 
+        if (!(level instanceof ServerLevel server) || !available(server, fluidPos)) return false;
         for (BlockPos pumpPos : checkPositions) {
+            if (!available(server, pumpPos)) continue;
             net.minecraft.world.level.block.entity.BlockEntity blockEntity = level.getBlockEntity(pumpPos);
-            
-            if (blockEntity instanceof mio_icif_pump_elc pump) {
-                if (pump.canAcceptFluid(fluid)) {
-                    if (pump.injectFluid(fluid, 1000)) {
-                        level.setBlock(fluidPos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 3);
-                        return true;
-                    }
-                }
+
+            if (blockEntity instanceof mio_icif_pump_elc pump && pump.tryCollectForMiner(this, fluidPos)) {
+                return true;
             }
         }
 
@@ -311,283 +297,167 @@ public class mio_icif_miner_elc extends mio_icif_producer {
         }
 
         BlockPos center = new BlockPos(worldPosition.getX(), tipPos.getY(), worldPosition.getZ());
-        
+
         boolean hasRemainingFluid = false;
-        
+
         for (int x = -radius; x <= radius; x++) {
             for (int z = -radius; z <= radius; z++) {
                 BlockPos checkPos = center.offset(x, 0, z);
+                if (!(level instanceof ServerLevel server) || !available(server, checkPos)) return true;
                 BlockState state = level.getBlockState(checkPos);
                 FluidState fluidState = state.getFluidState();
-                
+
                 if (!fluidState.isEmpty() && fluidState.isSource()) {
-                    if (tryConnectPumpForFluidExtraction(fluidState.getType(), checkPos)) {
-                        level.setBlock(checkPos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 3);
-                    } else {
+                    if (!tryConnectPumpForFluidExtraction(fluidState.getType(), checkPos)) {
                         hasRemainingFluid = true;
                     }
                 }
             }
         }
-        
+
         return hasRemainingFluid;
     }
 
     @Override
+    protected void onTick() { flushPendingLoot(); }
+
+    @Override
     protected void doWork() {
-        if (level == null || level.isClientSide) {
-            return;
-        }
-
+        if (!canWork()) { stopWork(); return; }
         isWorking = true;
+        if (progress < maxProgress) return;
+        if (performMining()) progress = 0;
+        else stopWork();
+        ContainerToTank.markUnsaved(this);
+    }
 
-        if (progress >= maxProgress) {
-            if (performMining()) {
-                progress = 0;
-            }
-        }
+    @Override
+    protected void updateProgress() {
+        if (isWorking) progress = (int) Math.min(Math.max(0, maxProgress), (long) Math.max(0, progress) + Math.max(1, getProgressPerTick()));
     }
 
     private boolean performMining() {
-        if (!(level instanceof ServerLevel serverLevel)) {
-            return false;
+        if (!(level instanceof ServerLevel server)) return false;
+        if (scexPipeAdvance.active()) return resumePipeAdvance(server);
+        if (scexRoute.active()) return advanceRoute(server);
+        if (tipPos == null) {
+            var first = worldPosition.below();
+            if (!available(server, first)) return false;
+            if (!scexRoute.begin(worldPosition, first, calculateEnergyCost())) return false;
+            return advanceRoute(server);
         }
-
-        if (currentDepth == 0 && tipPos == null) {
-            tipPos = worldPosition.below();
-            BlockState belowState = level.getBlockState(tipPos);
-
-            if (!belowState.isAir() && !belowState.canBeReplaced()) {
-                if (!consumeEnergyForMining()) {
-                    return false;
-                }
-                consumeDrillDurability();
-                resetEnergyCost();
-            }
-
-            if (!placeFirstMiningTipConsumePipe()) {
-                stopWork();
-                return true;
-            }
-            scanCurrentLayer();
-            if (checkAndExtractLayerFluid()) {
-                stopWork();
-                return true;
-            }
-            return true;
+        if (!available(server, tipPos) || !server.getBlockState(tipPos).is(mio_icif_blocks.BLOCK_MINING_TIP.get())) return false;
+        if (!scexLayerReady && !scanCurrentLayer()) return false;
+        if (checkAndExtractLayerFluid()) return false;
+        while (currentOreIndex < oresInCurrentLayer.size()) {
+            var ore = oresInCurrentLayer.get(currentOreIndex);
+            if (!available(server, ore)) return false;
+            if (!isOre(server.getBlockState(ore))) { currentOreIndex++; ContainerToTank.markUnsaved(this); continue; }
+            if (!scexRoute.begin(tipPos, ore, calculateEnergyCost())) return false;
+            return advanceRoute(server);
         }
+        var next = tipPos.below();
+        if (!available(server, next) || !isMiningPipe(itemHandler.getStackInSlot(SLOT_PIPE))) return false;
+        if (!scexRoute.begin(tipPos, next, calculateEnergyCost())) return false;
+        return advanceRoute(server);
+    }
 
-        if (!oresInCurrentLayer.isEmpty() && currentOreIndex < oresInCurrentLayer.size()) {
-            BlockPos orePos = oresInCurrentLayer.get(currentOreIndex);
-            
-            if (!consumeEnergyForMining()) {
+    private boolean available(ServerLevel server, BlockPos pos) {
+        return !server.isOutsideBuildHeight(pos) && server.getWorldBorder().isWithinBounds(pos)
+            && server.getChunkSource().hasChunk(pos.getX() >> 4, pos.getZ() >> 4);
+    }
+
+    private boolean advanceRoute(ServerLevel server) {
+        if (!scexRoute.active() || scexRoute.invalid()) return false;
+        int examined = 0;
+        while (!scexRoute.complete() && examined++ < 2 * MiningRoute.RADIUS && scexPendingDrops.isEmpty()) {
+            var next = scexRoute.next();
+            if (!available(server, next)) return false;
+            var state = server.getBlockState(next);
+            boolean descending = next.getX() == worldPosition.getX() && next.getZ() == worldPosition.getZ()
+                && (tipPos == null || next.getY() < tipPos.getY());
+            if (state.isAir() || !descending && !state.getFluidState().isEmpty()) {
+                scexRoute.advance(next); continue;
+            }
+            if (!state.getFluidState().isEmpty()) {
+                // Pump owns protection checks, successful source pickup and storage; never delete the source here.
+                if (state.getFluidState().isSource()) tryConnectPumpForFluidExtraction(state.getFluidState().getType(), next);
                 return false;
             }
-            
-            if (minePathToOre(serverLevel, orePos)) {
-                if (!mineBlock(serverLevel, orePos)) {
-                    stopWork();
-                    return true;
-                }
-                currentOreIndex++;
-                
-                consumeDrillDurability();
-                
-                resetEnergyCost();
+            if (!canMineBlock(state, next)) return false;
+            var lootTool = getLootToolStack(server).copy();
+            Runnable account = () -> { scexRoute.markPaid(); scexRoute.advance(next); };
+            boolean removed;
+            if (scexRoute.paid()) {
+                removed = MiningLoot.capture(server, next, lootTool, scexPendingDrops, this::canStoreDrops, null, account);
             } else {
-                stopWork();
-                return true;
+                long toolCost = getItemAPI().isElectricTool(itemHandler.getStackInSlot(SLOT_DRILL)) ? 1 : 0;
+                removed = scexMiningPayment.attempt(energyStorage, itemHandler, SLOT_DRILL, getItemAPI(), scexRoute.cost(), toolCost,
+                    payment -> MiningLoot.capture(server, next, lootTool, scexPendingDrops, this::canStoreDrops, payment, account));
             }
-            return true;
+            if (!removed) return false;
+            flushPendingLoot();
         }
-
-        BlockPos nextPos = tipPos.below();
-        BlockState nextState = level.getBlockState(nextPos);
-        FluidState fluidState = nextState.getFluidState();
-
-
-        if (nextState.isAir() || (!fluidState.isEmpty() && !fluidState.isSource())) {
-            if (!replaceTipWithPipeConsumeOne()) {
-                stopWork();
-                return true;
-            }
-            if (!moveTipTo(nextPos)) {
-                stopWork();
-                return true;
-            }
-            currentDepth++;
-
-            scanCurrentLayer();
-            currentOreIndex = 0;
-
-            if (checkAndExtractLayerFluid()) {
-                stopWork();
-                return true;
-            }
-            return true;
+        if (!scexRoute.complete() || !scexPendingDrops.isEmpty()) return false;
+        var target = scexRoute.target();
+        boolean descending = target.getX() == worldPosition.getX() && target.getZ() == worldPosition.getZ()
+            && (tipPos == null || target.getY() < tipPos.getY());
+        if (descending) {
+            var pipe = itemHandler.getStackInSlot(SLOT_PIPE);
+            if (!isMiningPipe(pipe) || !scexPipeAdvance.begin(itemHandler, SLOT_PIPE, pipe.copyWithCount(1), tipPos, target)) return false;
+            return resumePipeAdvance(server);
         }
-
-        if (!fluidState.isEmpty() && fluidState.isSource()) {
-            if (tryConnectPumpForFluidExtraction(fluidState.getType(), nextPos)) {
-                return true;
-            }
-            stopWork();
-            return true;
-        }
-
-        if (!canMineBlock(nextState)) {
-            stopWork();
-            return true;
-        }
-
-        if (!consumeEnergyForMining()) {
-            return false;
-        }
-
-        if (!mineBlock(serverLevel, nextPos)) {
-            stopWork();
-            return true;
-        }
-
-        if (!replaceTipWithPipeConsumeOne()) {
-            stopWork();
-            return true;
-        }
-
-        if (!moveTipTo(nextPos)) {
-            stopWork();
-            return true;
-        }
-        currentDepth++;
-
-        scanCurrentLayer();
-        currentOreIndex = 0;
-
-        if (checkAndExtractLayerFluid()) {
-            stopWork();
-            return true;
-        }
-
-        consumeDrillDurability();
-
-        resetEnergyCost();
+        scexRoute.finish(); currentOreIndex++; resetEnergyCost(); ContainerToTank.markUnsaved(this);
         return true;
     }
 
-    private boolean consumeEnergyForMining() {
-        long energyCost = calculateEnergyCost();
-        long energyBefore = energyStorage.getAmount();
-        if (energyBefore < energyCost) {
-            stopWork();
-            return false;
-        }
-        long actuallyExtracted = energyStorage.extract(energyCost, false);
-        return actuallyExtracted > 0;
-    }
-
-    private boolean placeFirstMiningTipConsumePipe() {
-        if (level == null || tipPos == null) {
-            return false;
-        }
-
-        ItemStack pipeStack = itemHandler.getStackInSlot(SLOT_PIPE);
-        if (pipeStack.isEmpty()) {
-            return false;
-        }
-
-        BlockState currentState = level.getBlockState(tipPos);
-        if (currentState.isAir() || currentState.canBeReplaced()) {
-            level.setBlock(tipPos, mio_icif_blocks.BLOCK_MINING_TIP.get().defaultBlockState(), 3);
-            pipeStack.shrink(1);
-            setChanged();
-            return true;
-        }
-
-        if (currentState.is(Blocks.BEDROCK)) {
-            return false;
-        }
-
-        FluidState fluidState = currentState.getFluidState();
-        if (!fluidState.isEmpty()) {
-            return false;
-        }
-
-        if (currentState.getDestroySpeed(level, tipPos) < 0) {
-            return false;
-        }
-
-        if (!canMineBlock(currentState)) {
-            return false;
-        }
-
-        if (!(level instanceof ServerLevel serverLevel)) {
-            return false;
-        }
-
-        if (!mineBlock(serverLevel, tipPos)) {
-            return false;
-        }
-
-        level.setBlock(tipPos, mio_icif_blocks.BLOCK_MINING_TIP.get().defaultBlockState(), 3);
-        pipeStack.shrink(1);
-        setChanged();
-        return true;
-    }
-
-    private boolean replaceTipWithPipeConsumeOne() {
-        if (level == null || tipPos == null) {
-            return false;
-        }
-
-        ItemStack pipeStack = itemHandler.getStackInSlot(SLOT_PIPE);
-        if (pipeStack.isEmpty()) {
-            return false;
-        }
-
-        level.setBlock(tipPos, mio_icif_blocks.BLOCK_MINING_PIPE.get().defaultBlockState(), 3);
-        pipeStack.shrink(1);
-        setChanged();
-        return true;
+    private boolean resumePipeAdvance(ServerLevel server) {
+        if (!scexPipeAdvance.belongsTo(worldPosition, server.getMinBuildHeight(), server.getMaxBuildHeight())) return false;
+        if (!scexPipeAdvance.advance(new PipeAdvance.WorldAccess() {
+            public PipeAdvance.Outcome placeTip(BlockPos target) {
+                if (!available(server, target)) return PipeAdvance.Outcome.RETRY;
+                var before = server.getBlockState(target);
+                if (!before.isAir()) return PipeAdvance.Outcome.RETRY;
+                return MiningPlacement.replace(server, target, before, mio_icif_blocks.BLOCK_MINING_TIP.get().defaultBlockState(),
+                    scexPipeAdvance.reserved());
+            }
+            public PipeAdvance.Outcome replaceOldTip(BlockPos previous) {
+                if (!available(server, previous)) return PipeAdvance.Outcome.RETRY;
+                var before = server.getBlockState(previous);
+                if (!before.is(mio_icif_blocks.BLOCK_MINING_TIP.get())) return PipeAdvance.Outcome.RETRY;
+                return MiningPlacement.replace(server, previous, before, mio_icif_blocks.BLOCK_MINING_PIPE.get().defaultBlockState(), ItemStack.EMPTY);
+            }
+        })) return false;
+        tipPos = scexPipeAdvance.target();
+        currentDepth = Math.max(0, worldPosition.getY() - tipPos.getY() - 1);
+        if (scexRoute.active() && scexRoute.complete()) scexRoute.finish();
+        scexPipeAdvance.finish(); resetEnergyCost();
+        currentOreIndex = 0; oresInCurrentLayer.clear(); scexLayerReady = false;
+        ContainerToTank.markUnsaved(this); return true;
     }
 
 
-    private boolean moveTipTo(BlockPos newTipPos) {
-        if (level == null) return false;
 
-        BlockState stateAt = level.getBlockState(newTipPos);
-        if (!(stateAt.isAir() || stateAt.canBeReplaced())) {
-            return false;
-        }
 
-        level.setBlock(newTipPos, mio_icif_blocks.BLOCK_MINING_TIP.get().defaultBlockState(), 3);
-        tipPos = newTipPos;
-        setChanged();
-        return true;
-    }
 
-    private void scanCurrentLayer() {
-        oresInCurrentLayer.clear();
-        
-        if (level == null || tipPos == null) {
-            return;
-        }
 
+
+
+
+
+    private boolean scanCurrentLayer() {
+        if (!(level instanceof ServerLevel server) || tipPos == null) return false;
         int radius = getScanRadius();
-        if (radius == 0) {
-            return;
+        var found = new ArrayList<BlockPos>();
+        var center = new BlockPos(worldPosition.getX(), tipPos.getY(), worldPosition.getZ());
+        for (int x = -radius; x <= radius; x++) for (int z = -radius; z <= radius; z++) {
+            var candidate = center.offset(x, 0, z);
+            if (!server.getWorldBorder().isWithinBounds(candidate)) continue;
+            if (!available(server, candidate)) return false;
+            if (!candidate.equals(tipPos) && isOre(server.getBlockState(candidate))) found.add(candidate);
         }
-
-        BlockPos center = new BlockPos(worldPosition.getX(), tipPos.getY(), worldPosition.getZ());
-        for (int x = -radius; x <= radius; x++) {
-            for (int z = -radius; z <= radius; z++) {
-                BlockPos checkPos = center.offset(x, 0, z);
-                BlockState state = level.getBlockState(checkPos);
-                
-                if (isOre(state)) {
-                    oresInCurrentLayer.add(checkPos);
-                }
-            }
-        }
+        oresInCurrentLayer = found; currentOreIndex = 0; scexLayerReady = true;
+        ContainerToTank.markUnsaved(this); return true;
     }
 
     private boolean isOre(BlockState state) {
@@ -621,73 +491,19 @@ public class mio_icif_miner_elc extends mio_icif_producer {
     /**
      * ??��?��?�tip??�矿??��?�间???路�??
      */
-    private boolean minePathToOre(ServerLevel serverLevel, BlockPos orePos) {
-        // �???�路�?：直?��水平移动作??��??��?�tip?��??��??�?�?
-        int dx = orePos.getX() - tipPos.getX();
-        int dz = orePos.getZ() - tipPos.getZ();
 
-
-        // ???水平移�??
-        BlockPos currentPos = tipPos;
-        while (dx != 0 || dz != 0) {
-            if (dx != 0) {
-                int step = dx > 0 ? 1 : -1;
-                BlockPos nextPos = currentPos.offset(step, 0, 0);
-                if (!mineBlockIfPossible(serverLevel, nextPos)) {
-                    return false;
-                }
-                currentPos = nextPos;
-                dx -= step;
-            } else if (dz != 0) {
-                int step = dz > 0 ? 1 : -1;
-                BlockPos nextPos = currentPos.offset(0, 0, step);
-                if (!mineBlockIfPossible(serverLevel, nextPos)) {
-                    return false;
-                }
-                currentPos = nextPos;
-                dz -= step;
-            }
-        }
-
-        return true;
-    }
 
     /**
      * �???�可以�?��?��?��?��?�方???
      * 跳�??空气?��?�液体方??��?��?��?? true
      */
-    private boolean mineBlockIfPossible(ServerLevel serverLevel, BlockPos pos) {
-        BlockState state = level.getBlockState(pos);
-        
-        // �???�是空气?��?�直?��跳�??
-        if (state.isAir()) {
-            return true;
-        }
-        
-        // �???�是液�?��?�跳�?�?????��?��不�?��?��?�液体�?��??路�???��以穿�?液�?��??
-        FluidState fluidState = state.getFluidState();
-        if (!fluidState.isEmpty()) {
-            return true;
-        }
-        
-        // �??��?��?��?��?���?
-        if (state.is(Blocks.BEDROCK)) {
-            return false;
-        }
 
-        // �??��?��?��?��以�?��??
-        if (!canMineBlock(state)) {
-            return false;
-        }
-
-        return mineBlock(serverLevel, pos);
-    }
 
     /**
      * �??��?��?��?��以�?��?�方???
      * ????��?��?��以�?��?��?�U?��????�方??��???���??��岩�?�液体�??
      */
-    private boolean canMineBlock(BlockState state) {
+    private boolean canMineBlock(BlockState state, BlockPos pos) {
         // 不�?��?��?�空气�???��岩�?�液�?
         if (state.isAir() || state.is(Blocks.BEDROCK)) {
             return false;
@@ -699,7 +515,7 @@ public class mio_icif_miner_elc extends mio_icif_producer {
         }
 
         // �??��?��??�硬度�??-1.0F 表示不可?��??��??�??��岩�??
-        if (state.getDestroySpeed(level, BlockPos.ZERO) < 0) {
+        if (state.getDestroySpeed(level, pos) < 0) {
             return false;
         }
 
@@ -735,92 +551,27 @@ public class mio_icif_miner_elc extends mio_icif_producer {
      * ??��?�方??�并?��?????�落???
      * 使用destroyBlock?��?��?��??�方??��?��?�获??�落??�并存�?��?��?�槽
      */
-    private boolean mineBlock(ServerLevel serverLevel, BlockPos pos) {
-        BlockState state = level.getBlockState(pos);
 
 
-        // �???�已经是空气?��?�直?��返回?��?��??
-        if (state.isAir()) {
-            return true;
-        }
+    private int[] lootOutputSlots() {
+        return java.util.stream.IntStream.range(SLOT_STORAGE_START, SLOT_STORAGE_END).toArray();
+    }
 
-        // ???计算?��?�落???
-        LootParams.Builder lootBuilder = new LootParams.Builder(serverLevel)
-            .withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(pos))
-            .withParameter(LootContextParams.TOOL, getLootToolStack(serverLevel))
-            .withOptionalParameter(LootContextParams.BLOCK_STATE, state);
-
-        List<ItemStack> drops = state.getDrops(lootBuilder);
-
-        // �??��??��?�槽?��?��??�足够�??空间存放??�落???
-        if (!canStoreDrops(drops)) {
-            return false;
-        }
-
-        // 使用destroyBlock?��??�方??��?��??不�?�落??��??�???�们?��己收???�?
-        // ????��：�?�置????��?��??�落??��??????��??��??
-        boolean destroyed = level.destroyBlock(pos, false);
-
-        if (!destroyed) {
-            return false;
-        }
-
-        // �???�落??�放??��?��?��??
-        for (ItemStack drop : drops) {
-            insertItemToStorage(drop);
-        }
-
-        return true;
+    private void flushPendingLoot() {
+        if (!scexPendingDrops.isEmpty()) scexPendingDrops.commitOwned(itemHandler, lootOutputSlots());
     }
 
     /**
      * �??��??��?�槽?��?��??�足够�??空间存放??�落???
      */
     private boolean canStoreDrops(List<ItemStack> drops) {
-        // 模式????��?��?��???��?��?��??�空?��
-        for (ItemStack drop : drops) {
-            if (!canInsertItem(drop.copy())) {
-                return false;
-            }
-        }
-        return true;
+        return drops.isEmpty() || RecipeSlots.outputs(itemHandler, lootOutputSlots(), drops).isPresent();
     }
 
     /**
      * �??��?��?��?��以�?��?��?��????��?��?��??
      */
-    private boolean canInsertItem(ItemStack stack) {
-        if (stack.isEmpty()) {
-            return true;
-        }
 
-        int remaining = stack.getCount();
-
-        // ???�??��?��以�??并�?�已??��?��??????��???
-        for (int i = SLOT_STORAGE_START; i < SLOT_STORAGE_END; i++) {
-            ItemStack slotStack = itemHandler.getStackInSlot(i);
-            if (!slotStack.isEmpty() && ItemStack.isSameItem(slotStack, stack)) {
-                int canAdd = Math.min(slotStack.getMaxStackSize() - slotStack.getCount(), remaining);
-                remaining -= canAdd;
-                if (remaining <= 0) {
-                    return true;
-                }
-            }
-        }
-
-        // ??��???��空气??
-        for (int i = SLOT_STORAGE_START; i < SLOT_STORAGE_END; i++) {
-            ItemStack slotStack = itemHandler.getStackInSlot(i);
-            if (slotStack.isEmpty()) {
-                remaining -= stack.getMaxStackSize();
-                if (remaining <= 0) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
-    }
 
     /**
      * ?��??�用于�?�利???计算?��????�工??��???????�H???��于时间?/精�????????等�?��??
@@ -861,56 +612,12 @@ public class mio_icif_miner_elc extends mio_icif_producer {
     /**
      * �???��????��?��?��?�槽
      */
-    private boolean insertItemToStorage(ItemStack stack) {
-        if (stack.isEmpty()) {
-            return true;
-        }
 
-        // ???尝�?��??并�?�已??��?��??
-        for (int i = SLOT_STORAGE_START; i < SLOT_STORAGE_END; i++) {
-            ItemStack slotStack = itemHandler.getStackInSlot(i);
-            if (!slotStack.isEmpty() && ItemStack.isSameItem(slotStack, stack)) {
-                int canAdd = Math.min(slotStack.getMaxStackSize() - slotStack.getCount(), stack.getCount());
-                if (canAdd > 0) {
-                    slotStack.grow(canAdd);
-                    stack.shrink(canAdd);
-                    if (stack.isEmpty()) {
-                        setChanged();
-                        return true;
-                    }
-                }
-            }
-        }
-
-        // ??��?��?�放??�空气?
-        for (int i = SLOT_STORAGE_START; i < SLOT_STORAGE_END; i++) {
-            ItemStack slotStack = itemHandler.getStackInSlot(i);
-            if (slotStack.isEmpty()) {
-                itemHandler.setStackInSlot(i, stack.copy());
-                setChanged();
-                return true;
-            }
-        }
-
-        // 没�?�空?���?
-        return false;
-    }
 
     /**
      * �???�钻头�?��??
      */
-    private void consumeDrillDurability() {
-        ItemStack drillStack = itemHandler.getStackInSlot(SLOT_DRILL);
-        if (drillStack.isEmpty()) {
-            return;
-        }
 
-        // ?��模式???��头�?��?�电??�工??��?�用??��????��?��?��?�来表现??��??�????
-        if (getItemAPI().isElectricTool(drillStack)) {
-            getItemAPI().dischargeElectricTool(drillStack, 1, false);
-            setChanged();
-        }
-    }
 
     @Override
     protected void stopWork() {
@@ -925,7 +632,7 @@ public class mio_icif_miner_elc extends mio_icif_producer {
 
         if (!level.isClientSide()) {
             blockEntity.chargeTools();
-            
+
             boolean isLit = state.getValue(com.singularity_iteration.mio_icif.Blocks.Producer.mio_icif_block_miner_elc.LIT);
             if (blockEntity.isWorking() != isLit) {
                 level.setBlock(pos, state.setValue(com.singularity_iteration.mio_icif.Blocks.Producer.mio_icif_block_miner_elc.LIT, blockEntity.isWorking()), 3);
@@ -934,46 +641,25 @@ public class mio_icif_miner_elc extends mio_icif_producer {
     }
 
     private void chargeTools() {
-        ItemStack scannerStack = itemHandler.getStackInSlot(SLOT_SCANNER);
-        if (!scannerStack.isEmpty() && getItemAPI().isElectricTool(scannerStack)) {
-            long availableEnergy = energyStorage.getAmount();
-            if (availableEnergy > 0) {
-                long scannerMaxEnergy = getItemAPI().getElectricToolMaxEnergy(scannerStack);
-                long currentScannerEnergy = getItemAPI().getElectricToolStored(scannerStack);
-                long canAdd = Math.min(scannerMaxEnergy - currentScannerEnergy, availableEnergy);
-                if (canAdd > 0) {
-                    long added = getItemAPI().chargeElectricTool(scannerStack, canAdd, false);
-                    if (added > 0) {
-                        apiUseEnergy(added, false);
-                    }
-                }
-            }
-        }
-
-        ItemStack drillStack = itemHandler.getStackInSlot(SLOT_DRILL);
-        if (!drillStack.isEmpty() && getItemAPI().isElectricTool(drillStack)) {
-            long availableEnergy = energyStorage.getAmount();
-            if (availableEnergy > 0) {
-                long drillMaxEnergy = getItemAPI().getElectricToolMaxEnergy(drillStack);
-                long currentDrillEnergy = getItemAPI().getElectricToolStored(drillStack);
-                long canAdd = Math.min(drillMaxEnergy - currentDrillEnergy, availableEnergy);
-                if (canAdd > 0) {
-                    long added = getItemAPI().chargeElectricTool(drillStack, canAdd, false);
-                    if (added > 0) {
-                        apiUseEnergy(added, false);
-                    }
-                }
-            }
-        }
+        if (scexPendingDrops.isBusy() || scexMiningPayment.isBusy() || scexPipeAdvance.isBusy()) return;
+        dev.scex.si.energy.ToolEnergy.charge(itemHandler, SLOT_SCANNER, energyStorage, getItemAPI());
+        dev.scex.si.energy.ToolEnergy.charge(itemHandler, SLOT_DRILL, energyStorage, getItemAPI());
     }
 
     @Override
     public void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
-        currentDepth = tag.getInt("CurrentDepth");
+        scexPendingDrops.load(registries, tag.getList("scex_pending_mining_drops", net.minecraft.nbt.Tag.TAG_COMPOUND));
+        scexRoute.load(tag.getCompound("scex_mining_route"));
+        scexMiningPayment.load(tag.getCompound("scex_mining_payment"));
+        scexPipeAdvance.load(tag.getCompound("scex_pipe_advance"), registries);
+        currentEnergyCost = Math.max(0, tag.getLong("scex_mining_cost"));
+        scexLayerReady = tag.getBoolean("scex_layer_ready");
+        currentDepth = Math.max(0, tag.getInt("CurrentDepth"));
         isPaused = tag.getBoolean("IsPaused");
-        currentOreIndex = tag.getInt("CurrentOreIndex");
-        
+        currentOreIndex = Math.max(0, tag.getInt("CurrentOreIndex"));
+        tipPos = null;
+
         if (tag.contains("TipPosX")) {
             tipPos = new BlockPos(
                 tag.getInt("TipPosX"),
@@ -984,22 +670,38 @@ public class mio_icif_miner_elc extends mio_icif_producer {
 
         // ??�载?��??��?�表
         oresInCurrentLayer.clear();
-        int oreCount = tag.getInt("OreCount");
+        int oreCount = Math.clamp(tag.getInt("OreCount"), 0, (2 * MiningRoute.RADIUS + 1) * (2 * MiningRoute.RADIUS + 1));
+        var unique = new java.util.HashSet<BlockPos>();
         for (int i = 0; i < oreCount; i++) {
             int x = tag.getInt("Ore" + i + "X");
             int y = tag.getInt("Ore" + i + "Y");
             int z = tag.getInt("Ore" + i + "Z");
-            oresInCurrentLayer.add(new BlockPos(x, y, z));
+            var candidate = new BlockPos(x, y, z);
+            if (tipPos == null || y != tipPos.getY() || Math.abs((long) x - worldPosition.getX()) > MiningRoute.RADIUS
+                    || Math.abs((long) z - worldPosition.getZ()) > MiningRoute.RADIUS || !unique.add(candidate)) {
+                oresInCurrentLayer.clear(); scexLayerReady = false; break;
+            }
+            oresInCurrentLayer.add(candidate);
+        }
+        currentOreIndex = Math.min(currentOreIndex, oresInCurrentLayer.size());
+        if (tipPos != null && (tipPos.getX() != worldPosition.getX() || tipPos.getZ() != worldPosition.getZ())) {
+            tipPos = null; oresInCurrentLayer.clear(); currentOreIndex = 0; scexLayerReady = false;
         }
     }
 
     @Override
     public void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
+        tag.put("scex_pending_mining_drops", scexPendingDrops.save(registries));
+        tag.put("scex_mining_route", scexRoute.save());
+        tag.put("scex_mining_payment", scexMiningPayment.save());
+        tag.put("scex_pipe_advance", scexPipeAdvance.save(registries));
+        tag.putLong("scex_mining_cost", currentEnergyCost);
+        tag.putBoolean("scex_layer_ready", scexLayerReady);
         tag.putInt("CurrentDepth", currentDepth);
         tag.putBoolean("IsPaused", isPaused);
         tag.putInt("CurrentOreIndex", currentOreIndex);
-        
+
         if (tipPos != null) {
             tag.putInt("TipPosX", tipPos.getX());
             tag.putInt("TipPosY", tipPos.getY());

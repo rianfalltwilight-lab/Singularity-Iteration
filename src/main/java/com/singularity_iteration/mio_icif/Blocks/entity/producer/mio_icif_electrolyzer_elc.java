@@ -7,6 +7,11 @@ import com.singularity_iteration.mio_icif.Items.Cell.mio_icif_cells;
 import com.singularity_iteration.mio_icif.energy.EnergyUnit.CableTier;
 import com.singularity_iteration.mio_icif.energy.EnergyUnit.EUApi;
 import com.singularity_iteration.mio_icif.energy.EnergyUnit.IEUEnergyStorage;
+import dev.scex.si.processing.RecipeSlots;
+import dev.scex.si.energy.ContainerToTank;
+import java.util.Optional;
+import java.util.List;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
@@ -47,6 +52,11 @@ public class mio_icif_electrolyzer_elc extends mio_icif_producer {
 
     // ??��?�累积器�??��于追踪�?�时间???�水??��??�?    
     protected long energyAccumulator = 0;
+    // Legacy accumulator energy was already in ChemicalEnergy or had already been emitted.
+    // It still owes cell consumption but must not be published as chemical energy a second time.
+    protected long legacyCellCredit;
+    private long uncertainOutput;
+    private boolean scexProcessing, scexOutputting;
 
     public mio_icif_electrolyzer_elc(BlockPos pos, BlockState state) {
         this(pos, state, mio_icif_block_entities.ELECTROLYZER.get());
@@ -129,34 +139,22 @@ public class mio_icif_electrolyzer_elc extends mio_icif_producer {
      * 4. ??�学??�未�?     */
     @Override
     protected boolean canWork() {
-        // �??��?��?��??��??        
-        if (energyStorage.getAmount() < energyPerTick) {
-            return false;
-        }
+        if (scexProcessing || scexOutputting || uncertainOutput > 0 || prepareCell().isEmpty()) return false;
+        long freshNeeded = ENERGY_PER_WATER_CELL - Math.min(ENERGY_PER_WATER_CELL, legacyCellCredit);
+        if (freshNeeded > Math.max(0, DEFAULT_CAPACITY - chemicalEnergy)) return false;
+        return energyAccumulator >= freshNeeded || apiGetStoredEnergy() > 0;
+    }
 
-        // �??��??�学??�是?��已满
-        if (chemicalEnergy >= DEFAULT_CAPACITY) {
-            return false;
-        }
-
-        // �??��输�?�槽?��?��??�水??��??
-        ItemStack inputStack = itemHandler.getStackInSlot(INPUT_SLOT);
-        if (inputStack.isEmpty() || !mio_icif_cells.isCellContainingFluid(inputStack, net.minecraft.world.level.material.Fluids.WATER)) {
-            return false;
-        }
-
-        // �??��输出槽是?��?��以放??�空??��??        
-        ItemStack outputStack = itemHandler.getStackInSlot(OUTPUT_SLOT);
-        if (!outputStack.isEmpty()) {
-            if (!mio_icif_cells.isEmptyCell(outputStack)) {
-                return false;
-            }
-            if (outputStack.getCount() >= outputStack.getMaxStackSize()) {
-                return false;
-            }
-        }
-
-        return true;
+    protected Optional<RecipeSlots.Prepared> prepareCell() {
+        var input = itemHandler.getStackInSlot(INPUT_SLOT);
+        if (input.isEmpty()) return Optional.empty();
+        var single = input.copyWithCount(1);
+        if (!mio_icif_cells.isCellContainingFluid(single, net.minecraft.world.level.material.Fluids.WATER)) return Optional.empty();
+        var contents = mio_icif_cells.getCellFluid(single);
+        if (contents.isEmpty()) return Optional.empty();
+        var empty = mio_icif_cells.getEmptyCellForStack(single);
+        if (empty.isEmpty() || empty.getCount() != 1) return Optional.empty();
+        return RecipeSlots.prepare(itemHandler, INPUT_SLOT, 1, new int[]{OUTPUT_SLOT}, List.of(empty));
     }
 
     /**
@@ -165,45 +163,42 @@ public class mio_icif_electrolyzer_elc extends mio_icif_producer {
      * */
     @Override
     protected void doWork() {
-        // �???�电力?        
-        long extracted = energyStorage.extract(energyPerTick, false);
-        if (extracted <= 0) {
-            isWorking = false;
-            return;
-        }
-
-        isWorking = true;
-
-        // 累积??��?��?��?�学??��?��??
-        chemicalEnergy = Math.min(chemicalEnergy + extracted, DEFAULT_CAPACITY);
-        energyAccumulator += extracted;
-
-        // �??��?��?��达�?�电力?�?个水??��?????????????��??        
-        while (energyAccumulator >= ENERGY_PER_WATER_CELL) {
-            energyAccumulator -= ENERGY_PER_WATER_CELL;
-
-            // �???��??个水??��??
-            ItemStack inputStack = itemHandler.getStackInSlot(INPUT_SLOT);
-            inputStack.shrink(1);
-            if (inputStack.isEmpty()) {
-                itemHandler.setStackInSlot(INPUT_SLOT, ItemStack.EMPTY);
+        if (!canWork()) { stopWork(); return; }
+        var prepared = prepareCell();
+        if (prepared.isEmpty()) { stopWork(); return; }
+        scexProcessing = true;
+        try {
+            long legacyUsed = Math.min(ENERGY_PER_WATER_CELL, legacyCellCredit);
+            long freshNeeded = ENERGY_PER_WATER_CELL - legacyUsed;
+            if (energyAccumulator < freshNeeded) {
+                long debit = Math.min(freshNeeded - energyAccumulator,
+                    Math.min(DEFAULT_ENERGY_PER_TICK, Math.max(0, apiGetStoredEnergy())));
+                if (debit <= 0 || apiUseEnergy(debit, true) != debit) { stopWork(); return; }
+                long paid = apiUseEnergy(debit, false);
+                if (paid < 0 || paid > debit) throw new IllegalStateException("Invalid owned electrolyzer debit");
+                energyAccumulator += paid;
+                ContainerToTank.markUnsaved(this);
             }
-
-            ItemStack emptyCell = mio_icif_cells.getEmptyCellForStack(inputStack);
-            if (emptyCell.isEmpty()) emptyCell = new ItemStack(mio_icif_cells.CELL_EMPTY.get());
-
-            ItemStack outputStack = itemHandler.getStackInSlot(OUTPUT_SLOT);
-            if (outputStack.isEmpty()) {
-                itemHandler.setStackInSlot(OUTPUT_SLOT, emptyCell);
-            } else {
-                outputStack.grow(1);
+            isWorking = true;
+            if (energyAccumulator < freshNeeded) return;
+            long oldChemical = chemicalEnergy, oldCredit = energyAccumulator, oldLegacy = legacyCellCredit;
+            chemicalEnergy += freshNeeded; energyAccumulator -= freshNeeded; legacyCellCredit -= legacyUsed;
+            progress = 0;
+            // All account state is visible before owned inventory notifications.
+            if (!prepared.get().commit()) {
+                chemicalEnergy = oldChemical; energyAccumulator = oldCredit; legacyCellCredit = oldLegacy;
+                stopWork();
             }
+            ContainerToTank.markUnsaved(this);
+        } finally { scexProcessing = false; }
+    }
 
-            // �???��?��?�槽已空气???�止循环
-            if (itemHandler.getStackInSlot(INPUT_SLOT).isEmpty()) {
-                break;
-            }
-        }
+    @Override
+    protected void updateProgress() {
+        // The paid credit, rather than the generic scheduler, defines progress.
+        long legacy = Math.min(ENERGY_PER_WATER_CELL, legacyCellCredit);
+        long fresh = Math.min(ENERGY_PER_WATER_CELL - legacy, energyAccumulator);
+        progress = (int) ((legacy + fresh) * 20 / ENERGY_PER_WATER_CELL);
     }
 
     /**
@@ -220,38 +215,46 @@ public class mio_icif_electrolyzer_elc extends mio_icif_producer {
         // 输出??�学??��?�相??�机?��
         blockEntity.outputChemicalEnergy();
 
-        blockEntity.setChanged();
+
     }
 
     /**
      * 输出??�学??��?�相??�机?��
      * ??��????��?�满?��????��??�机?��输出??��??     */
     private void outputChemicalEnergy() {
-        if (chemicalEnergy <= 0) {
-            return;
-        }
-
+        if (!(level instanceof ServerLevel server) || !server.getServer().isSameThread()
+                || scexOutputting || scexProcessing || uncertainOutput > 0 || chemicalEnergy <= 0) return;
+        long budget = DEFAULT_MAX_EXTRACT;
         for (Direction direction : Direction.values()) {
-            BlockPos adjacentPos = worldPosition.relative(direction);
-            IEUEnergyStorage adjacentStorage = level.getCapability(EUApi.SIDED, adjacentPos, direction.getOpposite());
-
-            if (adjacentStorage != null && adjacentStorage.getCapacity() - adjacentStorage.getAmount() > 0) {
-                // �??��?��??�机?��?��?��已�??        
-                long containerSpace = adjacentStorage.getCapacity() - adjacentStorage.getAmount();
-                if (containerSpace > 0) {
-                    // 计算?�可以�?��?��????��??        
-                    long energyToTransfer = Math.min(Math.min(chemicalEnergy, DEFAULT_MAX_EXTRACT), containerSpace);
-
-                    if (energyToTransfer > 0) {
-                        // 输出??��??
-                        long received = adjacentStorage.receive(energyToTransfer, false);
-                        if (received > 0) {
-                            chemicalEnergy -= received;
-                        }
-                    }
-                }
+            if (budget <= 0 || chemicalEnergy <= 0) break;
+            var adjacent = worldPosition.relative(direction);
+            if (!server.getChunkSource().hasChunk(adjacent.getX() >> 4, adjacent.getZ() >> 4)) continue;
+            var target = server.getCapability(EUApi.SIDED, adjacent, direction.getOpposite());
+            if (target == null || target == energyStorage) continue;
+            long capacity = target.getCapacity(), stored = target.getAmount();
+            if (stored < 0 || capacity <= stored) continue;
+            long delivered = offerChemical(target, Math.min(budget, capacity - stored));
+            budget -= delivered;
+            if (delivered > 0) {
+                var neighbor = server.getBlockEntity(adjacent);
+                if (neighbor != null) ContainerToTank.markUnsaved(neighbor);
             }
         }
+    }
+
+    protected long offerChemical(IEUEnergyStorage target, long limit) {
+        if (scexOutputting || scexProcessing || uncertainOutput > 0 || limit <= 0 || chemicalEnergy <= 0) return 0;
+        long offered = Math.min(chemicalEnergy, limit);
+        scexOutputting = true;
+        chemicalEnergy -= offered; uncertainOutput = offered;
+        ContainerToTank.markUnsaved(this);
+        try {
+            long accepted = target.receive(offered, false);
+            if (accepted < 0 || accepted > offered) throw new IllegalStateException("Invalid electrolyzer target acceptance");
+            chemicalEnergy += offered - accepted; uncertainOutput = 0;
+            ContainerToTank.markUnsaved(this);
+            return accepted;
+        } finally { scexOutputting = false; }
     }
 
     @Override
@@ -259,17 +262,29 @@ public class mio_icif_electrolyzer_elc extends mio_icif_producer {
         super.saveAdditional(tag, registries);
         tag.putLong("ChemicalEnergy", chemicalEnergy);
         tag.putLong("EnergyAccumulator", energyAccumulator);
+        tag.putInt("scex_electrolysis_version", 1);
+        tag.putLong("scex_legacy_cell_credit", legacyCellCredit);
+        tag.putLong("scex_uncertain_output", uncertainOutput);
     }
 
     @Override
     public void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
-        if (tag.contains("ChemicalEnergy")) {
-            chemicalEnergy = tag.getLong("ChemicalEnergy");
+        chemicalEnergy = Math.max(0, tag.getLong("ChemicalEnergy"));
+        if (tag.contains("scex_electrolysis_version")) {
+            energyAccumulator = Math.max(0, tag.getLong("EnergyAccumulator"));
+            legacyCellCredit = Math.max(0, tag.getLong("scex_legacy_cell_credit"));
+        } else {
+            energyAccumulator = 0;
+            legacyCellCredit = Math.max(0, tag.getLong("EnergyAccumulator"));
         }
-        if (tag.contains("EnergyAccumulator")) {
-            energyAccumulator = tag.getLong("EnergyAccumulator");
-        }
+        uncertainOutput = Math.max(0, tag.getLong("scex_uncertain_output"));
+        updateProgress();
+    }
+
+    @Override
+    public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
+        var tag = super.getUpdateTag(registries); saveAdditional(tag, registries); return tag;
     }
 
     // ==================== Getter ?���? ====================

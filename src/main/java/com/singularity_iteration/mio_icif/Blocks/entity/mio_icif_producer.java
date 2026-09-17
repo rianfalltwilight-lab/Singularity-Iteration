@@ -15,6 +15,8 @@ import com.singularity_iteration.mio_icif.api.machine.IWorkCompleteCallback;
 import com.singularity_iteration.mio_icif.api.recipe.IRecipeAPI;
 import com.singularity_iteration.mio_icif.energy.EnergyUnit.CableTier;
 import com.singularity_iteration.mio_icif.mio_icif_sounds;
+import dev.scex.si.processing.FluidTransferBuffer;
+import dev.scex.si.energy.ContainerToTank;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
@@ -45,12 +47,15 @@ import java.util.List;
  * 电器类型，使用电力而非燃料
  * 实现 Container 和 WorldlyContainer 接口以支持漏斗交互
  * 使用 EU (Energy Unit) 能量系统
- * 
+ *
  * <p>配方查找和能量操作通过 API 层进行，子类可以覆盖受保护的方法
  * 来改变行为，Addon 可以安全地扩展机器行为。
  */
 @SuppressWarnings("null")
 public abstract class mio_icif_producer extends mio_icif_Energy_Block implements WorldlyContainer, ISlotValidator, com.singularity_iteration.mio_icif.api.machine.IProducerBlock {
+    private final FluidTransferBuffer scexFluidOutput = new FluidTransferBuffer(() -> ContainerToTank.markUnsaved(this));
+    private final FluidTransferBuffer scexFluidInput = new FluidTransferBuffer(() -> ContainerToTank.markUnsaved(this));
+
 
     protected final SlotLayout slotLayout;
     protected MachineItemHandler itemHandler;
@@ -231,12 +236,12 @@ public abstract class mio_icif_producer extends mio_icif_Energy_Block implements
 
     /**
      * 简化构造函数 - 供 NeoForge BlockEntityType.Builder.of() 使用
-     * 
+     *
      * <p>此构造函数使用默认配置，适用于 GenericMachineBlockEntity 等需要通过
      * BlockEntityType 创建的机器。实际配置应在 onLoad() 时从 MachineRegistry 获取。
      */
     public mio_icif_producer(BlockPos pos, BlockState state, BlockEntityType<?> type) {
-        this(pos, state, type, 10000, 100, 100, 200, 
+        this(pos, state, type, 10000, 100, 100, 200,
              SlotLayout.builder().input(1).output(1).build(), 10, CableTier.LV);
     }
 
@@ -355,7 +360,8 @@ public abstract class mio_icif_producer extends mio_icif_Energy_Block implements
 
     protected boolean isBattery(ItemStack stack) {
         return getItemAPI().isBattery(stack)
-            || stack.getItem() == Items.REDSTONE;
+            || stack.getItem() == Items.REDSTONE
+            || dev.scex.si.energy.FeMachineBridge.dischargeable(stack);
     }
 
     protected boolean canExtractItem(int slot, @Nullable Direction side) {
@@ -532,6 +538,11 @@ public abstract class mio_icif_producer extends mio_icif_Energy_Block implements
         }
         // 确保升级统计是最新的（子类可能未调用父类 tick）
         recalculateUpgradeStats();
+        if (hasMeasuredItemAutomation()) {
+            transferMeasuredItems();
+            handleFluidUpgrades();
+            return;
+        }
         if (upgradeStats.getEjectorCount() > 0) {
             ejectItems(upgradeStats.getEjectorCount());
         }
@@ -539,6 +550,104 @@ public abstract class mio_icif_producer extends mio_icif_Energy_Block implements
             pullItems(upgradeStats.getPullingCount());
         }
         handleFluidUpgrades();
+    }
+
+    // R27: normal-game observations, four basic processors only. Each upgrade
+    // slot acts separately; the sampled budgets are 1, 4, 16 and a full stack.
+    // Keep other SI machines and extended upgrade stacks on their existing path.
+    private boolean hasMeasuredItemAutomation() {
+        var id = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(getBlockState().getBlock());
+        if (!id.getNamespace().equals("mio_icif")) return false;
+        boolean basic = switch (id.getPath()) {
+            case "producer/block_furnace_elc", "producer/block_powder_elc",
+                 "producer/block_compressor_elc", "producer/block_extractor_elc" -> true;
+            default -> false;
+        };
+        if (!basic) return false;
+        for (int slot = 0; slot < itemHandler.getSlots(); slot++) {
+            if (itemHandler.getStackInSlot(slot).getCount() > 64) return false;
+        }
+        return true;
+    }
+
+    private static final Direction[] OBSERVED_TRANSFER_FACES = {
+        Direction.EAST, Direction.WEST, Direction.SOUTH,
+        Direction.NORTH, Direction.UP, Direction.DOWN
+    };
+
+    private void transferMeasuredItems() {
+        if (upgradeStats.getEjectorCount() == 0 && upgradeStats.getPullingCount() == 0) return;
+        IItemAPI api = getItemAPI();
+        int start = getUpgradeSlotStart();
+        int end = Math.min(start + getUpgradeSlotCount(), itemHandler.getSlots());
+        for (int slot = start; slot < end; slot++) {
+            ItemStack upgrade = itemHandler.getStackInSlot(slot);
+            if (upgrade.isEmpty()) continue;
+            String type = api.getUpgradeType(upgrade);
+            boolean eject = "ejector".equals(type);
+            if (!eject && !"pulling".equals(type)) continue;
+            int budget = switch (upgrade.getCount()) {
+                case 1 -> 1;
+                case 2 -> 4;
+                case 3 -> 16;
+                default -> 64;
+            };
+            Direction selected = api.getUpgradeDirection(upgrade);
+            for (Direction face : OBSERVED_TRANSFER_FACES) {
+                if (selected != null && selected != face) continue;
+                IItemHandler adjacent = getAdjacentItemHandler(worldPosition.relative(face), face.getOpposite());
+                if (adjacent == null) continue;
+                if (eject) {
+                    for (int output : getOutputSlots()) {
+                        ItemStack available = itemHandler.extractItem(output, budget, true);
+                        if (available.isEmpty()) continue;
+                        ItemStack remainder = ItemHandlerHelper.insertItemStacked(adjacent, available, true);
+                        int accepted = available.getCount() - remainder.getCount();
+                        if (accepted == 0) continue;
+                        ItemStack extracted = itemHandler.extractItem(output, accepted, false);
+                        ItemStack rejected = ItemHandlerHelper.insertItemStacked(adjacent, extracted, false);
+                        // A neighbor may accept less than it simulated. Retain the remainder.
+                        if (!rejected.isEmpty()) {
+                            ItemStack restored = itemHandler.getStackInSlot(output).copy();
+                            if (restored.isEmpty()) restored = rejected;
+                            else restored.grow(rejected.getCount());
+                            itemHandler.setStackInSlot(output, restored);
+                        }
+                        if (!extracted.isEmpty()) markItemTransferSaved(worldPosition.relative(face));
+                    }
+                } else {
+                    int remaining = budget;
+                    for (int sourceSlot = 0; sourceSlot < adjacent.getSlots() && remaining > 0; sourceSlot++) {
+                        ItemStack available = adjacent.extractItem(sourceSlot, remaining, true);
+                        if (available.isEmpty()) continue;
+                        for (int input : getInputSlots()) {
+                            ItemStack remainder = itemHandler.insertItem(input, available, true);
+                            int accepted = available.getCount() - remainder.getCount();
+                            if (accepted <= 0) continue;
+                            ItemStack extracted = adjacent.extractItem(sourceSlot, accepted, false);
+                            if (extracted.isEmpty()) continue;
+                            ItemStack rejected = itemHandler.insertItem(input, extracted, false);
+                            if (!rejected.isEmpty()) {
+                                ItemStack unreturned = adjacent.insertItem(sourceSlot, rejected, false);
+                                if (!unreturned.isEmpty()) net.minecraft.world.Containers.dropItemStack(level,
+                                    worldPosition.getX() + .5, worldPosition.getY() + .5, worldPosition.getZ() + .5, unreturned);
+                            }
+                            remaining -= extracted.getCount() - rejected.getCount();
+                            markItemTransferSaved(worldPosition.relative(face));
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private void markItemTransferSaved(BlockPos neighborPos) {
+        // The machine handler does not notify its owner when inventory changes.
+        // Mark both chunks so an earlier save cannot survive only on one side.
+        setChanged();
+        BlockEntity neighbor = level.getBlockEntity(neighborPos);
+        if (neighbor != null) neighbor.setChanged();
     }
 
     /**
@@ -633,7 +742,7 @@ public abstract class mio_icif_producer extends mio_icif_Energy_Block implements
      */
     @Nullable
     protected IItemHandler getAdjacentItemHandler(BlockPos pos, @Nullable Direction side) {
-        if (level == null) {
+        if (level == null || !level.getChunkSource().hasChunk(pos.getX() >> 4, pos.getZ() >> 4)) {
             return null;
         }
         BlockEntity target = level.getBlockEntity(pos);
@@ -648,7 +757,7 @@ public abstract class mio_icif_producer extends mio_icif_Energy_Block implements
      */
     @Nullable
     protected IFluidHandler getAdjacentFluidHandler(BlockPos pos, @Nullable Direction side) {
-        if (level == null) {
+        if (level == null || !level.getChunkSource().hasChunk(pos.getX() >> 4, pos.getZ() >> 4)) {
             return null;
         }
         BlockEntity target = level.getBlockEntity(pos);
@@ -666,6 +775,10 @@ public abstract class mio_icif_producer extends mio_icif_Energy_Block implements
         if (level == null || level.isClientSide) {
             return;
         }
+        if (this instanceof com.singularity_iteration.mio_icif.Blocks.entity.producer.mio_icif_canner_elc canner) {
+            transferMeasuredCannerFluids(canner);
+            return;
+        }
         IFluidHandler own = getFluidHandlerCapability(null);
         if (own == null || own.getTanks() == 0) {
             return;
@@ -679,6 +792,52 @@ public abstract class mio_icif_producer extends mio_icif_Energy_Block implements
         }
     }
 
+    // R27: the observed canner input reservoir is never a source for automation.
+    // Work through its separate reservoirs, not the historical combined capability.
+    private void transferMeasuredCannerFluids(
+            com.singularity_iteration.mio_icif.Blocks.entity.producer.mio_icif_canner_elc canner) {
+        if (upgradeStats.getFluidEjectorCount() == 0 && upgradeStats.getFluidPullingCount() == 0) return;
+        int start = getUpgradeSlotStart();
+        int end = Math.min(start + getUpgradeSlotCount(), itemHandler.getSlots());
+        IItemAPI api = getItemAPI();
+        for (int slot = start; slot < end; slot++) {
+            ItemStack upgrade = itemHandler.getStackInSlot(slot);
+            if (upgrade.isEmpty()) continue;
+            String type = api.getUpgradeType(upgrade);
+            boolean eject = "fluid_ejector".equals(type);
+            if (!eject && !"fluid_pulling".equals(type)) continue;
+            // 50, 200, 800 mB observed; later quantities require forward validation.
+            int budget = 50 << (2 * (Math.min(upgrade.getCount(), 5) - 1));
+            Direction selected = api.getUpgradeDirection(upgrade);
+            for (Direction face : OBSERVED_TRANSFER_FACES) {
+                if (selected != null && selected != face) continue;
+                BlockPos neighborPos = worldPosition.relative(face);
+                IFluidHandler adjacent = getAdjacentFluidHandler(neighborPos, face.getOpposite());
+                if (adjacent == null) continue;
+                BlockEntity neighbor = level.getBlockEntity(neighborPos);
+                if (neighbor instanceof com.singularity_iteration.mio_icif.Blocks.entity.producer.mio_icif_canner_elc other) {
+                    adjacent = eject ? other.getInputFluidTank() : other.getOutputFluidTank();
+                }
+                IFluidHandler from = eject ? canner.getOutputFluidTank() : adjacent;
+                IFluidHandler to = eject ? adjacent : canner.getInputFluidTank();
+                FluidStack offered = from.drain(budget, IFluidHandler.FluidAction.SIMULATE);
+                if (offered.isEmpty()) continue;
+                int accepted = to.fill(offered, IFluidHandler.FluidAction.SIMULATE);
+                if (accepted <= 0) continue;
+                FluidStack extracted = from.drain(offered.copyWithAmount(accepted), IFluidHandler.FluidAction.EXECUTE);
+                if (extracted.isEmpty()) continue;
+                int moved = to.fill(extracted, IFluidHandler.FluidAction.EXECUTE);
+                if (moved < extracted.getAmount()) {
+                    from.fill(extracted.copyWithAmount(extracted.getAmount() - moved), IFluidHandler.FluidAction.EXECUTE);
+                }
+                if (moved > 0) {
+                    setChanged();
+                    if (neighbor != null) neighbor.setChanged();
+                }
+            }
+        }
+    }
+
     /**
      * 流体弹出升级：将输出槽流体推送到相邻储罐
      * 默认把最后一个tank 当作输出 tank
@@ -686,31 +845,21 @@ public abstract class mio_icif_producer extends mio_icif_Energy_Block implements
      * @param upgradeCount 流体弹出升级数量
      */
     protected void ejectFluids(IFluidHandler own, int upgradeCount) {
-        int maxPerTick = Math.max(1, upgradeCount * 1000);
-        List<Direction> dirs = upgradeStats.getFluidEjectorDirections();
-        Iterable<Direction> targetDirs = !dirs.isEmpty() ? dirs : Arrays.asList(Direction.values());
-        for (int tank = own.getTanks() - 1; tank >= 0; tank--) {
-            FluidStack fluid = own.getFluidInTank(tank);
-            if (fluid.isEmpty()) {
-                continue;
-            }
-            FluidStack toMove = fluid.copyWithAmount(Math.min(fluid.getAmount(), maxPerTick));
-            if (toMove.isEmpty()) {
-                continue;
-            }
-            for (Direction dir : targetDirs) {
-                IFluidHandler target = getAdjacentFluidHandler(worldPosition.relative(dir), dir.getOpposite());
-                if (target == null) {
-                    continue;
-                }
-                int filled = target.fill(toMove, IFluidHandler.FluidAction.EXECUTE);
-                if (filled > 0) {
-                    own.drain(fluid.copyWithAmount(filled), IFluidHandler.FluidAction.EXECUTE);
-                    toMove.setAmount(toMove.getAmount() - filled);
-                    if (toMove.isEmpty()) {
-                        break;
-                    }
-                }
+        int budget = (int) Math.min(Integer.MAX_VALUE, Math.max(0L, (long) upgradeCount * 1000));
+        var configured = upgradeStats.getFluidEjectorDirections();
+        Iterable<Direction> directions = configured.isEmpty() ? java.util.Arrays.asList(Direction.values()) : configured;
+        for (Direction direction : directions) {
+            if (budget <= 0) break;
+            BlockPos adjacentPos = worldPosition.relative(direction);
+            var adjacent = getAdjacentFluidHandler(adjacentPos, direction.getOpposite());
+            if (adjacent == null) continue;
+            var before = scexFluidOutput.pending();
+            int moved = scexFluidOutput.move(own, adjacent, budget);
+            budget -= moved;
+            if (moved > 0 || !FluidStack.matches(before, scexFluidOutput.pending())) {
+                ContainerToTank.markUnsaved(this);
+                var neighbor = level.getBlockEntity(adjacentPos);
+                if (neighbor != null) ContainerToTank.markUnsaved(neighbor);
             }
         }
     }
@@ -722,41 +871,21 @@ public abstract class mio_icif_producer extends mio_icif_Energy_Block implements
      * @param upgradeCount 流体抽入升级数量
      */
     protected void pullFluids(IFluidHandler own, int upgradeCount) {
-        int maxPerTick = Math.max(1, upgradeCount * 1000);
-        List<Direction> dirs = upgradeStats.getFluidPullingDirections();
-        Iterable<Direction> targetDirs = !dirs.isEmpty() ? dirs : Arrays.asList(Direction.values());
-        for (int tank = 0; tank < own.getTanks(); tank++) {
-            int capacity = own.getTankCapacity(tank);
-            FluidStack current = own.getFluidInTank(tank);
-            if (current.getAmount() >= capacity) {
-                continue;
-            }
-            boolean inputTank = tank == 0 || current.isEmpty();
-            if (!inputTank) {
-                continue;
-            }
-            for (Direction dir : targetDirs) {
-                IFluidHandler source = getAdjacentFluidHandler(worldPosition.relative(dir), dir.getOpposite());
-                if (source == null) {
-                    continue;
-                }
-                int space = capacity - current.getAmount();
-                int maxDrain = Math.min(space, maxPerTick);
-                FluidStack available = source.drain(maxDrain, IFluidHandler.FluidAction.SIMULATE);
-                if (available.isEmpty()) {
-                    continue;
-                }
-                if (!current.isEmpty() && !FluidStack.isSameFluid(available, current)) {
-                    continue;
-                }
-                if (!own.isFluidValid(tank, available)) {
-                    continue;
-                }
-                int filled = own.fill(available, IFluidHandler.FluidAction.EXECUTE);
-                if (filled > 0) {
-                    source.drain(filled, IFluidHandler.FluidAction.EXECUTE);
-                    break;
-                }
+        int budget = (int) Math.min(Integer.MAX_VALUE, Math.max(0L, (long) upgradeCount * 1000));
+        var configured = upgradeStats.getFluidPullingDirections();
+        Iterable<Direction> directions = configured.isEmpty() ? java.util.Arrays.asList(Direction.values()) : configured;
+        for (Direction direction : directions) {
+            if (budget <= 0) break;
+            BlockPos adjacentPos = worldPosition.relative(direction);
+            var adjacent = getAdjacentFluidHandler(adjacentPos, direction.getOpposite());
+            if (adjacent == null) continue;
+            var before = scexFluidInput.pending();
+            int moved = scexFluidInput.move(adjacent, own, budget);
+            budget -= moved;
+            if (moved > 0 || !FluidStack.matches(before, scexFluidInput.pending())) {
+                ContainerToTank.markUnsaved(this);
+                var neighbor = level.getBlockEntity(adjacentPos);
+                if (neighbor != null) ContainerToTank.markUnsaved(neighbor);
             }
         }
     }
@@ -931,51 +1060,12 @@ public abstract class mio_icif_producer extends mio_icif_Energy_Block implements
     /**
      * 处理电池槽的放电逻辑（仅从电池提取能量给机器，不给电池充电）
      * 生产机器只能消耗电池能量，不能给电池充电
-     * 
+     *
      * <p>通过 IItemAPI 进行电池操作，Addon 可以注册自定义电池类型。
      */
     protected void handleBatterySlot() {
-        int batterySlot = getBatterySlot();
-        if (batterySlot < 0) {
-            return;
-        }
-
-        ItemStack batteryStack = itemHandler.getStackInSlot(batterySlot);
-        if (batteryStack.isEmpty()) {
-            return;
-        }
-
-        if (apiGetStoredEnergy() >= getEffectiveCapacity()) {
-            return;
-        }
-
-        long energyNeeded = getEffectiveCapacity() - apiGetStoredEnergy();
-        long maxTransfer = Math.min(energyNeeded, getEffectiveMaxReceive());
-
-        if (batteryStack.getItem() == Items.REDSTONE) {
-            // 对齐IC2：有任何空间即消耗红石，不要求满800EU空缺
-            long energyToAdd = Math.min(REDSTONE_ENERGY_VALUE, maxTransfer);
-            if (energyToAdd > 0) {
-                batteryStack.shrink(1);
-                apiReceiveEnergy(energyToAdd, false);
-                setChanged();
-            }
-            return;
-        }
-
-        // 通过 API 检查是否为电池并进行放电
-        if (apiIsBattery(batteryStack)) {
-            long batteryEnergy = apiGetBatteryStored(batteryStack);
-            if (batteryEnergy > 0) {
-                long batteryChargeRate = apiGetChargeRate(batteryStack);
-                long energyToExtract = Math.min(batteryEnergy, Math.min(batteryChargeRate, maxTransfer));
-                long extractedEnergy = apiDischargeBattery(batteryStack, energyToExtract, false);
-                if (extractedEnergy > 0) {
-                    apiReceiveEnergy(extractedEnergy, false);
-                    setChanged();
-                }
-            }
-        }
+        int slot = getBatterySlot();
+        if (slot >= 0 && !itemHandler.getStackInSlot(slot).isEmpty()) scexFeBridge().discharge(itemHandler, slot);
     }
 
     /**
@@ -1240,6 +1330,8 @@ public abstract class mio_icif_producer extends mio_icif_Energy_Block implements
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
+        tag.put("scex_fluid_output_pending", scexFluidOutput.save(registries));
+        tag.put("scex_fluid_input_pending", scexFluidInput.save(registries));
         tag.put("inventory", itemHandler.serializeNBT(registries));
         tag.putInt("progress", progress);
         tag.putBoolean("is_working", isWorking);
@@ -1248,6 +1340,8 @@ public abstract class mio_icif_producer extends mio_icif_Energy_Block implements
     @Override
     public void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
+        scexFluidOutput.load(registries, tag.getCompound("scex_fluid_output_pending"));
+        scexFluidInput.load(registries, tag.getCompound("scex_fluid_input_pending"));
         if (tag.contains("inventory")) {
             itemHandler.deserializeNBT(registries, tag.getCompound("inventory"));
             // 自动迁移旧存档的槽位数量（例如冷凝机从3/7 槽扩容到 8 槽）
@@ -1273,6 +1367,7 @@ public abstract class mio_icif_producer extends mio_icif_Energy_Block implements
         // The energy base class loads before the upgrade inventory. Restore against
         // the final capacity so a reload does not truncate an upgraded machine's EU.
         if (tag.contains("energy", net.minecraft.nbt.Tag.TAG_ANY_NUMERIC)) apiSetEnergy(tag.getLong("energy"));
+        energyStorage.scexLoadFraction(tag.getLong("scex_energy_fraction"));
     }
 
     @Override

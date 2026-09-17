@@ -5,14 +5,75 @@
   "finding_limit": "Review boundaries are not findings of copying. No original IC2 implementation was inspected or compared.",
   "unresolved_groups": [
     {
+      "id": "quantum-and-projectile-mapping",
+      "prefixes": [],
+      "paths": [
+        "src/main/java/com/singularity_iteration/mio_icif/Items/Armor/mio_icif_chestplate_quantum.java",
+        "src/main/java/com/singularity_iteration/mio_icif/Items/Armor/mio_icif_boots_quantum.java",
+        "src/main/java/com/singularity_iteration/mio_icif/Items/Tools/mio_icif_diamond_driller.java",
+        "src/main/java/com/singularity_iteration/mio_icif/Items/Tools/mio_icif_laser_miner.java",
+        "src/main/java/com/singularity_iteration/mio_icif/Items/Tools/mio_icif_laser_bullet.java",
+        "src/main/java/com/singularity_iteration/mio_icif/Items/Tools/mio_icif_plasma_bullet.java"
+      ],
+      "basis": "R60 SI metadata names internal quantum/jetpack/tool/entity classes, methods or implementation correspondence. Bodies remain unread. Comment snippets are not behavior specifications. Conservative exclusion, not a copying finding."
+    },
+    {
+      "id": "item-energy-and-equipment-mapping",
+      "prefixes": [],
+      "paths": [
+        "src/main/java/com/singularity_iteration/mio_icif/Items/Armor/mio_icif_solar_helmet.java",
+        "src/main/java/com/singularity_iteration/mio_icif/Items/Armor/mio_icif_chestplate_energy_pack.java",
+        "src/main/java/com/singularity_iteration/mio_icif/api/item/IElectricArmorItem.java",
+        "src/main/java/com/singularity_iteration/mio_icif/api/item/BatteryElectricAdapter.java",
+        "src/main/java/com/singularity_iteration/mio_icif/api/item/electric/ISpecialElectricItem.java",
+        "src/main/java/com/singularity_iteration/mio_icif/api/item/electric/IElectricItemManager.java",
+        "src/main/java/com/singularity_iteration/mio_icif/api/item/electric/IElectricItem.java",
+        "src/main/java/com/singularity_iteration/mio_icif/api/item/electric/IBackupElectricItemManager.java"
+      ],
+      "basis": "R59 metadata names IC2 electric item API counterparts, armor absorption methods, solar internal methods and backpack classes. Bodies remain unread and conservatively excluded pending independent replacement or removal of unused legacy APIs. Not a copying finding."
+    },
+    {
+      "id": "crop-method-and-class-mapping",
+      "prefixes": [],
+      "paths": [
+        "src/main/java/com/singularity_iteration/mio_icif/Items/Tools/CropAnalyzerItem.java",
+        "src/main/java/com/singularity_iteration/mio_icif/api/internal/crop/PlantHybridization.java",
+        "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/crop/mio_icif_crop_entity.java",
+        "src/main/java/com/singularity_iteration/mio_icif/api/crop/PlantType.java",
+        "src/main/java/com/singularity_iteration/mio_icif/api/crop/PlantStats.java",
+        "src/main/java/com/singularity_iteration/mio_icif/Blocks/Crop/mio_icif_crop_stick.java",
+        "src/main/java/com/singularity_iteration/mio_icif/Blocks/Crop/mio_icif_crop_stick_upgraded.java",
+        "src/main/java/com/singularity_iteration/mio_icif/event/CropRegistryEvent.java",
+        "src/main/java/com/singularity_iteration/mio_icif/crop/PlantEatingPlant.java"
+      ],
+      "basis": "R56 comment-only inspection names IC2 internal crop classes/methods and algorithm correspondence. Bodies were not opened. Conservative exclusion pending independent gameplay-based replacement, not a copying finding."
+    },
+    {
+      "id": "reactor-internal-api-and-method-notices",
+      "prefixes": [],
+      "paths": [
+        "src/main/java/com/singularity_iteration/mio_icif/api/reactor/IBaseReactorComponent.java",
+        "src/main/java/com/singularity_iteration/mio_icif/api/reactor/IReactor.java",
+        "src/main/java/com/singularity_iteration/mio_icif/Items/Reactor/mio_icif_condensator.java",
+        "src/main/java/com/singularity_iteration/mio_icif/Items/Reactor/mio_icif_heat_vent.java",
+        "src/main/java/com/singularity_iteration/mio_icif/Items/Reactor/mio_icif_nuclear_reactor.java",
+        "src/main/java/com/singularity_iteration/mio_icif/Items/Reactor/mio_icif_mox_reactor.java"
+      ],
+      "basis": "R46 SI comments name IC2 reactor interfaces and internal method/callback correspondence. Bodies were not read in this audit. Conservative exclusion pending independent gameplay-based replacement; not a copying finding."
+    },
+    {
       "id": "grid",
-      "prefixes": ["src/main/java/com/singularity_iteration/mio_icif/energy/grid/"],
+      "prefixes": [
+        "src/main/java/com/singularity_iteration/mio_icif/energy/grid/"
+      ],
       "paths": [],
       "basis": "Existing author-feedback records an IC2 implementation adaptation notice in EnergyNetGlobal. Implementation bodies remain excluded."
     },
     {
       "id": "legacy-grid",
-      "prefixes": ["src/main/java/com/singularity_iteration/mio_icif/energy/leg/"],
+      "prefixes": [
+        "src/main/java/com/singularity_iteration/mio_icif/energy/leg/"
+      ],
       "paths": [],
       "basis": "Legacy electrical implementation remains unreviewed and excluded from algorithm inspection."
     },
@@ -34,9 +95,106 @@
     },
     {
       "id": "energy-api",
-      "prefixes": ["src/main/java/com/singularity_iteration/mio_icif/api/energy/"],
+      "prefixes": [
+        "src/main/java/com/singularity_iteration/mio_icif/api/energy/"
+      ],
       "paths": [],
       "basis": "Some SI-owned API comments identify counterpart IC2 methods. Own namespace/import absence alone cannot establish independent origin."
+    }
+  ],
+  "independent_replacements": [
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_condenser.java",
+      "revision": "R52",
+      "predecessor_sha256": "edc3164c358c78e3daeb734fbe0e143af6bf4df7c5b021ea992b1c5bbc0393f3",
+      "evidence": "evidence/r52/replacement-provenance.json",
+      "scope": "New body from normal R50 condenser observations and existing SI public callers. Unaccelerated cycle only; vent acceleration and unmapped legacy data remain open behavior work. Other full-source gate groups remain."
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_pump_elc.java",
+      "revision": "R64",
+      "predecessor_sha256": "d269769b3b1758b13aec286a4fba9e1c7370c0e5042d0c046d0456d1c348c90e",
+      "evidence": "evidence/r64/replacement-provenance.json",
+      "scope": "New body from R49 adjacent-water observations and SI public ABI. Bounded search, lava and protected miner handoff are candidate extensions. Legacy migration and world validation remain open."
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_replicator_elc.java",
+      "basis": "R95 independent replacement authored from R94 ordinary IC2 GUI/save observations and frozen SI public ABI; predecessor preserved opaque and not inspected. Pricing resolver and complete behavior validation remain open.",
+      "evidence": "../evidence/r95/preimage.json"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/HUEntity/HuGenerator/mio_icif_heat_generator_elc.java",
+      "revision": "R106",
+      "predecessor_sha256": "1b984896cd6f850ac8347974e533fe79365cee4d97a7cf370b32244144678571",
+      "evidence": "../evidence/r106/replacement-provenance.json",
+      "scope": "Single existing EU balance and paid HU buffer. Reference measured10 HU per coil at1 EU/HU; no idle debit beyond buffer. SI declared front-face port,11 slots/menu and EV integration. No IC2 API or implementation inspected."
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/generator/mio_icif_stirling_generator.java",
+      "revision": "R107",
+      "predecessor_sha256": "5b09714c4fa1db1973a641378ee2546ea56f30ae0ec1272c246b7b4056511dea",
+      "evidence": "../evidence/r107/replacement-provenance.json",
+      "scope": "Independent R102 black-box 2 HU/EU and demand-only pull; existing SI public ABI and capacities. Runtime acceptance pending."
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/generator/mio_icif_kinetic_generator.java",
+      "revision": "R111",
+      "predecessor_sha256": "0edaa58565246bba310a034add15297076b3cf934f0e285ea923ef3c1009849b",
+      "evidence": "../evidence/r111/replacement-provenance.json",
+      "scope": "Independent normal R110/R111 GUI and stored-energy observations; 4 KU/EU, demand pull, one real EU balance, explicit SI push interoperability. Runtime acceptance pending."
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_blast_furnace.java",
+      "revision": "R113",
+      "predecessor_sha256": "84ae04a81ad52b32f40fdbd6d6f0308a1d4f2ae88f364fdd960bdb5970ba7c91",
+      "evidence": "../evidence/r113/replacement-provenance.json",
+      "scope": "Independent normal R112 blast cycle/heat/air observations and public SI factory/NBT. Six-face integration and runtime acceptance pending."
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_matter_elc.java",
+      "revision": "R115",
+      "predecessor_sha256": "3aa8c2670cfffac98e3fab270df856b513d17b24c3aec908c9b6b20ece393220",
+      "evidence": "../evidence/r115/replacement-provenance.json",
+      "scope": "Independent implementation from R114 normal EU/scrap/UU/pause observations and public SI ABI. Runtime acceptance pending."
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/generator/mio_icif_nuclear_reactor_generator.java",
+      "revision": "R118",
+      "predecessor_sha256": "8070dd2815dc90d51cfad68406efb8221be341127cffd6e62358fa362ac70c96",
+      "evidence": "../evidence/r118/replacement-provenance.json",
+      "scope": "Independent electrical reactor candidate from160 finite normal reference cases and public SI ABI; fluid/accident/chamber energy routing and runtime acceptance remain open. Other six nuclear source exclusions retained."
+    }
+  ],
+  "retired_source_groups": [
+    {
+      "id": "uu-index-and-replicator-internal-mapping",
+      "revision": "R103",
+      "status": "RETIRED_UNUSED_CLUSTER_RUNTIME_VERIFIED",
+      "paths": [
+        "src/main/java/com/singularity_iteration/mio_icif/uu/ILateRecipeResolver.java",
+        "src/main/java/com/singularity_iteration/mio_icif/uu/IRecipeResolver.java",
+        "src/main/java/com/singularity_iteration/mio_icif/uu/LeanItemStack.java",
+        "src/main/java/com/singularity_iteration/mio_icif/uu/MachineRecipeResolver.java",
+        "src/main/java/com/singularity_iteration/mio_icif/uu/RecipeTransformation.java",
+        "src/main/java/com/singularity_iteration/mio_icif/uu/SmeltingRecipeResolver.java",
+        "src/main/java/com/singularity_iteration/mio_icif/uu/UuGraph.java",
+        "src/main/java/com/singularity_iteration/mio_icif/uu/UuIndex.java",
+        "src/main/java/com/singularity_iteration/mio_icif/uu/UuRecipeWhitelist.java",
+        "src/main/java/com/singularity_iteration/mio_icif/uu/UuScanValues.java",
+        "src/main/java/com/singularity_iteration/mio_icif/uu/VanillaRecipeResolver.java"
+      ],
+      "opaque_archive": "../evidence/r103-uu-closure/legacy-uu-source-opaque.zip",
+      "opaque_archive_sha256": "1e4f0b2e4d3ac943ee55704093f2144fdf1948bd62114c7a36d202a827d19c96",
+      "basis": "All 11 legacy UU owners retired together after allowed-source callers outside the package were zero; six quarantined bodies remain unread. No compatibility stubs.",
+      "reference_audit": "../evidence/r103-uu-closure/eleven-cluster-reference-audit.json",
+      "activation_requirements": [
+        "All listed paths absent from active source roots (mere compiler exclusion is insufficient for this policy candidate).",
+        "Legacy package absent from compiler inputs and materialized runtime roots.",
+        "Scoped compile/contracts and actual loader/scanner/replicator/reload world checks pass on filtered candidate.",
+        "Full source release gate remains held; other unresolved groups retained."
+      ],
+      "acceptance_receipt": "../evidence/r103/retirement-validation-receipt.json",
+      "acceptance_receipt_sha256": "c60e52e56fdd6b5a37a68fb7155a09124c10f8a2610eec6d6a72f5e29265b9a8"
     }
   ]
 }

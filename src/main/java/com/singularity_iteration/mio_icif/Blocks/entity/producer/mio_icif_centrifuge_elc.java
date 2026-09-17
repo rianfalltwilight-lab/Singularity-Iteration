@@ -226,58 +226,10 @@ public class mio_icif_centrifuge_elc extends mio_icif_producer {
 
     @Override
     protected boolean canWork() {
-        // �??��?��?��??��?��?��?��??
-        ItemStack input = itemHandler.getStackInSlot(INPUT_SLOT);
-        if (input.isEmpty()) {
-            return false;
-        }
-
-        // �??��?��?��?��?��??�工??��??
-        if (!isProcessable(input)) {
-            return false;
-        }
-
-        // �??��??��?�是?��达�?�工作�??�?
-        if (heatStorage < MIN_HEAT_FOR_WORK) {
-            return false;
-        }
-
-        // �??��?��?��??�足够�?��??
-        if (!hasEnoughEnergy()) {
-            return false;
-        }
-
-        // �??��?��?��??�足够�??输出槽空?��容纳?????��?��??
-        List<ItemStack> results = getProcessingResults(input);
-        if (results.isEmpty()) {
-            return false;
-        }
-        
-        // �??��每个输出?��?��??�足够空?��
-        for (int i = 0; i < results.size() && i < 3; i++) {
-            ItemStack result = results.get(i);
-            int outputSlot = OUTPUT_SLOT_1 + i;
-            ItemStack currentOutput = itemHandler.getStackInSlot(outputSlot);
-            
-            if (result.isEmpty()) {
-                continue; // 空气?��??不�??�?空气??
-            }
-            
-            if (currentOutput.isEmpty()) {
-                continue; // 空槽?��以�?��??
-            }
-            
-            if (ItemStack.isSameItem(currentOutput, result) && 
-                ItemStack.isSameItemSameComponents(currentOutput, result)) {
-                int newCount = currentOutput.getCount() + result.getCount();
-                if (newCount > currentOutput.getMaxStackSize()) {
-                    return false; // 空间不足
-                }
-            } else {
-                return false; // 槽位?�已被�?��?��?��????�用
-            }
-        }
-        return true;
+        var input = itemHandler.getStackInSlot(INPUT_SLOT);
+        if (input.isEmpty() || !hasEnoughEnergy() || heatStorage < MIN_HEAT_FOR_WORK) return false;
+        return dev.scex.si.processing.RecipeSlots.prepare(itemHandler, INPUT_SLOT, 1,
+            new int[]{OUTPUT_SLOT_1, OUTPUT_SLOT_2, OUTPUT_SLOT_3}, getProcessingResults(input)).isPresent();
     }
 
     /**
@@ -314,46 +266,15 @@ public class mio_icif_centrifuge_elc extends mio_icif_producer {
      * 完成?��?�工�?多�?�出????���?
      */
     private void finishProcessing() {
-        ItemStack input = itemHandler.getStackInSlot(INPUT_SLOT);
-        if (input.isEmpty()) {
-            stopWork();
-            return;
-        }
-
-        // ?��??��????��?�出结果??
-        List<ItemStack> results = getProcessingResults(input);
-        if (results.isEmpty()) {
-            stopWork();
-            return;
-        }
-
-        // 尝�?��???????��?��?�放??��?�应�???输出�?
-        boolean allPlaced = true;
-        for (int i = 0; i < results.size() && i < 3; i++) {
-            ItemStack result = results.get(i);
-            int outputSlot = OUTPUT_SLOT_1 + i;
-            
-            if (!tryPlaceResult(outputSlot, result)) {
-                allPlaced = false;
-                break;
-            }
-        }
-
-        if (!allPlaced) {
-            stopWork();
-            return;
-        }
-
-        // �???��?��?��?��??
-        input.shrink(1);
-
-        // ??�置进度
+        var input = itemHandler.getStackInSlot(INPUT_SLOT);
+        var plan = dev.scex.si.processing.RecipeSlots.prepare(itemHandler, INPUT_SLOT, 1,
+            new int[]{OUTPUT_SLOT_1, OUTPUT_SLOT_2, OUTPUT_SLOT_3}, getProcessingResults(input));
+        if (plan.isEmpty()) { stopWork(); return; }
+        int completedProgress = progress;
+        progress = 0; // An inventory observer must never save completed work against the next input.
+        if (!plan.get().commit()) { progress = completedProgress; stopWork(); return; }
         finishWork();
-
-        // �??��?��?��还可以继续?工�??
-        if (canWork()) {
-            isWorking = true;
-        }
+        if (canWork()) isWorking = true;
     }
 
     /**

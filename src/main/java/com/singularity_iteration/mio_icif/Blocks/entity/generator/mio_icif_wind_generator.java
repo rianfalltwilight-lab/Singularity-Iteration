@@ -153,6 +153,8 @@ public class mio_icif_wind_generator extends mio_icif_Energy_Generator {
                     }
                     
                     BlockPos checkPos = pos.offset(dx, dy, dz);
+                    // Unknown adjacent chunks are obstacles; never load them for a generator scan.
+                    if (!level.hasChunkAt(checkPos)) { count++; continue; }
                     BlockState state = level.getBlockState(checkPos);
                     
                     // 如果不是空气方块，算作障碍物
@@ -238,6 +240,10 @@ public class mio_icif_wind_generator extends mio_icif_Energy_Generator {
      */
     @Override
     protected void chargeItems() {
+        if (energyStorage.scexNetworkControlled()) {
+            if (dev.scex.si.energy.SolarItemCharging.chargeRange(itemHandler, BATTERY_SLOT, 1, energyStorage, getItemAPI())) setChanged();
+            return;
+        }
         ItemStack chargeStack = itemHandler.getStackInSlot(BATTERY_SLOT);
         if (chargeStack.isEmpty()) {
             return;
@@ -298,7 +304,7 @@ public class mio_icif_wind_generator extends mio_icif_Energy_Generator {
         blockEntity.chargeItems();
         
         // 只有当发电机需要直接向相邻方块输出能量时，才调用distributeEnergy()
-        if (blockEntity.shouldDirectlyDistributeEnergy()) {
+        if (!blockEntity.energyStorage.scexNetworkControlled() && blockEntity.shouldDirectlyDistributeEnergy()) {
             blockEntity.distributeEnergy();
         }
 
@@ -429,6 +435,11 @@ public class mio_icif_wind_generator extends mio_icif_Energy_Generator {
         currentEnergyOutput = tag.getLong("CurrentEnergyOutput");
         obstacleCount = tag.getInt("ObstacleCount");
         effectiveHeight = tag.getInt("EffectiveHeight");
+        if (energyStorage.scexNetworkControlled()) {
+            windStrength = Math.clamp(windStrength, MIN_WIND_STRENGTH, MAX_WIND_STRENGTH);
+            ticksUntilUpdate = 0;
+            currentEnergyOutput = 0;
+        }
     }
 
     @Override

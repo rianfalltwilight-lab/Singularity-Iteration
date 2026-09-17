@@ -58,9 +58,7 @@ public interface IKineticStorage {
      * 用于显示和某些特殊机器
      */
     default int getRPM() {
-        if (getMaxKineticStored() == 0) return 0;
-        long kineticPercent = (getKineticStored() * 100) / getMaxKineticStored();
-        return (int)((kineticPercent * 10000) / 100);
+        return dev.scex.energy.BoundedUnits.gauge(getKineticStored(), getMaxKineticStored(), 0, 10000);
     }
     
     /**

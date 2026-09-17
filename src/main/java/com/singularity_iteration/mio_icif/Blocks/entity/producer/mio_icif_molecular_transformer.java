@@ -156,6 +156,7 @@ public class mio_icif_molecular_transformer extends mio_icif_producer {
         var recipe = recipeOpt.get().value();
 
         long recipeEUCost = recipe.getEuCost();
+        if (recipeEUCost <= 0) { resetWork(); return false; }
         if (currentRecipeEU == null || currentRecipeEU != recipeEUCost) {
             currentRecipeEU = recipeEUCost;
             consumedEU = 0;
@@ -203,7 +204,7 @@ public class mio_icif_molecular_transformer extends mio_icif_producer {
 
     private void syncProgressToBase() {
         if (currentRecipeEU != null && currentRecipeEU > 0) {
-            this.progress = (int) Math.min((consumedEU * maxProgress) / currentRecipeEU, maxProgress);
+            this.progress = (int) dev.scex.energy.BoundedUnits.multiplyDivide(Math.max(0, Math.min(consumedEU, currentRecipeEU)), Math.max(0, maxProgress), currentRecipeEU);
         }
     }
 
@@ -287,10 +288,17 @@ public class mio_icif_molecular_transformer extends mio_icif_producer {
             var recipe = recipeOpt.get().value();
             // 再次验证是否可以添加到输出槽
             if (canAddItem(OUTPUT_SLOT, recipe.getResult())) {
-                input.shrink(1);
-                addItemToSlot(OUTPUT_SLOT, recipe.getResult().copy());
-                // 成功产出物品，重置工作状态
-                resetWork();
+                var plan = dev.scex.si.processing.RecipeSlots.prepare(itemHandler, INPUT_SLOT, 1,
+                    new int[]{OUTPUT_SLOT}, java.util.List.of(recipe.getResult()));
+                if (plan.isEmpty()) { stopWork(); return; }
+                long paid = consumedEU;
+                var cost = currentRecipeEU;
+                var lastRate = lastEnergyPerTick;
+                int savedProgress = progress;
+                // Publish completed billing before slot callbacks can observe the next input.
+                consumedEU = 0; currentRecipeEU = null; lastEnergyPerTick = null; progress = 0; isWorking = false;
+                if (plan.get().commit()) resetWork();
+                else { consumedEU = paid; currentRecipeEU = cost; lastEnergyPerTick = lastRate; progress = savedProgress; stopWork(); }
             } else {
                 // 无法添加到输出槽，停止工作状态，不重置进度
                 // 等待输出槽位有空位时再继续
@@ -324,10 +332,11 @@ public class mio_icif_molecular_transformer extends mio_icif_producer {
     }
 
     private boolean canAddItem(int slot, ItemStack stack) {
-        ItemStack current = itemHandler.getStackInSlot(slot);
-        if (current.isEmpty()) return true;
-        if (!ItemStack.isSameItemSameComponents(current, stack)) return false;
-        return current.getCount() + stack.getCount() <= current.getMaxStackSize();
+        if (stack.isEmpty()) return false;
+        var current = itemHandler.getStackInSlot(slot);
+        int limit = Math.min(itemHandler.getSlotLimit(slot), stack.getMaxStackSize());
+        return stack.getCount() <= limit && (current.isEmpty() || ItemStack.isSameItemSameComponents(current, stack)
+            && current.getCount() <= limit - stack.getCount());
     }
 
     @Override
@@ -342,12 +351,10 @@ public class mio_icif_molecular_transformer extends mio_icif_producer {
     @Override
     public void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
-        if (tag.contains("currentRecipeEU")) {
-            currentRecipeEU = tag.getLong("currentRecipeEU");
-        }
-        if (tag.contains("consumedEU")) {
-            consumedEU = tag.getLong("consumedEU");
-        }
+        long cost = tag.getLong("currentRecipeEU");
+        currentRecipeEU = cost > 0 ? cost : null;
+        consumedEU = currentRecipeEU == null ? 0 : dev.scex.energy.BoundedUnits.clamp(tag.getLong("consumedEU"), currentRecipeEU);
+        syncProgressToBase();
     }
 
     @Override

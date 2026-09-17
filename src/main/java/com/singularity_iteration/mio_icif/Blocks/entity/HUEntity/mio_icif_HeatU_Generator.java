@@ -34,7 +34,7 @@ import org.jetbrains.annotations.Nullable;
 public abstract class mio_icif_HeatU_Generator extends mio_icif_HeatU_Block implements WorldlyContainer, IBurnControl, IHeatGeneratorBlock {
 
     // 物品处理器，使用统一的槽位系�
-protected MachineItemHandler itemHandler;
+// Uses the inherited inventory; no shadow copy.
 
     // 当前燃烧时间
     public int burnTime = 0;
@@ -49,7 +49,7 @@ public int burnDuration = 0;
 
     @Override
     public void setBurnTime(int ticks) {
-        this.burnTime = ticks;
+        this.burnTime = Math.max(0, ticks);
         this.setChanged();
     }
 
@@ -94,7 +94,9 @@ protected static final int FUEL_SLOT = 0;
     }
 
     protected MachineItemHandler createItemHandler(SlotLayout layout) {
-        return new MachineItemHandler(layout);
+        return new MachineItemHandler(layout) {
+            @Override protected void onContentsChanged(int slot) { mio_icif_HeatU_Generator.this.setChanged(); }
+        };
     }
     
     /**
@@ -106,6 +108,7 @@ protected static final int FUEL_SLOT = 0;
         // 获取方块朝向
         Direction facing = getBlockState().getValue(net.minecraft.world.level.block.state.properties.BlockStateProperties.FACING);
         BlockPos frontPos = worldPosition.relative(facing);
+        if (!level.hasChunkAt(frontPos)) return false;
 
         // 获取前方方块的热能存储能量
     IMioIcifCapabilities.IHeatStorage frontHeat = level.getCapability(
@@ -198,6 +201,7 @@ protected static final int FUEL_SLOT = 0;
         
         for (Direction direction : Direction.values()) {
             BlockPos adjacentPos = worldPosition.relative(direction);
+            if (!level.hasChunkAt(adjacentPos)) continue;
             
             // 获取相邻方块的热能存储能量
         IMioIcifCapabilities.IHeatStorage adjacentHeat = level.getCapability(
@@ -220,7 +224,7 @@ protected static final int FUEL_SLOT = 0;
                         if (extracted > 0) {
                             long received = adjacentHeat.receiveHeat(extracted, false);
                             if (received < extracted) {
-                                heatStorage.receiveHeat(extracted - received, false);
+                                heatStorage.generateHeatInternal(extracted - received, false);
                             }
                             setChanged();
                         }
@@ -359,6 +363,7 @@ protected static final int FUEL_SLOT = 0;
 
     @Override
     public ItemStack removeItem(int slot, int amount) {
+        if (amount <= 0 || slot < 0 || slot >= itemHandler.getSlots()) return ItemStack.EMPTY;
         ItemStack stack = itemHandler.getStackInSlot(slot);
         if (stack.isEmpty()) return ItemStack.EMPTY;
         int toRemove = Math.min(amount, stack.getCount());

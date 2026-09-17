@@ -22,17 +22,19 @@ import java.util.List;
  */
 @SuppressWarnings("null")
 public class mio_icif_memory extends Item {
+    private static final String CONTAINER_VERSION="scex_pattern_container";
+    private static final String[] OWNED_KEYS={"item_id","item_count","item_name","uu_matter_cost_buckets","uu_matter_cost","energy_cost",CONTAINER_VERSION};
 
     public mio_icif_memory(Properties properties) {
-        super(properties);
+        super(properties.stacksTo(1));
     }
 
     /**
      * 检查记忆水晶是否已存储数据
      */
     public boolean hasData(ItemStack stack) {
-        CustomData customData = stack.get(DataComponents.CUSTOM_DATA);
-        return customData != null && !customData.isEmpty();
+        CompoundTag tag=getDataTag(stack);
+        return tag!=null&&(tag.contains(CONTAINER_VERSION)||tag.contains("item_id")||tag.contains("item_name"));
     }
 
     /**
@@ -50,24 +52,30 @@ public class mio_icif_memory extends Item {
      * 获取存储的物品堆
      */
     public ItemStack getStoredItemStack(ItemStack stack) {
-        CompoundTag tag = getDataTag(stack);
-        if (tag == null) {
-            return ItemStack.EMPTY;
-        }
+        CompoundTag tag=getDataTag(stack);
+        return tag!=null&&validCosts(tag)?getStoredItemIdentity(stack):ItemStack.EMPTY;
+    }
 
-        // 优先使用新的item_id格式
-        if (tag.contains("item_id")) {
+    /** Identity-only migration boundary; returned identity never authorizes a stored price. */
+    public ItemStack getStoredItemIdentity(ItemStack stack) {
+        CompoundTag tag = getDataTag(stack);
+        if (tag == null || stack.getItem()!=this || stack.getCount()!=1) return ItemStack.EMPTY;
+        if(tag.contains(CONTAINER_VERSION)) {
+            if(!tag.contains(CONTAINER_VERSION,net.minecraft.nbt.Tag.TAG_INT)||tag.getInt(CONTAINER_VERSION)!=1)return ItemStack.EMPTY;
+            var contents=stack.get(DataComponents.CONTAINER);
+            if(contents==null||contents.getSlots()!=1)return ItemStack.EMPTY;
+            var item=contents.copyOne();
+            return item.getCount()==1?item:ItemStack.EMPTY;
+        }
+        if (tag.contains("item_id",net.minecraft.nbt.Tag.TAG_STRING)&&tag.contains("item_count",net.minecraft.nbt.Tag.TAG_INT)
+                &&!stack.has(DataComponents.CONTAINER)) {
             String itemId = tag.getString("item_id");
             net.minecraft.resources.ResourceLocation id = net.minecraft.resources.ResourceLocation.tryParse(itemId);
             if (id != null) {
                 net.minecraft.world.item.Item item = net.minecraft.core.registries.BuiltInRegistries.ITEM.get(id);
-                if (item != null) {
+                if (item != null && item != net.minecraft.world.item.Items.AIR) {
                     int count = tag.getInt("item_count");
-                    if (count <= 0) count = 1;
-                    ItemStack result = new ItemStack(item, count);
-                    // 组件数据恢复比较复杂，这里简化处理
-                    // 如果需要完整支持，需要使用DataComponentPatch.CODEC 进行反序列化
-                    return result;
+                    if (count == 1) return new ItemStack(item);
                 }
             }
         }
@@ -80,13 +88,7 @@ public class mio_icif_memory extends Item {
      */
     public double getUuMatterCost(ItemStack stack) {
         CompoundTag tag = getDataTag(stack);
-        if (tag != null && tag.contains("uu_matter_cost_buckets")) {
-            return tag.getDouble("uu_matter_cost_buckets");
-        }
-        if (tag != null && tag.contains("uu_matter_cost")) {
-            return tag.getLong("uu_matter_cost") / 1000.0;
-        }
-        return 0;
+        return tag!=null&&validCosts(tag)?buckets(tag):0;
     }
 
     /**
@@ -94,7 +96,7 @@ public class mio_icif_memory extends Item {
      */
     public long getEnergyCost(ItemStack stack) {
         CompoundTag tag = getDataTag(stack);
-        if (tag != null && tag.contains("energy_cost")) {
+        if (tag != null && validCosts(tag)) {
             return tag.getLong("energy_cost");
         }
         return 0;
@@ -104,10 +106,12 @@ public class mio_icif_memory extends Item {
      * 存储扫描结果到记忆水晶（旧版，使用物品名称字符串）
      */
     public void storeData(ItemStack stack, String itemName, double uuMatterCostBuckets, long energyCost) {
-        CompoundTag tag = new CompoundTag();
+        if(!canReplace(stack)||itemName==null||itemName.isBlank()||!dev.scex.si.processing.StoredPattern.validCosts(uuMatterCostBuckets,energyCost))return;
+        CompoundTag tag = cleanOwnedTag(stack);
         tag.putString("item_name", itemName);
         tag.putDouble("uu_matter_cost_buckets", uuMatterCostBuckets);
         tag.putLong("energy_cost", energyCost);
+        if(ownsContainer(stack))stack.remove(DataComponents.CONTAINER);
         stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
     }
 
@@ -115,21 +119,57 @@ public class mio_icif_memory extends Item {
      * 存储扫描结果到记忆水晶（新版，使用物品堆）
      */
     public void storeData(ItemStack stack, ItemStack storedItem, double uuMatterCostBuckets, long energyCost) {
-        CompoundTag tag = new CompoundTag();
+        tryStoreData(stack,storedItem,uuMatterCostBuckets,energyCost);
+    }
+
+    public boolean tryStoreData(ItemStack stack,ItemStack storedItem,double uuMatterCostBuckets,long energyCost) {
+        if(!canReplace(stack)||!dev.scex.si.processing.StoredPattern.valid(storedItem,uuMatterCostBuckets,energyCost))return false;
+        var content=net.minecraft.world.item.component.ItemContainerContents.fromItems(java.util.List.of(storedItem));
+        CompoundTag tag = cleanOwnedTag(stack);
         String itemId = net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(storedItem.getItem()).toString();
         tag.putString("item_id", itemId);
         tag.putInt("item_count", storedItem.getCount());
         tag.putDouble("uu_matter_cost_buckets", uuMatterCostBuckets);
         tag.putLong("energy_cost", energyCost);
         tag.putString("item_name", storedItem.getHoverName().getString());
+        tag.putInt(CONTAINER_VERSION,1);
+        stack.set(DataComponents.CONTAINER,content);
         stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
+        return true;
     }
 
     /**
      * 清除记忆水晶中的数据
      */
     public void clearData(ItemStack stack) {
-        stack.remove(DataComponents.CUSTOM_DATA);
+        var existing=getDataTag(stack);
+        if(existing==null||existing.contains(CONTAINER_VERSION)&&!ownsContainer(stack))return;
+        if(ownsContainer(stack))stack.remove(DataComponents.CONTAINER);
+        var tag=cleanOwnedTag(stack);
+        if(tag.isEmpty())stack.remove(DataComponents.CUSTOM_DATA);
+        else stack.set(DataComponents.CUSTOM_DATA,CustomData.of(tag));
+    }
+
+    private boolean ownsContainer(ItemStack stack) {
+        var tag=getDataTag(stack);return tag!=null&&tag.contains(CONTAINER_VERSION,net.minecraft.nbt.Tag.TAG_INT)&&tag.getInt(CONTAINER_VERSION)==1;
+    }
+    private boolean canReplace(ItemStack stack) {
+        if(stack.getItem()!=this||stack.getCount()!=1)return false;
+        var tag=getDataTag(stack);
+        if(tag!=null&&tag.contains(CONTAINER_VERSION)&&!ownsContainer(stack))return false;
+        return ownsContainer(stack)||!stack.has(DataComponents.CONTAINER);
+    }
+    private CompoundTag cleanOwnedTag(ItemStack stack) {
+        var tag=getDataTag(stack);if(tag==null)tag=new CompoundTag();
+        for(var key:OWNED_KEYS)tag.remove(key);return tag;
+    }
+    private static double buckets(CompoundTag tag) {
+        if(tag.contains("uu_matter_cost_buckets",net.minecraft.nbt.Tag.TAG_DOUBLE))return tag.getDouble("uu_matter_cost_buckets");
+        if(tag.contains("uu_matter_cost",net.minecraft.nbt.Tag.TAG_LONG))return tag.getLong("uu_matter_cost")/1000.0;
+        return Double.NaN;
+    }
+    private static boolean validCosts(CompoundTag tag) {
+        return tag.contains("energy_cost",net.minecraft.nbt.Tag.TAG_LONG)&&dev.scex.si.processing.StoredPattern.validCosts(buckets(tag),tag.getLong("energy_cost"));
     }
 
     /**

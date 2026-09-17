@@ -1,487 +1,222 @@
+// SPDX-License-Identifier: Apache-2.0
 package com.singularity_iteration.mio_icif.Blocks.entity.producer;
 
-import com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_Energy_Block;
-import com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_block_entities;
 import com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_producer;
+import com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_block_entities;
+import com.singularity_iteration.mio_icif.Blocks.entity.slot.MachineItemHandler;
 import com.singularity_iteration.mio_icif.Blocks.entity.slot.SlotLayout;
+import com.singularity_iteration.mio_icif.Blocks.Producer.mio_icif_block_matter_elc;
 import com.singularity_iteration.mio_icif.Blocks.Environment.fluid.mio_icif_fluids;
 import com.singularity_iteration.mio_icif.Items.Cell.mio_icif_cells;
 import com.singularity_iteration.mio_icif.Items.Normal.mio_icif_normal;
 import com.singularity_iteration.mio_icif.Items.Resource.mio_icif_resources;
+import com.singularity_iteration.mio_icif.Items.Upgrade.MachineUpgradeStats;
+import com.singularity_iteration.mio_icif.Menu.Producer.MatterElcMenu;
+import com.singularity_iteration.mio_icif.api.MioIcifAPI;
 import com.singularity_iteration.mio_icif.energy.EnergyUnit.CableTier;
+import dev.scex.energy.EnergyAmount;
+import dev.scex.si.energy.ContainerToTank;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ContainerData;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
 import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.neoforge.fluids.capability.IFluidHandler;
 import net.neoforged.neoforge.fluids.capability.templates.FluidTank;
-import org.jetbrains.annotations.Nullable;
+import net.neoforged.neoforge.items.IItemHandler;
 
-/**
- * UU物质合成机方块实体类 - 参考IC2 Squeezer模式
- *
- * 槽位布局(对比IC2):
- * - 0: 放大器槽位 - (72, 40)
- * - 1: 输出槽位 - (125, 59)
- * - 2: 容器槽位：空单元输入输出 - (125, 23)
- * - 3-6: 4个升级槽 - (152, 8 + i * 18)
- *
- * 工作机机制(对比IC2):
- * - 满能量的机器产1mB UU物质
- * - 满能量用于一次，5M EU（实际3M EU）才能完成
- * - 流体槽容量8000 mB（参考原版）
- * - 额外的资源来自于电池升级：5M EU才能合成
- */
-@SuppressWarnings("null")
+/** R115 independent implementation from R114 normal gameplay observations and public SI ABI.
+ * Fabrication progress is not electrical storage. Only newly received EU can consume amplifier
+ * credit. Pending EU, completed work and fractional credit each survive saves independently. */
 public class mio_icif_matter_elc extends mio_icif_producer {
+    public static final int SLOT_COUNT=7,AMPLIFIER_SLOT=0,OUTPUT_SLOT=1,CONTAINER_SLOT=2,UPGRADE_SLOT_START=3,UPGRADE_SLOT_COUNT=4;
+    public static final long DEFAULT_CAPACITY=1000000,DEFAULT_MAX_RECEIVE=8192,DEFAULT_MAX_EXTRACT=0,DEFAULT_ENERGY_PER_TICK=0,EU_PER_MB=1000000;
+    public static final int DEFAULT_WORK_TIME=1,UUMATTER_CAPACITY=8000,SCRAP_BONUS=5000,SCRAPBOX_BONUS=45000,THORIUM_SCRAP_BONUS=360000,UUMATTER_OUTPUT_AMOUNT=1;
+    private static final SlotLayout LAYOUT=SlotLayout.builder().input(1).output(1).fluidInput(1).upgrade(4).build();
+    private static final EnergyAmount UNIT=EnergyAmount.of(EU_PER_MB),PRELOAD=EnergyAmount.of(10000);
+    private EnergyAmount work=EnergyAmount.ZERO,amplifier=EnergyAmount.ZERO;
+    private CompoundTag hold=new CompoundTag();
+    private final FluidTank matter;
+    private long capacity=DEFAULT_CAPACITY;
+    private boolean changing,amplifying,ready;
+    private double legacyLastEnergy;
 
-    private static final SlotLayout LAYOUT = SlotLayout.builder()
-        .extra(1)   // 放大器槽
-        .output(1)  // 输出槽
-        .input(1)   // 容器槽位：空单元输入/输出
-        .upgrade(4) // 4个升级槽
-        .build();
-
-    // 槽位布局定义（对比IC2）
-    public static final int SLOT_COUNT = 7;
-    public static final int AMPLIFIER_SLOT = 0;      // 放大器槽位：接受废料/废料箱
-    public static final int OUTPUT_SLOT = 1;         // 输出槽
-    public static final int CONTAINER_SLOT = 2;      // 容器槽位：空单元输入/输出
-    public static final int UPGRADE_SLOT_START = 3;  // 升级槽起始位
-    public static final int UPGRADE_SLOT_COUNT = 4;  // 升级槽的数量
-
-    // 默认配置（对比IC2原版）
-    public static final long DEFAULT_CAPACITY = 1000000L; // 1M EU（推荐使用K=1M EU）
-    public static final long DEFAULT_MAX_RECEIVE = 8192L; // EV级输入电压
-    public static final long DEFAULT_MAX_EXTRACT = 0L;    // 不输出能量
-    public static final int DEFAULT_WORK_TIME = 1;        // 不使用工作周期
-    public static final long DEFAULT_ENERGY_PER_TICK = 0L; // 不自动消耗能量
-
-    // UU物质液体槽容量（对比IC2原版: 8000 mB）
-    public static final int UUMATTER_CAPACITY = 8000;
-
-    // EU消费配置（对比IC2）
-    public static final long EU_PER_MB = 1000000L;      // 每mB需要1M EU
-    public static final int SCRAP_BONUS = 5000;         // 每个废料赔偿5000 EU能量倍率
-    public static final int SCRAPBOX_BONUS = 45000;     // 每个废料赔偿补偿5000 EU能量倍率
-    public static final int THORIUM_SCRAP_BONUS = 360000; // 每个钍废料额外提供360000 EU能量倍率对应8倍废料赔偿倍率
-
-    // UU物质液体槽实例
-    protected final FluidTank uuMatterTank;
-
-    // 放大器增强器计算，用于计算能量消耗倍率
-    protected int scrap;
-    // 上次能量计算，用于计算能量来源
-    protected double lastEnergy;
-
-    private final ContainerData dataAccess = new ContainerData() {
-        @Override
-        public int get(int index) {
-            return switch (index) {
-                case 0 -> (int) energyStorage.getAmount();           // 当前能量
-                case 1 -> (int) energyStorage.getCapacity();         // 最大容量值
-                case 2 -> (int) energyStorage.getAmount();           // 当前能量与储备容纳
-                case 3 -> (int) energyStorage.getCapacity();         // 最大能量与储备容纳
-                case 4 -> uuMatterTank.getFluidAmount();             // UU物质液体数量
-                case 5 -> uuMatterTank.getCapacity();                // UU物质液体容量
-                case 6 -> scrap;                                      // 放大器增强器数量
-                default -> 0;
-            };
+    public mio_icif_matter_elc(BlockPos pos,BlockState state){this(pos,state,mio_icif_block_entities.MATTER_ELC_ENTITY_TYPE.get());}
+    public mio_icif_matter_elc(BlockPos pos,BlockState state,BlockEntityType<?> type){
+        super(pos,state,type,DEFAULT_CAPACITY,DEFAULT_MAX_RECEIVE,0,DEFAULT_WORK_TIME,LAYOUT,0,CableTier.EV);
+        matter=new FluidTank(UUMATTER_CAPACITY,f->f.getFluid()==mio_icif_fluids.UUMATTER.get()){
+            @Override protected void onContentsChanged(){dirty();}
+        };
+        energyStorage.setCapacity(0); // Wait for a real server tick before trusting neighbor/redstone state.
+    }
+    @Override protected MachineItemHandler createItemHandler(SlotLayout layout){return new MachineItemHandler(layout){
+        @Override public boolean isItemValid(int slot,ItemStack stack){return isItemValidForSlot(slot,stack);}
+        @Override protected void onContentsChanged(int slot){dirty();}
+    };}
+    private void dirty(){ContainerToTank.markUnsaved(this);}
+    private boolean live(){
+        if(!(level instanceof ServerLevel s)||!s.getServer().isSameThread()||isRemoved())return false;
+        var c=s.getChunkSource().getChunkNow(worldPosition.getX()>>4,worldPosition.getZ()>>4);
+        return c!=null&&c.getBlockEntity(worldPosition,LevelChunk.EntityCreationType.CHECK)==this;
+    }
+    public boolean hasUnmappedState(){return !hold.isEmpty();}
+    public EnergyAmount getFabricationProgress(){return work;}
+    public EnergyAmount getAmplifierCredit(){return amplifier;}
+    private static int bonus(ItemStack stack){
+        if(stack.is(mio_icif_normal.SCRAP.get()))return SCRAP_BONUS;
+        if(stack.is(mio_icif_normal.SCRAPBOX.get()))return SCRAPBOX_BONUS;
+        // Existing SI extension, not an original-game equivalence claim.
+        return stack.is(mio_icif_resources.THORIUM_SCRAP.get())?THORIUM_SCRAP_BONUS:0;
+    }
+    public boolean isItemValidForSlot(int slot,ItemStack stack){
+        if(stack.isEmpty())return false;
+        if(slot==AMPLIFIER_SLOT)return bonus(stack)>0;
+        if(slot==CONTAINER_SLOT)return stack.is(Items.BUCKET)||mio_icif_cells.isEmptyCell(stack);
+        return slot>=UPGRADE_SLOT_START&&slot<SLOT_COUNT&&MioIcifAPI.instance().getItemAPI().isUpgrade(stack);
+    }
+    @Override protected int getBatterySlot(){return -1;}
+    @Override protected int[] getSlotsForDirection(Direction side){return side==Direction.DOWN?new int[]{OUTPUT_SLOT}:new int[]{AMPLIFIER_SLOT,CONTAINER_SLOT};}
+    @Override protected boolean canWork(){return !hasUnmappedState()&&canWorkRedstone();}
+    @Override protected void doWork(){} // The exact ledger below owns production.
+    @Override protected void recalculateUpgradeStats(){
+        upgradeStats=MachineUpgradeStats.fromInventory(itemHandler,UPGRADE_SLOT_START,UPGRADE_SLOT_COUNT);
+        capacity=Math.addExact(DEFAULT_CAPACITY,Math.max(0,upgradeStats.getEnergyCapacityBonus()));
+        energyStorage.setMaxReceive(DEFAULT_MAX_RECEIVE);updateAdmission();
+    }
+    @Override public long getEffectiveCapacity(){return !ready||work==null||hold==null||hasUnmappedState()||!canWorkRedstone()?0:Math.max(0,capacity-Math.min(capacity,work.whole()));}
+    private void updateAdmission(){
+        if(work==null||hold==null)return; // Base load/constructor callbacks precede independent fields.
+        // Capacity counts paid work as well as pending input, but only real EU lives in storage.
+        // A fractional room is rounded up for intake; exact conservation retains any overshoot.
+        energyStorage.setCapacity(getEffectiveCapacity());
+    }
+    public static void tick(Level level,BlockPos pos,BlockState state,mio_icif_matter_elc m){
+        if(!m.live()||m.changing)return;
+        m.ready=true;
+        m.recalculateUpgradeStats();m.isWorking=false;m.amplifying=false;
+        if(!m.hasUnmappedState()&&m.canWorkRedstone()){
+            m.changing=true;
+            try{m.fabricate();m.fillContainer();}finally{m.changing=false;}
+            m.handleAutomationUpgrades();
         }
-
-        @Override
-        public void set(int index, int value) {}
-
-        @Override
-        public int getCount() {
-            return 7;
+        m.updateAdmission();
+        var actual=m.getBlockState();if(actual.getValue(mio_icif_block_matter_elc.LIT)!=m.isWorking)
+            level.setBlock(pos,actual.setValue(mio_icif_block_matter_elc.LIT,m.isWorking),3);
+    }
+    private void fabricate(){
+        var offered=energyStorage.scexExactAmount();
+        if(!offered.isZero()){
+            // Mode-off compatibility consumes only whole EU; exact fractions stay pending there.
+            if(!energyStorage.scexNetworkControlled())offered=EnergyAmount.of(offered.whole());
+            var boosted=offered.min(amplifier);
+            var next=work.add(offered);
+            for(int i=0;i<5;i++)next=next.add(boosted);
+            var paid=energyStorage.scexNetworkControlled()?energyStorage.scexConsumeEnergy(offered,false)
+                :EnergyAmount.of(energyStorage.consumeEnergyInternal(offered.whole(),false));
+            if(!paid.equals(offered))throw new IllegalStateException("Owned input changed during fabrication");
+            work=next;amplifier=amplifier.subtract(boosted);amplifying=!boosted.isZero();dirty();
         }
-    };
-
-    public mio_icif_matter_elc(BlockPos pos, BlockState state) {
-        this(pos, state, mio_icif_block_entities.MATTER_ELC_ENTITY_TYPE.get());
-    }
-
-    public mio_icif_matter_elc(BlockPos pos, BlockState state, BlockEntityType<?> type) {
-        super(pos, state, type,
-            DEFAULT_CAPACITY,
-            DEFAULT_MAX_RECEIVE,
-            DEFAULT_MAX_EXTRACT,
-            DEFAULT_WORK_TIME,
-            LAYOUT,
-            DEFAULT_ENERGY_PER_TICK,
-            CableTier.EV);
-
-        // 创建UU物质液体槽，只接受UU物质流
-        this.uuMatterTank = new FluidTank(UUMATTER_CAPACITY, fluidStack -> 
-            fluidStack.getFluid() == mio_icif_fluids.UUMATTER.get());
-
-        this.scrap = 0;
-        this.lastEnergy = 0;
-    }
-
-    @Override
-    public net.minecraft.network.chat.Component getDisplayName() {
-        return net.minecraft.network.chat.Component.translatable("container.mio_icif.matter_elc");
-    }
-
-    @Override
-    public boolean isItemValidForSlot(int slot, ItemStack stack) {
-        return switch (slot) {
-            case AMPLIFIER_SLOT -> isScrap(stack);
-            case OUTPUT_SLOT -> false; // 输出槽位不允许自动化
-            case CONTAINER_SLOT -> isEmptyCell(stack);
-            default -> {
-                // 升级槽位（槽位3-6处）
-                if (slot >= UPGRADE_SLOT_START && slot < UPGRADE_SLOT_START + UPGRADE_SLOT_COUNT) {
-                    yield getItemAPI().isUpgrade(stack);
-                }
-                yield false;
-            }
-        };
-    }
-
-    private boolean isScrap(ItemStack stack) {
-        return !stack.isEmpty() && (stack.is(mio_icif_normal.SCRAP.get()) || stack.is(mio_icif_normal.SCRAPBOX.get()) || stack.is(mio_icif_resources.THORIUM_SCRAP.get()));
-    }
-
-    private boolean isEmptyCell(ItemStack stack) {
-        return mio_icif_cells.isEmptyCell(stack);
-    }
-
-    @Override
-    protected int[] getSlotsForDirection(Direction side) {
-        return switch (side) {
-            case UP -> new int[]{AMPLIFIER_SLOT}; // 上方：访问放大器
-            case DOWN -> new int[]{OUTPUT_SLOT};   // 下方：访问输出
-            case NORTH, SOUTH, EAST, WEST -> new int[]{CONTAINER_SLOT, AMPLIFIER_SLOT};
-        };
-    }
-
-    @Override
-    protected int[] getInputSlots() {
-        return new int[]{CONTAINER_SLOT};
-    }
-
-    @Override
-    protected int[] getOutputSlots() {
-        return new int[]{OUTPUT_SLOT};
-    }
-
-    @Override
-    protected boolean canInsertItem(int slot, ItemStack stack, @Nullable Direction side) {
-        return switch (slot) {
-            case AMPLIFIER_SLOT -> isScrap(stack);
-            case CONTAINER_SLOT -> isEmptyCell(stack);
-            case OUTPUT_SLOT -> false;
-            default -> {
-                if (slot >= UPGRADE_SLOT_START && slot < UPGRADE_SLOT_START + UPGRADE_SLOT_COUNT) {
-                    yield false; // 升级槽不允许自动化访问，与IC2原版保持一致
-                }
-                yield false;
-            }
-        };
-    }
-
-    @Override
-    protected boolean canExtractItem(int slot, @Nullable Direction side) {
-        return slot == OUTPUT_SLOT;
-    }
-
-    /**
-     * 尝试消耗增强器执行能量
-     * 对比IC2算法:
-     * 1. 首先应用增强器减少bonus = min(scrap, energy - lastEnergy)
-     * 2. 额度能量就用力输出而不是能量消耗
-     * 3. 设置内部状态StateRunningScrap而不是StateRunning
-     */
-    private void processAmplifier() {
-        // 应用增强器减少能量
-        if (scrap > 0) {
-            double bonus = Math.min(scrap, energyStorage.getAmount() - lastEnergy);
-            if (bonus > 0) {
-                // 这里计算scrap使用能量，机器为原型而不是升级槽改
-                // 能量与scrap的关系是机器matter设计
-                long currentEnergy = energyStorage.getAmount();
-                long newEnergy = currentEnergy + (long)(5.0 * bonus);
-                energyStorage.setEnergy(Math.min(newEnergy, energyStorage.getCapacity()));
-                scrap -= (int)bonus;
+        isWorking=!work.isZero();
+        if(!work.isZero()&&amplifier.compareTo(PRELOAD)<0){
+            var before=itemHandler.getStackInSlot(AMPLIFIER_SLOT).copy();int add=bonus(before);
+            if(add>0){var next=amplifier.add(EnergyAmount.of(add));
+                itemHandler.scexCommitSlots(new int[]{AMPLIFIER_SLOT},new ItemStack[]{before},
+                    new ItemStack[]{before.copyWithCount(before.getCount()-1)},()->{amplifier=next;dirty();});
             }
         }
-
-        // 尝试从放大器槽位获取更多增强剂，使用三方计提方法
-        if (scrap < 10000) {
-            processAmplifierSlot();
+        if(work.compareTo(UNIT)>=0&&matter.getFluidAmount()<UUMATTER_CAPACITY){
+            var output=new FluidStack(mio_icif_fluids.UUMATTER.get(),1);
+            if(matter.fill(output,IFluidHandler.FluidAction.SIMULATE)==1){
+                matter.fill(output,IFluidHandler.FluidAction.EXECUTE);work=work.subtract(UNIT);dirty();
+            }
         }
     }
-
-    /**
-     * 处理增强器槽位中的物品，使用三方计提系统对齐为输入
-     */
-    private void processAmplifierSlot() {
-        ItemStack scrapStack = itemHandler.getStackInSlot(AMPLIFIER_SLOT);
-        if (scrapStack.isEmpty()) return;
-
-        // 检查对应废料种族
-        if (scrapStack.is(mio_icif_normal.SCRAP.get())) {
-            scrap += SCRAP_BONUS;
-            scrapStack.shrink(1);
-            setChanged();
-        } else if (scrapStack.is(mio_icif_normal.SCRAPBOX.get())) {
-            scrap += SCRAPBOX_BONUS;
-            scrapStack.shrink(1);
-            setChanged();
-        } else if (scrapStack.is(mio_icif_resources.THORIUM_SCRAP.get())) {
-            scrap += THORIUM_SCRAP_BONUS;
-            scrapStack.shrink(1);
-            setChanged();
+    private void fillContainer(){
+        var input=itemHandler.getStackInSlot(CONTAINER_SLOT);if(input.isEmpty()||matter.isEmpty())return;
+        if(input.is(Items.BUCKET)){
+            var filled=new ItemStack(mio_icif_fluids.UUMATTER.get().getBucket());filled.applyComponents(input.getComponentsPatch());
+            if(matter.getFluidAmount()>=1000)ContainerToTank.drainToContainer(itemHandler,CONTAINER_SLOT,OUTPUT_SLOT,matter,
+                new FluidStack(mio_icif_fluids.UUMATTER.get(),1000),filled);
+        }else if(mio_icif_cells.isEmptyCell(input)){
+            // Cell capacity/content come from the existing public SI item helper.
+            var filled=mio_icif_cells.getFilledCellForFluidStack(mio_icif_fluids.UUMATTER.get());
+            if(!filled.isEmpty()){
+                var content=mio_icif_cells.getCellFluid(filled);filled.applyComponents(input.getComponentsPatch());
+                // Refuse an incompatible custom fluid component instead of dropping it or minting contents.
+                if(FluidStack.matches(content,mio_icif_cells.getCellFluid(filled)))
+                    ContainerToTank.drainToContainer(itemHandler,CONTAINER_SLOT,OUTPUT_SLOT,matter,content,filled);
+            }
         }
     }
-
-    // UU物质每次产出1mB（对比IC2原版：1M EU = 1mB UU物质）
-    public static final int UUMATTER_OUTPUT_AMOUNT = 1;
-
-    /**
-     * 尝试生成UU物质
-     * 修改：能量满的时候自动0mB UU物质质量从输出槽1mB位置放置时，需要消耗一定来保证
-     * - 不使用setEnergy方法
-     * - 使用 fillInternal 填充输出不触发发射事件
-     */
-    private boolean attemptGeneration() {
-        // 检查流体槽是否有足够空间
-        if (uuMatterTank.getFluidAmount() + UUMATTER_OUTPUT_AMOUNT > uuMatterTank.getCapacity()) {
-            return false;
-        }
-        // 检查能量是否已经满
-        if (energyStorage.getAmount() < energyStorage.getCapacity()) {
-            return false;
-        }
-
-        // 输出槽接收产出10mB UU物质
-        uuMatterTank.fill(new FluidStack(mio_icif_fluids.UUMATTER.get(), UUMATTER_OUTPUT_AMOUNT), IFluidHandler.FluidAction.EXECUTE);
-        apiUseEnergy(energyStorage.getCapacity(), false);
-        setChanged();
-        return true;
+    public FluidTank getUuMatterTank(){return matter;}
+    public int getUuMatterAmount(){return matter.getFluidAmount();}
+    public int getUuMatterCapacity(){return UUMATTER_CAPACITY;}
+    public int getScrap(){return (int)Math.min(Integer.MAX_VALUE,amplifier.whole());}
+    public int getState(){return !isWorking?0:amplifying?2:1;}
+    @Override public int getProgress(){return (int)Math.min(Integer.MAX_VALUE,work.whole());}
+    @Override public int getMaxProgress(){return (int)EU_PER_MB;}
+    public String getProgressAsString(){return String.format(java.util.Locale.ROOT,"%.2f%%",100.0*work.toDouble()/EU_PER_MB);}
+    @Override public IItemHandler getItemHandlerCapability(Direction side){return new IItemHandler(){
+        public int getSlots(){return SLOT_COUNT;}
+        public ItemStack getStackInSlot(int slot){return itemHandler.getStackInSlot(slot).copy();}
+        public int getSlotLimit(int slot){return itemHandler.getSlotLimit(slot);}
+        public boolean isItemValid(int slot,ItemStack stack){return isItemValidForSlot(slot,stack);}
+        public ItemStack insertItem(int slot,ItemStack stack,boolean simulate){return !live()||changing||hasUnmappedState()?stack:itemHandler.insertItem(slot,stack,simulate);}
+        public ItemStack extractItem(int slot,int amount,boolean simulate){return !live()||changing||hasUnmappedState()||slot!=OUTPUT_SLOT?ItemStack.EMPTY:itemHandler.extractItem(slot,amount,simulate);}
+    };}
+    @Override public IFluidHandler getFluidHandlerCapability(Direction side){return new IFluidHandler(){
+        public int getTanks(){return 1;}
+        public FluidStack getFluidInTank(int tank){if(tank!=0)throw new IndexOutOfBoundsException(tank);return matter.getFluid().copy();}
+        public int getTankCapacity(int tank){if(tank!=0)throw new IndexOutOfBoundsException(tank);return UUMATTER_CAPACITY;}
+        public boolean isFluidValid(int tank,FluidStack f){return false;}
+        public int fill(FluidStack f,FluidAction a){return 0;}
+        public FluidStack drain(FluidStack f,FluidAction a){return !live()||changing||hasUnmappedState()?FluidStack.EMPTY:matter.drain(f,a);}
+        public FluidStack drain(int n,FluidAction a){return !live()||changing||hasUnmappedState()?FluidStack.EMPTY:matter.drain(n,a);}
+    };}
+    @Override public Component getDisplayName(){return Component.translatable("container.mio_icif.matter_elc");}
+    @Override public AbstractContainerMenu createMenu(int id,Inventory inventory,Player player){return new MatterElcMenu(id,inventory,this);}
+    public ContainerData getContainerData(){return new ContainerData(){
+        public int getCount(){return 7;}
+        public int get(int i){return switch(i){case 0,2->(int)Math.min(Integer.MAX_VALUE,work.whole()+Math.min(Integer.MAX_VALUE,energyStorage.getAmount()));case 1->(int)EU_PER_MB;case 3->(int)Math.min(Integer.MAX_VALUE,capacity);case 4->getUuMatterAmount();case 5->UUMATTER_CAPACITY;case 6->getScrap();default->0;};}
+        public void set(int i,int v){}
+    };}
+    private static void putAmount(CompoundTag tag,String key,EnergyAmount value){var t=new CompoundTag();t.putLong("whole",value.whole());t.putLong("fraction",value.fraction());tag.put(key,t);}
+    private static EnergyAmount amount(CompoundTag tag,String key){var t=tag.getCompound(key);return new EnergyAmount(t.getLong("whole"),t.getLong("fraction"));}
+    @Override protected void saveAdditional(CompoundTag tag,HolderLookup.Provider provider){
+        super.saveAdditional(tag,provider);tag.put("UuMatterTank",matter.writeToNBT(provider,new CompoundTag()));tag.putInt("Scrap",getScrap());tag.putDouble("LastEnergy",legacyLastEnergy);
+        var s=new CompoundTag();s.putInt("version",1);putAmount(s,"work",work);putAmount(s,"amplifier",amplifier);s.put("hold",hold.copy());tag.put("scex_matter",s);
     }
-
-    /**
-     * 填充到空气容器中 - 对比IC2
-     * 从输入流中取出
-     * - 检查输出槽是否为空的空容器
-     * - 检查流体槽中有足够流体量1000mB
-     * - 检查输出槽是否可以接收
-     * - 填充到输出槽
-     */
-    private boolean processContainer() {
-        ItemStack inputStack = itemHandler.getStackInSlot(CONTAINER_SLOT);
-        ItemStack outputStack = itemHandler.getStackInSlot(OUTPUT_SLOT);
-        
-        // 检查输入槽是否为空容器
-        if (!isEmptyCell(inputStack)) return false;
-        
-        // 检查流体槽中有足够流体
-        if (uuMatterTank.getFluidAmount() < 1000) return false;
-        
-        // 构建UU物质物品
-        ItemStack uuMatterCell = mio_icif_cells.getFilledCellForFluidStack(mio_icif_fluids.UUMATTER.get());
-        
-        // 检查输出槽是否可以接收
-        if (outputStack.isEmpty()) {
-            // 输出槽为空可以直接放置
-            itemHandler.setStackInSlot(OUTPUT_SLOT, uuMatterCell);
-            inputStack.shrink(1);
-            uuMatterTank.drain(1000, IFluidHandler.FluidAction.EXECUTE);
-            setChanged();
-            return true;
-        } else if (ItemStack.isSameItemSameComponents(outputStack, uuMatterCell) && 
-                   outputStack.getCount() < outputStack.getMaxStackSize()) {
-            // 输出槽已有相同物品且未满
-            outputStack.grow(1);
-            inputStack.shrink(1);
-            uuMatterTank.drain(1000, IFluidHandler.FluidAction.EXECUTE);
-            setChanged();
-            return true;
-        }
-        
-        return false;
-    }
-
-    @Override
-    protected boolean canWork() {
-        // 检查是否可以生成UU物质或填充容器
-        return energyStorage.getAmount() >= energyStorage.getCapacity() || 
-               (uuMatterTank.getFluidAmount() >= 1000 && isEmptyCell(itemHandler.getStackInSlot(CONTAINER_SLOT)));
-    }
-
-    @Override
-    protected void doWork() {
-        isWorking = true;
-        
-        // 处理增强器
-        processAmplifier();
-        
-        // 尝试生成UU物质
-        if (energyStorage.getAmount() >= energyStorage.getCapacity()) {
-            attemptGeneration();
-        }
-        
-        // 处理容器填充
-        processContainer();
-        
-        lastEnergy = energyStorage.getAmount();
-    }
-
-    @Override
-    protected void stopWork() {
-        isWorking = false;
-    }
-
-    public FluidTank getUuMatterTank() {
-        return uuMatterTank;
-    }
-
-    public int getUuMatterAmount() {
-        return uuMatterTank.getFluidAmount();
-    }
-
-    public int getUuMatterCapacity() {
-        return UUMATTER_CAPACITY;
-    }
-
-    public int getScrap() {
-        return scrap;
-    }
-
-    public ContainerData getContainerData() {
-        return dataAccess;
-    }
-
-    @Nullable
-    @Override
-    public AbstractContainerMenu createMenu(int containerId, Inventory playerInventory, Player player) {
-        return new com.singularity_iteration.mio_icif.Menu.Producer.MatterElcMenu(
-            containerId, playerInventory, this);
-    }
-
-    /**
-     * 获取能量百分比进度字符串用于GUI显示
-     */
-    public String getProgressAsString() {
-        int p = (int)Math.min(100.0 * energyStorage.getAmount() / energyStorage.getCapacity(), 100.0);
-        return p + "%";
-    }
-
-    @Override
-    public IFluidHandler getFluidHandlerCapability(@Nullable Direction side) {
-        return uuMatterTank;
-    }
-
-    @Override
-    protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
-        super.saveAdditional(tag, registries);
-        tag.putInt("Scrap", scrap);
-        tag.putDouble("LastEnergy", lastEnergy);
-        
-        CompoundTag fluidTag = new CompoundTag();
-        uuMatterTank.writeToNBT(registries, fluidTag);
-        tag.put("UuMatterTank", fluidTag);
-    }
-
-    @Override
-    public void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
-        super.loadAdditional(tag, registries);
-        
-        if (tag.contains("Scrap")) {
-            scrap = tag.getInt("Scrap");
-        }
-        if (tag.contains("LastEnergy")) {
-            lastEnergy = tag.getDouble("LastEnergy");
-        }
-        
-        if (tag.contains("UuMatterTank")) {
-            CompoundTag fluidTag = tag.getCompound("UuMatterTank");
-            uuMatterTank.readFromNBT(registries, fluidTag);
-        }
-    }
-
-    /**
-     * 主tick执行逻辑 - 对比IC2
-     * 执行顺序如下:
-     * 1. 重新计算升级统计
-     * 2. 调用父类tick方法处理充放电等逻辑
-     * 3. 检查红石信号情况
-     * 4. 处理增强器：应用bonus + 清除增强器计数器
-     * 5. 尝试生成UU物质时能量满进行
-     * 6. 执行容器填充
-     * 7. 执行升级流体/升级液体弹射等
-     * 8. 保存lastEnergy用于计算能量来源bonus用
-     */
-    public static void tick(Level level, BlockPos pos, BlockState state, mio_icif_matter_elc blockEntity) {
-        if (level.isClientSide()) return;
-
-        // 先升级计挺
-        blockEntity.recalculateUpgradeStats();
-        
-        // 调用父类tick方法处理充放电等
-        mio_icif_Energy_Block.tick(level, pos, state, blockEntity);
-
-        // 检查红石信号和工作情况
-        if (!blockEntity.canWorkRedstone() || blockEntity.energyStorage.getAmount() <= 0) {
-            blockEntity.setState(0); // 停止工作
-            blockEntity.stopWork();
-            // 即使不工作也处理流体升级
-            blockEntity.handleFluidUpgrades();
-            return;
-        }
-
-        // 激活工作状态
-        if (blockEntity.scrap > 0) {
-            blockEntity.setState(2); // 增强器工作模式
-        } else {
-            blockEntity.setState(1); // 正常工作模式
-        }
-        blockEntity.isWorking = true;
-        
-        // 处理增强器
-        blockEntity.processAmplifier();
-        
-        // 尝试生成UU物质当能量满时
-        if (blockEntity.energyStorage.getAmount() >= blockEntity.energyStorage.getCapacity()) {
-            blockEntity.attemptGeneration();
-        }
-        
-        // 执行容器填充
-        blockEntity.processContainer();
-        
-        // 执行流体升级/流体弹射等方式
-        blockEntity.handleFluidUpgrades();
-        
-        // 保存lastEnergy用于计算能量来源bonus
-        blockEntity.lastEnergy = blockEntity.energyStorage.getAmount();
-    }
-
-    // 状态管理变量
-    private int state = 0;
-    private int prevState = -1;
-
-    private void setState(int newState) {
-        this.state = newState;
-        if (this.prevState != this.state) {
-            this.prevState = this.state;
-            setChanged();
-        }
-    }
-
-    public int getState() {
-        return state;
+    @Override public void loadAdditional(CompoundTag tag,HolderLookup.Provider provider){
+        ready=false;
+        super.loadAdditional(tag,provider);matter.readFromNBT(provider,tag.getCompound("UuMatterTank"));
+        work=EnergyAmount.ZERO;amplifier=EnergyAmount.ZERO;hold=new CompoundTag();legacyLastEnergy=tag.getDouble("LastEnergy");
+        try{
+            new EnergyAmount(tag.getLong("energy"),tag.getLong("scex_energy_fraction"));
+            if(tag.contains("scex_matter",Tag.TAG_COMPOUND)){
+                var s=tag.getCompound("scex_matter");if(s.getInt("version")!=1)hold=s.copy();
+                else{work=amount(s,"work");amplifier=amount(s,"amplifier");hold=s.getCompound("hold").copy();}
+            }else{
+                // Legacy stored EU was already displayed fabrication progress. LastEnergy is
+                // retained as provenance, never used to award speculative historical bonuses.
+                work=new EnergyAmount(tag.getLong("energy"),tag.getLong("scex_energy_fraction"));
+                amplifier=EnergyAmount.of(tag.getInt("Scrap"));energyStorage.setEnergy(0);energyStorage.scexLoadFraction(0);
+            }
+            if(work.whole()>1000000000L||amplifier.whole()>1000000000L||tag.getLong("energy")>1000000000L
+                ||matter.getFluidAmount()>UUMATTER_CAPACITY||!matter.isEmpty()&&!matter.isFluidValid(matter.getFluid())||!Double.isFinite(legacyLastEnergy))throw new IllegalArgumentException("Saved state out of range");
+        }catch(IllegalArgumentException ex){hold=tag.copy();hold.putString("reason","Invalid saved matter ledger retained");}
+        isWorking=false;amplifying=false;recalculateUpgradeStats();
     }
 }

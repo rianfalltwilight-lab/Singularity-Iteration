@@ -39,6 +39,7 @@ public class RichSeedItem extends Item implements ICropSeedItem {
         BlockState state = level.getBlockState(pos);
         Player player = context.getPlayer();
         ItemStack stack = context.getItemInHand();
+        if(stack.isEmpty())return InteractionResult.PASS;
 
         // 检查是否是IC2作物架
         if (state.getBlock() instanceof mio_icif_crop_stick || 
@@ -54,10 +55,6 @@ public class RichSeedItem extends Item implements ICropSeedItem {
      * 在IC2作物架上种植
      */
     private InteractionResult tryPlantOnCropStick(Level level, BlockPos pos, BlockState state, Player player, ItemStack stack) {
-        if (level.isClientSide) {
-            return InteractionResult.SUCCESS;
-        }
-
         if (!(level.getBlockEntity(pos) instanceof IPlanter planter)) {
             return InteractionResult.FAIL;
         }
@@ -71,13 +68,20 @@ public class RichSeedItem extends Item implements ICropSeedItem {
         if (plantType == null) {
             return InteractionResult.FAIL;
         }
+        if(level.isClientSide)return InteractionResult.SUCCESS;
 
         // 种植作物
         planter.setPlant(plantType);
         planter.setGrowthStage(1);
+        planter.setGrowthSpeed(0);
+        planter.setYield(0);
+        planter.setResilience(0);
+        planter.setScanLevel(0);
+        planter.setProgress(0);
+        planter.setHybridBase(false);
         planter.updateState();
 
-        if (!player.getAbilities().instabuild) {
+        if (player==null || !player.getAbilities().instabuild) {
             stack.shrink(1);
         }
 
@@ -96,12 +100,15 @@ public class RichSeedItem extends Item implements ICropSeedItem {
         if (!level.getBlockState(cropPos).canBeReplaced()) {
             return InteractionResult.FAIL;
         }
+        BlockState cropState=this.cropBlock.defaultBlockState();
+        if(!cropState.canSurvive(level,cropPos))return InteractionResult.FAIL;
+        if(level.isClientSide)return InteractionResult.SUCCESS;
 
-        if (!level.setBlock(cropPos, this.cropBlock.defaultBlockState(), Block.UPDATE_ALL)) {
+        if (!level.setBlock(cropPos, cropState, Block.UPDATE_ALL)) {
             return InteractionResult.FAIL;
         }
 
-        if (!player.getAbilities().instabuild) {
+        if (player==null || !player.getAbilities().instabuild) {
             stack.shrink(1);
         }
 

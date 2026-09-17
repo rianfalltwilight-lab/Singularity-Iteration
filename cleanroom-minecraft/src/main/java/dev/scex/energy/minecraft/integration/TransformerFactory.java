@@ -19,11 +19,11 @@ public final class TransformerFactory {
         "mio_icif:wiring/transformer_mv_hv",new Tier("mio_icif:transformer_mv_hv",128),
         "mio_icif:wiring/transformer_hv_ev",new Tier("mio_icif:transformer_hv_ev",512),
         "mio_icif:wiring/transformer_ev_sc",new Tier("mio_icif:transformer_ev_sc",2048));
-    private static final boolean ENABLED=Boolean.getBoolean("scex.independent.energy") && Boolean.getBoolean("scex.independent.transformers");
+    private static boolean enabled() { return dev.scex.energy.IndependentEnergyMode.feature("transformers"); }
     private static final AtomicLong PLACED=new AtomicLong(), LOADED=new AtomicLong(), TICKERS=new AtomicLong();
     private TransformerFactory() { }
     private static BlockEntityType<?> type(BlockState state) {
-        if (!ENABLED) return null;
+        if (!enabled()) return null;
         var tier=TIERS.get(BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString());
         if (tier==null) return null;
         var type=BuiltInRegistries.BLOCK_ENTITY_TYPE.getOptional(ResourceLocation.parse(tier.entity())).orElseThrow();
@@ -43,10 +43,10 @@ public final class TransformerFactory {
         return new IndependentTransformerBlockEntity(type,position,state,low,1);
     }
     public static boolean suppressTicker(BlockEntity entity) {
-        if (!ENABLED || !(entity instanceof IndependentTransformerBlockEntity)) return false;
+        if (!enabled() || !(entity instanceof IndependentTransformerBlockEntity)) return false;
         TICKERS.incrementAndGet();return true;
     }
     public static Map<String,Object> metrics() {
-        return Map.of("enabled",ENABLED,"placed",PLACED.get(),"loaded",LOADED.get(),"suppressed_tickers",TICKERS.get());
+        return Map.of("enabled",enabled(),"placed",PLACED.get(),"loaded",LOADED.get(),"suppressed_tickers",TICKERS.get());
     }
 }

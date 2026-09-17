@@ -39,6 +39,8 @@ public class mio_icif_experience_generator extends mio_icif_Energy_Block impleme
     private static final double CONSUME_DISTANCE_SQ = 1.0D;
 
     private int fuel = 0;
+    private long scexFuelCredit;
+    private final dev.scex.si.energy.WorldFuelCollection scexCollector = new dev.scex.si.energy.WorldFuelCollection();
     private boolean isWorking = false;
 
     public mio_icif_experience_generator(BlockPos pos, BlockState state) {
@@ -49,6 +51,11 @@ public class mio_icif_experience_generator extends mio_icif_Energy_Block impleme
 
     public static void tick(Level level, BlockPos pos, BlockState state, mio_icif_experience_generator blockEntity) {
         if (level.isClientSide()) {
+            return;
+        }
+
+        if (blockEntity.energyStorage.scexNetworkControlled()) {
+            blockEntity.scexTickStoredFuel(level, pos);
             return;
         }
 
@@ -71,6 +78,20 @@ public class mio_icif_experience_generator extends mio_icif_Energy_Block impleme
         }
 
         blockEntity.setChanged();
+    }
+
+    private void scexTickStoredFuel(Level level, BlockPos pos) {
+        if (!(level instanceof net.minecraft.server.level.ServerLevel server) || !server.getServer().isSameThread()) return;
+        int previousFuel = fuel;
+        long previousCredit = scexFuelCredit;
+        fuel = scexCollector.experience(server, pos, SCAN_RANGE, fuel);
+        var step = dev.scex.si.energy.StoredFuelGeneration.tick(energyStorage, fuel, scexFuelCredit, PRODUCTION);
+        fuel = Math.toIntExact(step.fuelRemaining());
+        scexFuelCredit = step.bufferedEnergy();
+        boolean wasWorking = isWorking;
+        isWorking = step.generated() > 0;
+        if (wasWorking != isWorking) updateBlockState(isWorking);
+        if (previousFuel != fuel || previousCredit != scexFuelCredit || wasWorking != isWorking || step.generated() > 0) setChanged();
     }
 
     private void scanAndConsumeOrbs(Level level, BlockPos pos) {
@@ -122,7 +143,7 @@ public class mio_icif_experience_generator extends mio_icif_Energy_Block impleme
     @Override
     public void onLoad() {
         super.onLoad();
-        if (level != null && !level.isClientSide && !registered) {
+        if (!energyStorage.scexNetworkControlled() && level != null && !level.isClientSide && !registered) {
             NeoForge.EVENT_BUS.post(new EnergyTileLoadEvent(this, level));
             registered = true;
         }
@@ -130,7 +151,7 @@ public class mio_icif_experience_generator extends mio_icif_Energy_Block impleme
 
     @Override
     public void setRemoved() {
-        if (level != null && !level.isClientSide && registered) {
+        if (!energyStorage.scexNetworkControlled() && level != null && !level.isClientSide && registered) {
             NeoForge.EVENT_BUS.post(new EnergyTileUnloadEvent(this, level));
             registered = false;
         }
@@ -140,7 +161,7 @@ public class mio_icif_experience_generator extends mio_icif_Energy_Block impleme
     @Override
     public void clearRemoved() {
         super.clearRemoved();
-        if (level != null && !level.isClientSide && !registered) {
+        if (!energyStorage.scexNetworkControlled() && level != null && !level.isClientSide && !registered) {
             NeoForge.EVENT_BUS.post(new EnergyTileLoadEvent(this, level));
             registered = true;
         }
@@ -148,12 +169,14 @@ public class mio_icif_experience_generator extends mio_icif_Energy_Block impleme
 
     @Override
     public double getOfferedEnergy() {
+        if (energyStorage.scexNetworkControlled()) return 0;
         long available = Math.min(energyStorage.getAmount(), energyStorage.getMaxExtract());
         return Math.min(available, CABLE_TIER.powerRating);
     }
 
     @Override
     public void drawEnergy(double amount) {
+        if (energyStorage.scexNetworkControlled()) return;
         if (amount > 0.0D) {
             long request = Math.min((long) amount, CABLE_TIER.powerRating);
             energyStorage.extract(request, false);
@@ -162,12 +185,13 @@ public class mio_icif_experience_generator extends mio_icif_Energy_Block impleme
 
     @Override
     public int getSourceTier() {
+        if (energyStorage.scexNetworkControlled()) return 0;
         return EnergyNetGlobal.cableTierToSourceTier(CABLE_TIER);
     }
 
     @Override
     public boolean emitsEnergyTo(IEnergyAcceptor acceptor, Direction direction) {
-        return true;
+        return !energyStorage.scexNetworkControlled();
     }
 
     public long getEnergyStored() {
@@ -192,18 +216,40 @@ public class mio_icif_experience_generator extends mio_icif_Energy_Block impleme
         tag.putInt("Fuel", fuel);
         tag.putLong("Energy", energyStorage.getAmount());
         tag.putBoolean("IsWorking", isWorking);
+        if (energyStorage.scexNetworkControlled() || scexFuelCredit > 0) tag.putLong("scex_fuel_credit_eu", scexFuelCredit);
     }
 
     @Override
     public void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
-        fuel = tag.getInt("Fuel");
-        if (tag.contains("Energy", net.minecraft.nbt.Tag.TAG_LONG)) {
+        fuel = Math.max(0, tag.getInt("Fuel"));
+        scexFuelCredit = dev.scex.energy.BoundedUnits.clamp(tag.getLong("scex_fuel_credit_eu"), PRODUCTION - 1);
+        // The parent's lowercase energy + fraction is authoritative in the controlled format.
+        if (tag.contains("Energy", net.minecraft.nbt.Tag.TAG_LONG)
+                && (!energyStorage.scexNetworkControlled() || !tag.contains("energy", net.minecraft.nbt.Tag.TAG_ANY_NUMERIC))) {
             energyStorage.setEnergy(tag.getLong("Energy"));
+            energyStorage.scexLoadFraction(tag.getLong("scex_energy_fraction"));
         }
         if (tag.contains("IsWorking", net.minecraft.nbt.Tag.TAG_BYTE)) {
             isWorking = tag.getBoolean("IsWorking");
         }
+    }
+
+    @Override
+    public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
+        var tag = super.getUpdateTag(registries);
+        tag.putInt("Fuel", fuel);
+        tag.putLong("scex_fuel_credit_eu", scexFuelCredit);
+        tag.putBoolean("IsWorking", isWorking);
+        return tag;
+    }
+
+    @Override
+    public void handleUpdateTag(CompoundTag tag, HolderLookup.Provider registries) {
+        super.handleUpdateTag(tag, registries);
+        fuel = Math.max(0, tag.getInt("Fuel"));
+        scexFuelCredit = dev.scex.energy.BoundedUnits.clamp(tag.getLong("scex_fuel_credit_eu"), PRODUCTION - 1);
+        isWorking = tag.getBoolean("IsWorking");
     }
 
     @Override
@@ -263,7 +309,7 @@ public class mio_icif_experience_generator extends mio_icif_Energy_Block impleme
 
     @Override
     public void setBurnTime(int ticks) {
-        this.fuel = ticks;
+        this.fuel = Math.max(0, ticks);
         this.setChanged();
     }
 }

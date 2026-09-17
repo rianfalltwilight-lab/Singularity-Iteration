@@ -12,6 +12,7 @@ import com.singularity_iteration.mio_icif.api.machine.ISlotType;
 import com.singularity_iteration.mio_icif.api.machine.builder.IElectricMachineBuilder;
 import com.singularity_iteration.mio_icif.api.machine.builder.IMachineBuilderAPI;
 import com.singularity_iteration.mio_icif.api.recipe.IRecipeAPI;
+import dev.scex.si.processing.RecipeSlots;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
@@ -67,7 +68,6 @@ public class mio_icif_metal_former_advanced extends GenericMachineBlockEntity {
         this.batterySlot = layout.getBatterySlots()[0];
         this.outputSlot = layout.getOutputSlots()[0];
         setConfiguration(getOrCreateConfiguration());
-        setWorkHandler(this::handleWork);
     }
 
     public static ISlotLayout getOrCreateLayout() {
@@ -112,30 +112,7 @@ public class mio_icif_metal_former_advanced extends GenericMachineBlockEntity {
         return builder.getConfiguration();
     }
 
-    private void handleWork(GenericMachineBlockEntity machine, ItemStack[] inputs) {
-        if (level == null || level.isClientSide) return;
-        if (inputs.length == 0 || inputs[0].isEmpty()) return;
 
-        Optional<? extends RecipeHolder<?>> recipe = findRecipeForMode();
-        if (recipe.isEmpty()) return;
-
-        IRecipeAPI recipeAPI = MioIcifAPI.instance().getRecipeAPI();
-        ItemStack result = recipeAPI.getRecipeOutput(recipe.get());
-        if (result.isEmpty()) return;
-
-        int targetSlot = getTargetOutputSlot(result);
-        if (targetSlot == -1) return;
-
-        ItemStack currentOutput = itemHandler.getStackInSlot(targetSlot);
-        if (currentOutput.isEmpty()) {
-            itemHandler.setStackInSlot(targetSlot, result.copy());
-        } else {
-            currentOutput.grow(result.getCount());
-        }
-
-        int ingredientCount = recipeAPI.getRecipeIngredientCount(recipe.get());
-        consumeInput(inputSlot, ingredientCount);
-    }
 
     @Override
     public boolean isItemValidForSlot(int slot, ItemStack stack) {
@@ -166,19 +143,16 @@ public class mio_icif_metal_former_advanced extends GenericMachineBlockEntity {
 
     @Override
     protected boolean canWork() {
-        ItemStack input = itemHandler.getStackInSlot(inputSlot);
-        if (input.isEmpty()) return false;
-        if (!hasEnoughEnergy()) return false;
+        return getEffectiveEnergyPerTick() > 0 && (progress >= maxProgress || hasEnoughEnergy())
+            && prepareOperation().isPresent();
+    }
 
-        Optional<? extends RecipeHolder<?>> recipe = findRecipeForMode();
-        if (recipe.isEmpty()) return false;
-
-        IRecipeAPI recipeAPI = MioIcifAPI.instance().getRecipeAPI();
-        int ingredientCount = recipeAPI.getRecipeIngredientCount(recipe.get());
-        if (input.getCount() < ingredientCount) return false;
-
-        ItemStack result = recipeAPI.getRecipeOutput(recipe.get());
-        return canFitOutput(result);
+    private Optional<RecipeSlots.Prepared> prepareOperation() {
+        var recipe = findRecipeForMode();
+        if (recipe.isEmpty()) return Optional.empty();
+        var api = MioIcifAPI.instance().getRecipeAPI();
+        return RecipeSlots.prepare(itemHandler, inputSlot, api.getRecipeIngredientCount(recipe.get()),
+            new int[]{outputSlot}, java.util.List.of(api.getRecipeOutput(recipe.get())));
     }
 
     @Override
@@ -201,68 +175,34 @@ public class mio_icif_metal_former_advanced extends GenericMachineBlockEntity {
         };
     }
 
-    private boolean canFitOutput(ItemStack result) {
-        if (result.isEmpty()) return false;
-        ItemStack existing = itemHandler.getStackInSlot(outputSlot);
-        return canFitInSlot(existing, result);
-    }
 
-    private boolean canFitInSlot(ItemStack existing, ItemStack result) {
-        if (existing.isEmpty()) return true;
-        if (!ItemStack.isSameItem(existing, result)) return false;
-        return existing.getCount() + result.getCount() <= existing.getMaxStackSize();
-    }
 
-    private int getTargetOutputSlot(ItemStack result) {
-        ItemStack existing = itemHandler.getStackInSlot(outputSlot);
-        if (canFitInSlot(existing, result)) return outputSlot;
-        return -1;
-    }
+
+
+
 
     @Override
     protected void doWork() {
-        if (!consumeEnergy()) {
-            stopWork();
-            return;
+        if (prepareOperation().isEmpty()) { stopWork(); return; }
+        if (progress < maxProgress) {
+            if (getEffectiveEnergyPerTick() <= 0 || !hasEnoughEnergy() || !consumeEnergy()) { stopWork(); return; }
+            progress = (int) Math.min(maxProgress, (long) progress + getProgressPerTick());
         }
         isWorking = true;
-        if (progress >= maxProgress) {
-            finishProcessing();
-        }
+        if (progress >= maxProgress) finishProcessing();
     }
 
+    @Override
+    protected void updateProgress() { /* doWork owns the paid increment. */ }
+
     private void finishProcessing() {
-        ItemStack input = itemHandler.getStackInSlot(inputSlot);
-        if (input.isEmpty()) {
-            stopWork();
-            return;
-        }
-
-        Optional<? extends RecipeHolder<?>> recipe = findRecipeForMode();
-        if (recipe.isEmpty()) { stopWork(); return; }
-
-        IRecipeAPI recipeAPI = MioIcifAPI.instance().getRecipeAPI();
-        ItemStack result = recipeAPI.getRecipeOutput(recipe.get());
-        int ingredientCount = recipeAPI.getRecipeIngredientCount(recipe.get());
-
-        if (result.isEmpty()) { stopWork(); return; }
-
-        int targetSlot = getTargetOutputSlot(result);
-        if (targetSlot == -1) { stopWork(); return; }
-
-        ItemStack currentOutput = itemHandler.getStackInSlot(targetSlot);
-        if (currentOutput.isEmpty()) {
-            itemHandler.setStackInSlot(targetSlot, result.copy());
-        } else {
-            currentOutput.grow(result.getCount());
-        }
-
-        input.shrink(ingredientCount);
+        var operation = prepareOperation();
+        if (operation.isEmpty()) { stopWork(); return; }
+        int completed = progress;
+        progress = 0;
+        if (!operation.get().commit()) { progress = completed; stopWork(); return; }
         finishWork();
-
-        if (canWork()) {
-            isWorking = true;
-        }
+        setChanged();
     }
 
     public int getRecipeProcessingTime() {
@@ -284,6 +224,8 @@ public class mio_icif_metal_former_advanced extends GenericMachineBlockEntity {
 
     @Override
     public void setMetalFormerMode(IMachineAPI.MetalFormerMode mode) {
+        if (mode == null) return;
+        stopWork();
         this.currentMode = mode;
         this.progress = 0;
         setLit(isWorking());

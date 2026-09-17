@@ -309,11 +309,11 @@ protected static final int CHARGE_SLOT = 1;
         long previousEnergy = energyStorage.getAmount();
         int previousBurn = burnTime;
         chargeItems();
-        long room = Math.max(0, energyStorage.getCapacity() - energyStorage.getAmount());
+        long room = energyStorage.scexExactAmount().roomBelow(energyStorage.getCapacity()).whole();
         if (burnTime <= 0 && room >= energyGenerationRate) consumeFuel();
         boolean activeThisTick = burnTime > 0;
         if (activeThisTick) {
-            energyStorage.generateEnergyInternal(energyGenerationRate, false);
+            energyStorage.scexGenerateEnergy(dev.scex.energy.EnergyAmount.of(energyGenerationRate), false);
             burnTime--;
         }
         var property = com.singularity_iteration.mio_icif.Blocks.generator.mio_icif_Block_Thermal_Generator.ACTIVE;

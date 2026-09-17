@@ -2,6 +2,7 @@
 package dev.scex.energy.minecraft;
 
 import dev.scex.energy.NetworkCell;
+import dev.scex.energy.EnergyAmount;
 import dev.scex.energy.TransformerAccounting;
 import java.util.Optional;
 import net.minecraft.core.BlockPos;
@@ -25,6 +26,7 @@ import net.minecraft.world.level.block.state.BlockState;
 public final class IndependentTransformerBlockEntity extends BlockEntity {
     private final long lowPacket;
     private double savedBuffer;
+    private long savedFraction;
     private int savedMode;
     private NetworkCell cell;
     private boolean modeObserved, observedStepUp;
@@ -54,9 +56,10 @@ public final class IndependentTransformerBlockEntity extends BlockEntity {
             // Ordinary double saves cannot preserve every integer beyond 2^53.
             // Retain out-of-scope input for a future migration rather than lose it.
             if (!Double.isFinite(savedBuffer) || savedBuffer < 0
-                    || savedBuffer > 9_007_199_254_740_992d || Math.rint(savedBuffer) != savedBuffer)
+                    || savedBuffer > 9_007_199_254_740_992d)
                 return Optional.empty();
-            cell = new NetworkCell((long) savedBuffer);
+            cell = new NetworkCell(Math.rint(savedBuffer) == savedBuffer
+                ? new EnergyAmount((long) savedBuffer, savedFraction) : EnergyAmount.fromDouble(savedBuffer));
         }
         return Optional.of(new Snapshot(cell.quote(), getBlockState(), savedMode, stepUp,
             new TransformerAccounting.Configuration(lowPacket, stepUp)));
@@ -89,7 +92,7 @@ public final class IndependentTransformerBlockEntity extends BlockEntity {
         modeObserved = true;
         observedStepUp = stepUp;
         if (changed) {
-            if (cell != null) cell.replace(cell.quote().amount());
+            if (cell != null) cell.replace(cell.quote().exactAmount());
             setChanged();
             level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 2);
         }
@@ -101,7 +104,7 @@ public final class IndependentTransformerBlockEntity extends BlockEntity {
     public void setSavedMode(int mode) {
         requireServerThread();
         if (mode == savedMode) return;
-        if (cell != null) cell.replace(cell.quote().amount());
+        if (cell != null) cell.replace(cell.quote().exactAmount());
         savedMode = mode;
         setChanged();
         level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 2);
@@ -113,6 +116,7 @@ public final class IndependentTransformerBlockEntity extends BlockEntity {
     private void revokeCell() {
         if (cell == null) return;
         savedBuffer = cell.quote().amount();
+        savedFraction = cell.quote().fraction();
         cell.retire();
         cell = null;
     }
@@ -131,6 +135,8 @@ public final class IndependentTransformerBlockEntity extends BlockEntity {
         revokeCell();
         super.loadAdditional(tag, registries);
         savedBuffer = tag.getDouble("buffer");
+        savedFraction = tag.getLong("scex_energy_fraction");
+        if (savedFraction < 0 || savedFraction >= EnergyAmount.UNITS) savedFraction = 0;
         if (tag.contains("mode")) savedMode = tag.getInt("mode");
         modeObserved = false;
         observedStepUp = tag.getBoolean("active");
@@ -139,6 +145,7 @@ public final class IndependentTransformerBlockEntity extends BlockEntity {
     @Override protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
         tag.putDouble("buffer", cell == null ? savedBuffer : cell.quote().amount());
+        tag.putLong("scex_energy_fraction", cell == null ? savedFraction : cell.quote().fraction());
         tag.putInt("mode", savedMode);
         tag.putBoolean("active", observedStepUp);
     }

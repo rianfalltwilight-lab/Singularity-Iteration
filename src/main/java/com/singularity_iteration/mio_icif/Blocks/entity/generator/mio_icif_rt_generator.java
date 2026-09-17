@@ -25,7 +25,7 @@ import org.jetbrains.annotations.Nullable;
  * 特点：
  * - 6个槽位用于放置RTG燃料靶丸
  * - 靶丸无限耐久，不需要更换
- * - 发电量与放入的靶丸数量有关（IC2原版 efficiency=2.0）：
+ * - 未接管的旧 SI 路径保留以下发电量：
  *   1个= 2 EU/t
  *   2个= 4 EU/t
  *   3个= 8 EU/t
@@ -52,8 +52,11 @@ public class mio_icif_rt_generator extends mio_icif_Energy_Generator {
     // 当前发电量
     private long currentGenerationRate = 0;
 
-    // 发电量表 - 根据靶丸数量对应的发电量（IC2原版: 2^(n-1) × efficiency, efficiency=2.0）
+    // 旧 SI 扩展的发电量表；不是受控路径的成品行为规格。
     private static final long[] GENERATION_RATES = {0L, 2L, 4L, 8L, 16L, 32L, 64L};
+    // R29 ordinary placement/inventory/save observations, 0..6 occupied fuel slots.
+    private static final long[] INDEPENDENT_GENERATION_RATES = {0L, 1L, 2L, 4L, 8L, 16L, 32L};
+    private static final long INDEPENDENT_CAPACITY = 20000L;
 
     /**
      * 构造函数（用于 BlockEntityType.Builder）
@@ -67,7 +70,9 @@ public class mio_icif_rt_generator extends mio_icif_Energy_Generator {
      */
     public mio_icif_rt_generator(BlockPos pos, BlockState state, BlockEntityType<?> type) {
         super(pos, state, type != null ? type : mio_icif_block_entities.RT_GENERATOR_ENTITY_TYPE.get(),
-              SlotLayout.builder().rtgPellet(6).build(), BASE_GENERATION_RATE, ENERGY_CAPACITY, MAX_RECEIVE, MAX_EXTRACT, CableTier.LV);
+              SlotLayout.builder().rtgPellet(6).build(), BASE_GENERATION_RATE,
+              dev.scex.si.energy.IndependentSiEnergy.controls(state) ? INDEPENDENT_CAPACITY : ENERGY_CAPACITY,
+              MAX_RECEIVE, MAX_EXTRACT, CableTier.LV);
     }
 
     /**
@@ -78,13 +83,21 @@ public class mio_icif_rt_generator extends mio_icif_Energy_Generator {
             return;
         }
 
+        if (blockEntity.energyStorage.scexNetworkControlled()
+                && blockEntity.energyStorage.scexExactAmount().compareTo(dev.scex.energy.EnergyAmount.of(blockEntity.energyStorage.getCapacity())) > 0) {
+            // R29 forward save-input observation: this generator normalizes an
+            // oversized balance on its next natural tick, before generation.
+            blockEntity.energyStorage.setEnergy(blockEntity.energyStorage.getCapacity());
+        }
+
         // 计算当前放入的靶丸数量
         int pelletCount = blockEntity.countPellets();
 
         // 如果靶丸数量改变，更新发电量
         if (pelletCount != blockEntity.cachedPelletCount) {
             blockEntity.cachedPelletCount = pelletCount;
-            blockEntity.currentGenerationRate = GENERATION_RATES[pelletCount];
+            blockEntity.currentGenerationRate = (blockEntity.energyStorage.scexNetworkControlled()
+                ? INDEPENDENT_GENERATION_RATES : GENERATION_RATES)[pelletCount];
             // 更新电源输出功率
             blockEntity.setAsPowerSource(blockEntity.currentGenerationRate);
         }
@@ -96,7 +109,7 @@ public class mio_icif_rt_generator extends mio_icif_Energy_Generator {
         }
 
         // 分配能量到相邻方块
-        blockEntity.distributeEnergy();
+        if (!blockEntity.energyStorage.scexNetworkControlled()) blockEntity.distributeEnergy();
 
         // 更新方块active状态（用于模型切换）
         boolean shouldBeActive = blockEntity.currentGenerationRate > 0;
@@ -114,7 +127,8 @@ public class mio_icif_rt_generator extends mio_icif_Energy_Generator {
      */
     private void generateEnergyInternal() {
         if (currentGenerationRate > 0) {
-            apiGenerateEnergy(currentGenerationRate, false);
+            if (energyStorage.scexNetworkControlled()) energyStorage.scexGenerateEnergy(dev.scex.energy.EnergyAmount.of(currentGenerationRate), false);
+            else apiGenerateEnergy(currentGenerationRate, false);
         }
     }
 
@@ -205,6 +219,12 @@ public class mio_icif_rt_generator extends mio_icif_Energy_Generator {
         super.loadAdditional(tag, registries);
         this.cachedPelletCount = tag.getInt("CachedPelletCount");
         this.currentGenerationRate = tag.getLong("CurrentGenerationRate");
+        if (energyStorage.scexNetworkControlled()) {
+            // Inventory is authoritative after loading, including older SI caches.
+            // Recompute on the next server tick without consuming or replacing fuel.
+            this.cachedPelletCount = -1;
+            this.currentGenerationRate = 0;
+        }
     }
 
     // ==================== MenuProvider 接口实现 ====================

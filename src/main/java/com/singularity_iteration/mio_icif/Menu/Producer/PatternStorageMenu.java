@@ -9,6 +9,9 @@ import net.minecraft.world.item.ItemStack;
 import net.neoforged.neoforge.items.IItemHandler;
 import net.neoforged.neoforge.items.SlotItemHandler;
 import org.jetbrains.annotations.Nullable;
+import dev.scex.si.processing.PatternMenuData;
+import dev.scex.si.processing.MachineMenuAccess;
+import net.minecraft.world.entity.player.Player;
 
 /**
  * 模式存储机的容器菜单独?
@@ -16,20 +19,13 @@ import org.jetbrains.annotations.Nullable;
 @SuppressWarnings({"null"}) public class PatternStorageMenu extends mio_icif_machine_menu {
 
     public static final int MEMORY_SLOT = 0;
-    public static final int SLOT_COUNT = 1;
+    public static final int SLOT_COUNT = 2;
+    private net.minecraft.world.SimpleContainer preview;
 
     private static final int MEMORY_X = 80;
     private static final int MEMORY_Y = 35;
 
-    private static final int DATA_ENERGY = 0;
-    private static final int DATA_MAX_ENERGY = 1;
-    private static final int DATA_CURRENT_INDEX = 2;
-    private static final int DATA_MAX_INDEX = 3;
-    private static final int DATA_UU_COST_LOW = 4;
-    private static final int DATA_UU_COST_HIGH = 5;
-    private static final int DATA_EU_COST_LOW = 6;
-    private static final int DATA_EU_COST_HIGH = 7;
-    private static final int DATA_COUNT = 8;
+    private static final int DATA_COUNT = PatternMenuData.COUNT;
 
     public PatternStorageMenu(int containerId, Inventory playerInventory) {
         this(containerId, playerInventory, null, null);
@@ -55,42 +51,55 @@ import org.jetbrains.annotations.Nullable;
     }
 
     public int getCurrentIndex() {
-        return this.data.get(DATA_CURRENT_INDEX);
+        return this.data.get(PatternMenuData.INDEX);
     }
 
     public int getMaxIndex() {
-        return this.data.get(DATA_MAX_INDEX);
+        return this.data.get(PatternMenuData.SIZE);
     }
 
     public ItemStack getCurrentPattern() {
-        var be = getBlockEntity();
-        if (be != null) {
-            return be.getCurrentPattern();
-        }
-        return ItemStack.EMPTY;
+        return preview.getItem(0).copy();
     }
 
     public double getCurrentUuCost() {
-        long bits = ((long) this.data.get(DATA_UU_COST_HIGH) << 32) | (this.data.get(DATA_UU_COST_LOW) & 0xFFFFFFFFL);
-        return Double.longBitsToDouble(bits);
+        return Double.longBitsToDouble(PatternMenuData.read(data,PatternMenuData.UU,4));
     }
 
     public long getCurrentEuCost() {
-        return (long) this.data.get(DATA_EU_COST_HIGH) << 16 | (this.data.get(DATA_EU_COST_LOW) & 0xFFFFL);
+        return PatternMenuData.read(data,PatternMenuData.EU,4);
     }
 
     public void setSyncData(int energy, int maxEnergy) {
-        this.data.set(DATA_ENERGY, energy);
-        this.data.set(DATA_MAX_ENERGY, maxEnergy);
+        PatternMenuData.write(data,PatternMenuData.ENERGY,2,energy);
+        PatternMenuData.write(data,PatternMenuData.CAPACITY,2,maxEnergy);
     }
 
     public int getEnergy() {
-        return this.data.get(DATA_ENERGY);
+        return (int)PatternMenuData.read(data,PatternMenuData.ENERGY,2);
     }
 
     public int getMaxEnergy() {
-        return this.data.get(DATA_MAX_ENERGY);
+        return (int)PatternMenuData.read(data,PatternMenuData.CAPACITY,2);
     }
+
+    @Override public boolean stillValid(Player player){return player.level().isClientSide()||MachineMenuAccess.valid(player,getBlockEntity());}
+    @Override public boolean clickMenuButton(Player player,int button){
+        var storage=getBlockEntity();if(!MachineMenuAccess.action(player,this,storage))return false;
+        switch(button){
+            case 0:storage.previousPattern();return true;
+            case 1:storage.nextPattern();return true;
+            case 2:return storage.exportCurrentPattern();
+            case 3:return storage.importMemoryPattern();
+            default:return false;
+        }
+    }
+    @Override public void broadcastChanges(){
+        var storage=getBlockEntity();
+        if(storage!=null){var item=storage.getCurrentPattern();if(!ItemStack.matches(item,preview.getItem(0)))preview.setItem(0,item);}
+        super.broadcastChanges();
+    }
+    @Override public ItemStack quickMoveStack(Player player,int index){return index==1?ItemStack.EMPTY:super.quickMoveStack(player,index);}
 
     @Override
     protected void addMachineSlots() {
@@ -104,6 +113,13 @@ import org.jetbrains.annotations.Nullable;
             public int getMaxStackSize() {
                 return 1;
             }
+        });
+        // The vanilla slot packet carries the complete preview stack to an unbound client menu.
+        // It is not part of the machine inventory and cannot be picked up or filled.
+        preview=new net.minecraft.world.SimpleContainer(1);
+        this.addSlot(new net.minecraft.world.inventory.Slot(preview,0,-1000,-1000){
+            @Override public boolean mayPlace(ItemStack stack){return false;}
+            @Override public boolean mayPickup(Player player){return false;}
         });
     }
 }

@@ -7,9 +7,7 @@ import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.level.block.entity.BlockEntity;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 /**
@@ -44,27 +42,10 @@ public record ScannerButtonPacket(BlockPos pos, int buttonType) implements Custo
     public static void handleOnServer(ScannerButtonPacket packet, IPayloadContext context) {
         context.enqueueWork(() -> {
             if (context.player() instanceof ServerPlayer serverPlayer) {
-                ServerLevel level = serverPlayer.serverLevel();
-                BlockPos pos = packet.pos;
-
-                // 检查区块是否加载
-            if (!level.isLoaded(pos)) {
-                    return;
-                }
-
-                BlockEntity blockEntity = level.getBlockEntity(pos);
-                if (!(blockEntity instanceof mio_icif_scanner_elc scanner)) {
-                    return;
-                }
-
-                // 处理按钮点击
-                if (packet.buttonType == BUTTON_DELETE) {
-                    // 删除扫描结果
-                    scanner.discardResult();
-                } else if (packet.buttonType == BUTTON_SAVE) {
-                    // 保存扫描结果到模式存储机
-                    scanner.storeResult();
-                }
+                if (!(serverPlayer.containerMenu instanceof com.singularity_iteration.mio_icif.Menu.Producer.ScannerElcMenu menu)
+                        || !(menu.getBlockEntity() instanceof mio_icif_scanner_elc scanner)
+                        || !scanner.getBlockPos().equals(packet.pos)) return;
+                menu.clickMenuButton(serverPlayer,packet.buttonType);
             }
         });
     }

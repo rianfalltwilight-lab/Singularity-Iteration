@@ -26,7 +26,7 @@ public final class ContactOrder implements AutoCloseable {
     private final boolean alternatives;
     private final long constructionSeed;
     // A negative value denotes an endpoint. Conductors retain fractional loss.
-    private record Entry(long loss, long order) { }
+    private record Entry(long loss, long order, int faces) { }
     private final LinkedHashMap<Position, Entry> journal = new LinkedHashMap<>();
     private final Map<Position, Long> reservations = new HashMap<>();
     private final LinkedHashMap<Query, List<Position>> cache = new LinkedHashMap<>();
@@ -48,11 +48,13 @@ public final class ContactOrder implements AutoCloseable {
     private void active() {
         if (closed || Thread.currentThread() != owner) throw new IllegalStateException("Closed or wrong journal thread");
     }
-    public void putConductor(Position at, long lossMilli) {
+    public void putConductor(Position at, long lossMilli) { putConductor(at, lossMilli, 63); }
+    public void putConductor(Position at, long lossMilli, int openFaces) {
         if (lossMilli < 0) throw new IllegalArgumentException("Negative conductor loss");
-        put(at, lossMilli);
+        if ((openFaces & ~63) != 0) throw new IllegalArgumentException("Invalid conductor face mask");
+        put(at, lossMilli, openFaces);
     }
-    public void putEndpoint(Position at) { put(at, -1); }
+    public void putEndpoint(Position at) { put(at, -1, 63); }
     /** Record an actual placement without activating a route or reading the world. */
     public void reservePlacement(Position at) {
         active(); Objects.requireNonNull(at);
@@ -63,13 +65,17 @@ public final class ContactOrder implements AutoCloseable {
     public void forgetPlacements(java.util.function.Predicate<Position> predicate) {
         active(); reservations.keySet().removeIf(Objects.requireNonNull(predicate));
     }
-    private void put(Position at, long value) {
+    private void put(Position at, long value, int faces) {
         active(); Objects.requireNonNull(at);
         Entry previous = journal.get(at); Long reserved = reservations.remove(at);
-        if (previous != null && previous.loss == value && reserved == null) return;
+        if (previous != null && previous.loss == value && reserved == null) {
+            if (previous.faces == faces) return;
+            // A port edit is not a new placement and must not reroll construction history.
+            journal.put(at, new Entry(value, previous.order, faces)); invalidate(); return;
+        }
         if (previous == null && journal.size() >= limit) throw new IllegalStateException("Contact journal capacity reached");
         long order = reserved == null ? (nextOrder = Math.incrementExact(nextOrder)) : reserved.longValue();
-        journal.remove(at); journal.put(at, new Entry(value, order)); invalidate();
+        journal.remove(at); journal.put(at, new Entry(value, order, faces)); invalidate();
     }
     public void remove(Position at) {
         active(); Objects.requireNonNull(at);
@@ -117,10 +123,10 @@ public final class ContactOrder implements AutoCloseable {
     private record Visit(Node node, long distance) { }
     private record Query(Position source, Component component) { }
     private static final class Node {
-        final Position at; final long loss, birth;
+        final Position at; final long loss, birth; final int faces;
         final ArrayList<Node> links = new ArrayList<>();
         Node alias; Component component; boolean sharedAtPlacement;
-        Node(Position at, long loss, long birth) { this.at = at; this.loss = loss; this.birth = birth; }
+        Node(Position at, long loss, long birth, int faces) { this.at = at; this.loss = loss; this.birth = birth; this.faces = faces; }
         Node root() {
             Node result = this; while (result.alias != null) result = result.alias;
             Node current = this;
@@ -138,7 +144,7 @@ public final class ContactOrder implements AutoCloseable {
             while (current.parent != null) { Component next = current.parent; current.parent = result; current = next; }
             return result;
         }
-        Node endpoint(Position at, long birth) { return endpoints.computeIfAbsent(at, p -> new Node(p, -1, birth)).root(); }
+        Node endpoint(Position at, long birth) { return endpoints.computeIfAbsent(at, p -> new Node(p, -1, birth, 63)).root(); }
     }
     private static void link(Node a, Node b) {
         a = a.root(); b = b.root();
@@ -190,28 +196,32 @@ public final class ContactOrder implements AutoCloseable {
             var ordered = new ArrayList<>(journal.entrySet());
             ordered.sort(Comparator.comparingLong(entry -> entry.getValue().order));
             for (var entry : ordered) {
-                Position at = entry.getKey(); long loss = entry.getValue().loss;
+                Position at = entry.getKey(); long loss = entry.getValue().loss; int faces = entry.getValue().faces;
                 var nearWires = new ArrayList<Node>(6); var nearEndpoints = new ArrayList<Position>(6);
                 var groups = new ArrayList<Component>(6);
-                for (int[] side : SIDES) {
+                for (int face = 0; face < SIDES.length; face++) {
+                    int[] side = SIDES[face];
+                    if ((faces & (1 << face)) == 0) continue;
                     long x=(long)at.x()+side[0], y=(long)at.y()+side[1], z=(long)at.z()+side[2];
                     if (x<Integer.MIN_VALUE || x>Integer.MAX_VALUE || y<Integer.MIN_VALUE || y>Integer.MAX_VALUE || z<Integer.MIN_VALUE || z>Integer.MAX_VALUE) continue;
                     Position near = new Position((int)x,(int)y,(int)z); Node wire = wires.get(near);
-                    if (wire != null) {
+                    if (wire != null && (wire.faces & (1 << (face ^ 1))) != 0) {
                         nearWires.add(wire); Component group = wire.component.root();
                         if (!groups.contains(group)) groups.add(group);
-                    } else if (placedEndpoints.contains(near)) nearEndpoints.add(near);
+                    } else if (wire == null && placedEndpoints.contains(near)) nearEndpoints.add(near);
                 }
                 if (loss >= 0) {
                     Component target = groups.isEmpty() ? new Component() : groups.getFirst();
                     for (Component group : groups) target = merge(target, group, alternatives, seed);
-                    Node node = new Node(at, loss, entry.getValue().order); node.component = target; target.size++; wires.put(at,node);
+                    Node node = new Node(at, loss, entry.getValue().order, faces); node.component = target; target.size++; wires.put(at,node);
                     // Preserve the six-neighbour interleaving of wire and endpoint links.
-                    for (int[] side : SIDES) {
+                    for (int face = 0; face < SIDES.length; face++) {
+                    int[] side = SIDES[face];
+                    if ((faces & (1 << face)) == 0) continue;
                         long x=(long)at.x()+side[0], y=(long)at.y()+side[1], z=(long)at.z()+side[2];
                         if (x<Integer.MIN_VALUE || x>Integer.MAX_VALUE || y<Integer.MIN_VALUE || y>Integer.MAX_VALUE || z<Integer.MIN_VALUE || z>Integer.MAX_VALUE) continue;
                         Position near = new Position((int)x,(int)y,(int)z); Node wire = wires.get(near);
-                        if (wire != null) link(node,wire);
+                        if (wire != null && (wire.faces & (1 << (face ^ 1))) != 0) link(node,wire);
                         else if (nearEndpoints.contains(near)) link(node,target.endpoint(near, entry.getValue().order));
                     }
                 } else {

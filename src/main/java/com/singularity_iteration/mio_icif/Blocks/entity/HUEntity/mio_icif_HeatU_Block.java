@@ -7,6 +7,8 @@ import com.singularity_iteration.mio_icif.Blocks.entity.slot.SlotType;
 import com.singularity_iteration.mio_icif.Items.Upgrade.MachineUpgradeStats;
 import com.singularity_iteration.mio_icif.api.MioIcifAPI;
 import com.singularity_iteration.mio_icif.api.capability.IMioIcifCapabilities;
+import dev.scex.si.processing.FluidTransferBuffer;
+import dev.scex.si.energy.ContainerToTank;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
@@ -33,7 +35,10 @@ import java.util.List;
 
 @SuppressWarnings("null")
 public class mio_icif_HeatU_Block extends BlockEntity implements MenuProvider, IMioIcifCapabilities.IHeatStorage, IWrenchable {
-    
+    private final FluidTransferBuffer scexFluidOutput = new FluidTransferBuffer(() -> ContainerToTank.markUnsaved(this));
+    private final FluidTransferBuffer scexFluidInput = new FluidTransferBuffer(() -> ContainerToTank.markUnsaved(this));
+
+
     protected final IMioIcifCapabilities.IHeatStorage heatStorage;
     protected final int baseHeatCapacity;
 
@@ -45,12 +50,14 @@ protected MachineUpgradeStats upgradeStats = MachineUpgradeStats.empty();
     public mio_icif_HeatU_Block(BlockEntityType<?> type, BlockPos pos, BlockState state) {
         this(type, pos, state, 10000, 100, 100, 20, 1000, 0.01f);
     }
-    
+
     public mio_icif_HeatU_Block(BlockEntityType<?> type, BlockPos pos, BlockState state,
                                int capacity, int maxReceive, int maxExtract,
                                int baseTemp, int maxTemp, float lossFactor) {
         super(type, pos, state);
-        this.heatStorage = MioIcifAPI.instance().getCapabilities().createHeatStorage(
+        this.heatStorage = dev.scex.si.energy.ThermalOutput.enabled()
+            ? new dev.scex.si.energy.PlatformHeatStorage(capacity, maxReceive, maxExtract, baseTemp, maxTemp, lossFactor)
+            : MioIcifAPI.instance().getCapabilities().createHeatStorage(
             capacity, maxReceive, maxExtract, baseTemp, maxTemp, lossFactor);
         this.baseHeatCapacity = capacity;
     }
@@ -60,25 +67,41 @@ protected MachineUpgradeStats upgradeStats = MachineUpgradeStats.empty();
                                int capacity, int maxReceive, int maxExtract,
                                int baseTemp, int maxTemp, float lossFactor) {
         super(type, pos, state);
-        this.heatStorage = MioIcifAPI.instance().getCapabilities().createHeatStorage(
+        this.heatStorage = dev.scex.si.energy.ThermalOutput.enabled()
+            ? new dev.scex.si.energy.PlatformHeatStorage(capacity, maxReceive, maxExtract, baseTemp, maxTemp, lossFactor)
+            : MioIcifAPI.instance().getCapabilities().createHeatStorage(
             capacity, maxReceive, maxExtract, baseTemp, maxTemp, lossFactor);
         this.baseHeatCapacity = capacity;
         this.slotLayout = layout;
         this.itemHandler = createItemHandler(layout);
     }
-    
+
+    /** Allow an independently replaced machine to choose its reviewed owned storage explicitly. */
+    protected mio_icif_HeatU_Block(BlockEntityType<?> type, BlockPos pos, BlockState state,
+                                  SlotLayout layout, IMioIcifCapabilities.IHeatStorage ownedStorage) {
+        super(type, pos, state);
+        this.heatStorage = java.util.Objects.requireNonNull(ownedStorage);
+        this.baseHeatCapacity = Math.toIntExact(ownedStorage.getMaxHeatStored());
+        this.slotLayout = layout;
+        this.itemHandler = createItemHandler(layout);
+    }
+
     public IMioIcifCapabilities.IHeatStorage getHeatStorage() {
-        return heatStorage;
+        return this;
     }
 
     @Override
     public long receiveHeat(long toReceive, boolean simulate) {
-        return heatStorage.receiveHeat(toReceive, simulate);
+        long received = heatStorage.receiveHeat(toReceive, simulate);
+        if (!simulate && received > 0) setChanged();
+        return received;
     }
 
     @Override
     public long extractHeat(long toExtract, boolean simulate) {
-        return heatStorage.extractHeat(toExtract, simulate);
+        long extracted = heatStorage.extractHeat(toExtract, simulate);
+        if (!simulate && extracted > 0) setChanged();
+        return extracted;
     }
 
     @Override
@@ -128,27 +151,37 @@ protected MachineUpgradeStats upgradeStats = MachineUpgradeStats.empty();
 
     @Override
     public void setHeat(long heat) {
+        long before = heatStorage.getHeatStored();
         heatStorage.setHeat(heat);
+        if (heatStorage.getHeatStored() != before) setChanged();
     }
 
     @Override
     public void setCapacity(long capacity) {
+        long before = heatStorage.getMaxHeatStored();
         heatStorage.setCapacity(capacity);
+        if (heatStorage.getMaxHeatStored() != before) setChanged();
     }
 
     @Override
     public long applyHeatLoss() {
-        return heatStorage.applyHeatLoss();
+        long lost = heatStorage.applyHeatLoss();
+        if (lost > 0) setChanged();
+        return lost;
     }
 
     @Override
     public long consumeHeatInternal(long amount, boolean simulate) {
-        return heatStorage.consumeHeatInternal(amount, simulate);
+        long consumed = heatStorage.consumeHeatInternal(amount, simulate);
+        if (!simulate && consumed > 0) setChanged();
+        return consumed;
     }
 
     @Override
     public long generateHeatInternal(long amount, boolean simulate) {
-        return heatStorage.generateHeatInternal(amount, simulate);
+        long generated = heatStorage.generateHeatInternal(amount, simulate);
+        if (!simulate && generated > 0) setChanged();
+        return generated;
     }
 
     @Nullable
@@ -178,9 +211,14 @@ protected MachineUpgradeStats upgradeStats = MachineUpgradeStats.empty();
         int upgradeStart = slotLayout.getStart(SlotType.UPGRADE);
         int upgradeCount = slotLayout.getCount(SlotType.UPGRADE);
         this.upgradeStats = MachineUpgradeStats.fromInventory(itemHandler, upgradeStart, upgradeCount);
-        int upgradedCapacity = baseHeatCapacity + (int) (upgradeStats.energyStorageCount * MachineUpgradeStats.ENERGY_STORAGE_BONUS);
+        applyHeatCapacityUpgrades();
+    }
+
+    protected void applyHeatCapacityUpgrades() {
+        long upgradedCapacity = upgradeStats.getHeatCapacity(baseHeatCapacity);
         if (heatStorage.getMaxHeatStored() != upgradedCapacity) {
             heatStorage.setCapacity(upgradedCapacity);
+            ContainerToTank.markUnsaved(this);
         }
     }
 
@@ -332,7 +370,7 @@ protected MachineUpgradeStats upgradeStats = MachineUpgradeStats.empty();
 
     @Nullable
     protected IItemHandler getAdjacentItemHandler(BlockPos pos, @Nullable Direction side) {
-        if (level == null || level.getBlockEntity(pos) == null) {
+        if (level == null || !level.hasChunkAt(pos) || level.getBlockEntity(pos) == null) {
             return null;
         }
         return level.getCapability(Capabilities.ItemHandler.BLOCK, pos, side);
@@ -345,7 +383,7 @@ protected MachineUpgradeStats upgradeStats = MachineUpgradeStats.empty();
 
     @Nullable
     protected IFluidHandler getAdjacentFluidHandler(BlockPos pos, @Nullable Direction side) {
-        if (level == null) {
+        if (level == null || !level.hasChunkAt(pos)) {
             return null;
         }
         BlockEntity target = level.getBlockEntity(pos);
@@ -356,73 +394,41 @@ protected MachineUpgradeStats upgradeStats = MachineUpgradeStats.empty();
     }
 
     protected void ejectFluids(IFluidHandler own, int upgradeCount) {
-        int maxPerTick = Math.max(1, upgradeCount * 1000);
-        List<Direction> configuredDirections = upgradeStats.getFluidEjectorDirections();
-        Iterable<Direction> targetDirections = !configuredDirections.isEmpty()
-            ? configuredDirections : Arrays.asList(Direction.values());
-        for (int tank = own.getTanks() - 1; tank >= 0; tank--) {
-            FluidStack fluid = own.getFluidInTank(tank);
-            if (fluid.isEmpty()) {
-                continue;
-            }
-            FluidStack toMove = fluid.copyWithAmount(Math.min(fluid.getAmount(), maxPerTick));
-            if (toMove.isEmpty()) {
-                continue;
-            }
-            for (Direction dir : targetDirections) {
-                IFluidHandler target = getAdjacentFluidHandler(worldPosition.relative(dir), dir.getOpposite());
-                if (target == null) {
-                    continue;
-                }
-                int filled = target.fill(toMove, IFluidHandler.FluidAction.EXECUTE);
-                if (filled > 0) {
-                    own.drain(fluid.copyWithAmount(filled), IFluidHandler.FluidAction.EXECUTE);
-                    toMove.setAmount(toMove.getAmount() - filled);
-                    if (toMove.isEmpty()) {
-                        break;
-                    }
-                }
+        int budget = (int) Math.min(Integer.MAX_VALUE, Math.max(0L, (long) upgradeCount * 1000));
+        var configured = upgradeStats.getFluidEjectorDirections();
+        Iterable<Direction> directions = configured.isEmpty() ? java.util.Arrays.asList(Direction.values()) : configured;
+        for (Direction direction : directions) {
+            if (budget <= 0) break;
+            BlockPos adjacentPos = worldPosition.relative(direction);
+            var adjacent = getAdjacentFluidHandler(adjacentPos, direction.getOpposite());
+            if (adjacent == null) continue;
+            var before = scexFluidOutput.pending();
+            int moved = scexFluidOutput.move(own, adjacent, budget);
+            budget -= moved;
+            if (moved > 0 || !FluidStack.matches(before, scexFluidOutput.pending())) {
+                ContainerToTank.markUnsaved(this);
+                var neighbor = level.getBlockEntity(adjacentPos);
+                if (neighbor != null) ContainerToTank.markUnsaved(neighbor);
             }
         }
     }
 
     protected void pullFluids(IFluidHandler own, int upgradeCount) {
-        int maxPerTick = Math.max(1, upgradeCount * 1000);
-        List<Direction> configuredDirections = upgradeStats.getFluidPullingDirections();
-        Iterable<Direction> sourceDirections = !configuredDirections.isEmpty()
-            ? configuredDirections : Arrays.asList(Direction.values());
-        for (int tank = 0; tank < own.getTanks(); tank++) {
-            int capacity = own.getTankCapacity(tank);
-            FluidStack current = own.getFluidInTank(tank);
-            if (current.getAmount() >= capacity) {
-                continue;
-            }
-            boolean inputTank = tank == 0 || current.isEmpty();
-            if (!inputTank) {
-                continue;
-            }
-            for (Direction dir : sourceDirections) {
-                IFluidHandler source = getAdjacentFluidHandler(worldPosition.relative(dir), dir.getOpposite());
-                if (source == null) {
-                    continue;
-                }
-                int space = capacity - current.getAmount();
-                int maxDrain = Math.min(space, maxPerTick);
-                FluidStack available = source.drain(maxDrain, IFluidHandler.FluidAction.SIMULATE);
-                if (available.isEmpty()) {
-                    continue;
-                }
-                if (!current.isEmpty() && !FluidStack.isSameFluid(available, current)) {
-                    continue;
-                }
-                if (!own.isFluidValid(tank, available)) {
-                    continue;
-                }
-                int filled = own.fill(available, IFluidHandler.FluidAction.EXECUTE);
-                if (filled > 0) {
-                    source.drain(filled, IFluidHandler.FluidAction.EXECUTE);
-                    break;
-                }
+        int budget = (int) Math.min(Integer.MAX_VALUE, Math.max(0L, (long) upgradeCount * 1000));
+        var configured = upgradeStats.getFluidPullingDirections();
+        Iterable<Direction> directions = configured.isEmpty() ? java.util.Arrays.asList(Direction.values()) : configured;
+        for (Direction direction : directions) {
+            if (budget <= 0) break;
+            BlockPos adjacentPos = worldPosition.relative(direction);
+            var adjacent = getAdjacentFluidHandler(adjacentPos, direction.getOpposite());
+            if (adjacent == null) continue;
+            var before = scexFluidInput.pending();
+            int moved = scexFluidInput.move(adjacent, own, budget);
+            budget -= moved;
+            if (moved > 0 || !FluidStack.matches(before, scexFluidInput.pending())) {
+                ContainerToTank.markUnsaved(this);
+                var neighbor = level.getBlockEntity(adjacentPos);
+                if (neighbor != null) ContainerToTank.markUnsaved(neighbor);
             }
         }
     }
@@ -443,41 +449,47 @@ protected MachineUpgradeStats upgradeStats = MachineUpgradeStats.empty();
 
         blockEntity.handleAutomationUpgrades();
     }
-    
+
     protected void distributeHeat() {
-        if (heatStorage.getHeatStored() <= 0) {
+        if (level == null || level.isClientSide || isRemoved() || heatStorage.getHeatStored() <= 0) {
             return;
         }
-        
+
         int myTemp = heatStorage.getTemperature();
-        
+
         for (Direction direction : Direction.values()) {
             BlockPos adjacentPos = worldPosition.relative(direction);
-            
+            if (!level.hasChunkAt(adjacentPos)) continue;
+
             IMioIcifCapabilities.IHeatStorage adjacentHeat = level.getCapability(
                 IMioIcifCapabilities.HEAT_STORAGE_BLOCK, adjacentPos, direction.getOpposite());
-            
+
             if (adjacentHeat == null) {
                 adjacentHeat = MioIcifAPI.instance().getCapabilities().adaptHeatStorage(
                     level.getBlockEntity(adjacentPos));
             }
-            
+
             if (adjacentHeat != null && adjacentHeat.canReceiveHeat()) {
                 int adjacentTemp = adjacentHeat.getTemperature();
-                
+
                 if (myTemp > adjacentTemp) {
-                    int tempDiff = myTemp - adjacentTemp;
-                    
-                    long maxTransfer = Math.min(heatStorage.getMaxExtract(), 
+                    long tempDiff = (long) myTemp - adjacentTemp;
+
+                    long maxTransfer = Math.min(heatStorage.getMaxExtract(),
                                                adjacentHeat.getMaxHeatStored() - adjacentHeat.getHeatStored());
                     long heatToTransfer = Math.min(maxTransfer, tempDiff / 10);
-                    
+
                     if (heatToTransfer > 0) {
                         long extracted = heatStorage.extractHeat(heatToTransfer, false);
                         if (extracted > 0) {
                             long received = adjacentHeat.receiveHeat(extracted, false);
                             if (received < extracted) {
-                                heatStorage.receiveHeat(extracted - received, false);
+                                // Returning our reserved units must bypass the external input limit.
+                                heatStorage.generateHeatInternal(extracted - Math.max(0, received), false);
+                            }
+                            if (received > 0) {
+                                var target = level.getBlockEntity(adjacentPos);
+                                if (target != null) target.setChanged();
                             }
                             setChanged();
                         }
@@ -486,33 +498,37 @@ protected MachineUpgradeStats upgradeStats = MachineUpgradeStats.empty();
             }
         }
     }
-    
+
     @Nullable
     public IMioIcifCapabilities.IHeatStorage getHeatStorageCapability(@Nullable Direction side) {
-        return heatStorage;
+        return this;
     }
-    
+
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
+        tag.put("scex_fluid_output_pending", scexFluidOutput.save(registries));
+        tag.put("scex_fluid_input_pending", scexFluidInput.save(registries));
         tag.putLong("heat", heatStorage.getHeatStored());
     }
-    
+
     @Override
     public void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
+        scexFluidOutput.load(registries, tag.getCompound("scex_fluid_output_pending"));
+        scexFluidInput.load(registries, tag.getCompound("scex_fluid_input_pending"));
         if (tag.contains("heat", net.minecraft.nbt.Tag.TAG_INT)) {
             heatStorage.setHeat(tag.getInt("heat"));
         } else if (tag.contains("heat", net.minecraft.nbt.Tag.TAG_LONG)) {
             heatStorage.setHeat(tag.getLong("heat"));
         }
     }
-    
+
     @Override
     public Component getDisplayName() {
         return Component.translatable("container.mio_icif.heat_block");
     }
-    
+
     @Nullable
     @Override
     public AbstractContainerMenu createMenu(int containerId, Inventory playerInventory, Player player) {

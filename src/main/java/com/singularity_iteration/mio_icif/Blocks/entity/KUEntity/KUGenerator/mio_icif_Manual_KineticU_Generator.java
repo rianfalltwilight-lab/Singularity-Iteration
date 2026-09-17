@@ -67,6 +67,7 @@ public class mio_icif_Manual_KineticU_Generator extends mio_icif_KineticU_Genera
             return;
         }
 
+        if (dev.scex.si.energy.KineticOutput.enabled()) return; // All work is performed by the authoritative click path.
         // 调用父类tick 方法（处理摩擦损失和动能传输
         mio_icif_KineticU_Generator.tick(level, pos, state, blockEntity);
     }
@@ -84,6 +85,20 @@ public class mio_icif_Manual_KineticU_Generator extends mio_icif_KineticU_Genera
      * @return 是否成功产生动能
      */
     public boolean onPlayerClick(Player player) {
+        if (dev.scex.si.energy.KineticOutput.enabled()) {
+            if (!(level instanceof net.minecraft.server.level.ServerLevel server) || !server.getServer().isSameThread()
+                    || player.level() != level || !player.isAlive() || player.isSpectator()
+                    || !player.canInteractWithBlock(worldPosition, 0) || !level.mayInteract(player, worldPosition)
+                    || !hasEnoughHunger(player) || isRemoved()) return false;
+            long remaining = KINETIC_PER_CLICK;
+            for (var direction : Direction.values()) {
+                remaining -= dev.scex.si.energy.KineticOutput.offer(dev.scex.si.energy.KineticOutput.at(this, direction), remaining, MAX_RPM);
+                if (remaining == 0) break;
+            }
+            boolean emitted = remaining < KINETIC_PER_CLICK;
+            if (emitted) player.getFoodData().addExhaustion(HUNGER_COST_PER_CLICK);
+            return emitted;
+        }
         if (level == null || level.isClientSide()) {
             return false;
         }

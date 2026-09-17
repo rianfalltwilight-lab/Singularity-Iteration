@@ -53,6 +53,8 @@ public class mio_icif_water_generator extends mio_icif_Energy_Generator {
 
     // 当前水槽中的水量 (mb)
     private int waterAmount = 0;
+    // Energy owed by an already consumed millibucket when the EU buffer filled mid-unit.
+    private int scexBufferedWaterEnergy;
     // 当前是否正在发电
     private boolean isGenerating = false;
     // 当前计算的发电量
@@ -83,6 +85,7 @@ public class mio_icif_water_generator extends mio_icif_Energy_Generator {
         Direction facing = state.getValue(com.singularity_iteration.mio_icif.Blocks.generator.mio_icif_Block_Water_Generator.FACING);
         // 检查朝向的方块是否是水
         BlockPos frontPos = pos.relative(facing);
+        if (!level.hasChunkAt(frontPos)) { this.hasWaterInFront = false; return; }
         BlockState frontState = level.getBlockState(frontPos);
         this.hasWaterInFront = frontState.is(Blocks.WATER);
     }
@@ -99,6 +102,7 @@ public class mio_icif_water_generator extends mio_icif_Energy_Generator {
 
         // 检查是否是水桶
         if (bucketStack.is(Items.WATER_BUCKET)) {
+            if (energyStorage.scexNetworkControlled() && bucketStack.getCount() != 1) return false;
             // 检查水槽是否有足够空间
             int spaceAvailable = WATER_CAPACITY - waterAmount;
             if (spaceAvailable < WATER_PER_BUCKET) {
@@ -140,7 +144,7 @@ public class mio_icif_water_generator extends mio_icif_Energy_Generator {
         }
 
         // 如果有水在水槽中，根据水量发电
-        if (waterAmount > 0) {
+        if (waterAmount > 0 || energyStorage.scexNetworkControlled() && scexBufferedWaterEnergy > 0) {
             // 计算可以发多少电（每1000mb水发4000EU）
             // 每tick消耗1mb水，产生4EU
             output += 4;
@@ -154,6 +158,18 @@ public class mio_icif_water_generator extends mio_icif_Energy_Generator {
      */
     @Override
     protected void generateEnergy() {
+        if (energyStorage.scexNetworkControlled()) {
+            long room = energyStorage.scexExactAmount().roomBelow(energyStorage.getCapacity()).whole();
+            var step = dev.scex.energy.ConsumableGeneration.plan(waterAmount, scexBufferedWaterEnergy,
+                ENERGY_PER_BUCKET / WATER_PER_BUCKET, 4, room, hasWaterInFront ? WATER_FACE_GENERATION : 0);
+            if (step.generated() > 0) {
+                long generated = apiGenerateEnergy(step.generated(), false);
+                if (generated != step.generated()) throw new IllegalStateException("Stable water-generation capacity changed");
+                waterAmount = Math.toIntExact(step.fuelRemaining());
+                scexBufferedWaterEnergy = Math.toIntExact(step.bufferedEnergy());
+            }
+            return;
+        }
         if (currentEnergyOutput <= 0) {
             return;
         }
@@ -177,6 +193,10 @@ public class mio_icif_water_generator extends mio_icif_Energy_Generator {
      */
     @Override
     protected void chargeItems() {
+        if (energyStorage.scexNetworkControlled()) {
+            if (dev.scex.si.energy.SolarItemCharging.chargeRange(itemHandler, BATTERY_SLOT, 1, energyStorage, getItemAPI())) setChanged();
+            return;
+        }
         ItemStack chargeStack = itemHandler.getStackInSlot(BATTERY_SLOT);
         if (chargeStack.isEmpty()) {
             return;
@@ -239,7 +259,7 @@ public class mio_icif_water_generator extends mio_icif_Energy_Generator {
 
         // 先给充电槽中的物品充电，再分配能量到相邻方块
         blockEntity.chargeItems();
-        blockEntity.distributeEnergy();
+        if (!blockEntity.energyStorage.scexNetworkControlled()) blockEntity.distributeEnergy();
 
         // 检查发电状态是否改变
         if (wasGenerating != blockEntity.isGenerating) {
@@ -360,6 +380,7 @@ public class mio_icif_water_generator extends mio_icif_Energy_Generator {
         tag.putInt("WaterAmount", waterAmount);
         tag.putLong("CurrentEnergyOutput", currentEnergyOutput);
         tag.putBoolean("HasWaterInFront", hasWaterInFront);
+        tag.putInt("scex_buffered_water_eu", scexBufferedWaterEnergy);
     }
 
     @Override
@@ -369,6 +390,8 @@ public class mio_icif_water_generator extends mio_icif_Energy_Generator {
         waterAmount = tag.getInt("WaterAmount");
         currentEnergyOutput = tag.getLong("CurrentEnergyOutput");
         hasWaterInFront = tag.getBoolean("HasWaterInFront");
+        waterAmount = Math.clamp(waterAmount, 0, WATER_CAPACITY);
+        scexBufferedWaterEnergy = Math.clamp(tag.getInt("scex_buffered_water_eu"), 0, 3);
     }
 
     @Override
@@ -378,6 +401,7 @@ public class mio_icif_water_generator extends mio_icif_Energy_Generator {
         tag.putInt("WaterAmount", waterAmount);
         tag.putLong("CurrentEnergyOutput", currentEnergyOutput);
         tag.putBoolean("HasWaterInFront", hasWaterInFront);
+        tag.putInt("scex_buffered_water_eu", scexBufferedWaterEnergy);
         return tag;
     }
 
@@ -388,6 +412,8 @@ public class mio_icif_water_generator extends mio_icif_Energy_Generator {
         waterAmount = tag.getInt("WaterAmount");
         currentEnergyOutput = tag.getLong("CurrentEnergyOutput");
         hasWaterInFront = tag.getBoolean("HasWaterInFront");
+        waterAmount = Math.clamp(waterAmount, 0, WATER_CAPACITY);
+        scexBufferedWaterEnergy = Math.clamp(tag.getInt("scex_buffered_water_eu"), 0, 3);
     }
 
     // ==================== MenuProvider 接口实现 ====================

@@ -1,5 +1,7 @@
 package com.singularity_iteration.mio_icif.energy.heat;
 
+import dev.scex.energy.BoundedUnits;
+
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.LongTag;
 import net.minecraft.nbt.Tag;
@@ -27,12 +29,12 @@ public class HeatStorage implements IHeatStorage, INBTSerializable<Tag> {
     
     public HeatStorage(long capacity, long maxReceive, long maxExtract, 
                        int baseTemp, int maxTemp, float lossFactor) {
-        this.capacity = capacity;
-        this.maxReceive = maxReceive;
-        this.maxExtract = maxExtract;
+        this.capacity = Math.max(0, capacity);
+        this.maxReceive = Math.max(0, maxReceive);
+        this.maxExtract = Math.max(0, maxExtract);
         this.baseTemp = baseTemp;
-        this.maxTemp = maxTemp;
-        this.lossFactor = lossFactor;
+        this.maxTemp = Math.max(baseTemp, maxTemp);
+        this.lossFactor = BoundedUnits.nonNegativeFactor(lossFactor);
         this.heat = 0;
     }
     
@@ -43,7 +45,7 @@ public class HeatStorage implements IHeatStorage, INBTSerializable<Tag> {
     public HeatStorage(long capacity, long maxReceive, long maxExtract, long heat,
                        int baseTemp, int maxTemp, float lossFactor) {
         this(capacity, maxReceive, maxExtract, baseTemp, maxTemp, lossFactor);
-        this.heat = Math.max(0, Math.min(capacity, heat));
+        setHeat(heat);
     }
     
     @Override
@@ -105,25 +107,23 @@ public class HeatStorage implements IHeatStorage, INBTSerializable<Tag> {
     
     @Override
     public int getTemperature() {
-        if (this.capacity == 0) return this.baseTemp;
-        long heatPercent = (this.heat * 100) / this.capacity;
-        return this.baseTemp + (int)((heatPercent * (this.maxTemp - this.baseTemp)) / 100);
+        return BoundedUnits.gauge(this.heat, this.capacity, this.baseTemp, this.maxTemp);
     }
     
     @Override
     public long getHeatLossPerTick() {
         int temp = getTemperature();
         if (temp <= this.baseTemp) return 0;
-        return (long) ((temp - this.baseTemp) * this.lossFactor);
+        return Math.min(this.heat, (long) (((long) temp - this.baseTemp) * this.lossFactor));
     }
     
     public void setHeat(long heat) {
-        this.heat = Math.max(0, Math.min(this.capacity, heat));
+        this.heat = BoundedUnits.clamp(heat, this.capacity);
     }
     
     public void setCapacity(long capacity) {
         this.capacity = Math.max(0, capacity);
-        this.heat = Math.min(this.heat, this.capacity);
+        this.heat = BoundedUnits.clamp(this.heat, this.capacity);
     }
     
     public long applyHeatLoss() {
@@ -137,7 +137,7 @@ public class HeatStorage implements IHeatStorage, INBTSerializable<Tag> {
     }
     
     public long consumeHeatInternal(long amount, boolean simulate) {
-        long heatConsumed = Math.min(this.heat, amount);
+        long heatConsumed = BoundedUnits.extract(this.heat, amount, Long.MAX_VALUE);
         if (!simulate) {
             this.heat -= heatConsumed;
         }
@@ -145,7 +145,7 @@ public class HeatStorage implements IHeatStorage, INBTSerializable<Tag> {
     }
     
     public long generateHeatInternal(long amount, boolean simulate) {
-        long heatGenerated = Math.min(this.capacity - this.heat, amount);
+        long heatGenerated = BoundedUnits.receive(this.heat, this.capacity, amount, Long.MAX_VALUE);
         if (!simulate) {
             this.heat += heatGenerated;
         }

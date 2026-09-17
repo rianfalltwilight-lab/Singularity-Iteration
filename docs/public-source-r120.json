@@ -1,0 +1,24 @@
+{
+  "snapshot": "R120 scoped reviewed source inputs",
+  "sourceArchiveSHA256": "7ff4fd986f629bdc7fe067be2b4d6e6e399b0f0d9e196714309675e5f45c0ae6",
+  "sourceFilesMatched": 309,
+  "reviewedOwners": 160,
+  "compiledClassesInFrozenEvidence": 348,
+  "retiredSourceFiles": [
+    "src/main/java/com/singularity_iteration/mio_icif/uu/ILateRecipeResolver.java",
+    "src/main/java/com/singularity_iteration/mio_icif/uu/IRecipeResolver.java",
+    "src/main/java/com/singularity_iteration/mio_icif/uu/LeanItemStack.java",
+    "src/main/java/com/singularity_iteration/mio_icif/uu/MachineRecipeResolver.java",
+    "src/main/java/com/singularity_iteration/mio_icif/uu/RecipeTransformation.java",
+    "src/main/java/com/singularity_iteration/mio_icif/uu/SmeltingRecipeResolver.java",
+    "src/main/java/com/singularity_iteration/mio_icif/uu/UuGraph.java",
+    "src/main/java/com/singularity_iteration/mio_icif/uu/UuIndex.java",
+    "src/main/java/com/singularity_iteration/mio_icif/uu/UuRecipeWhitelist.java",
+    "src/main/java/com/singularity_iteration/mio_icif/uu/UuScanValues.java",
+    "src/main/java/com/singularity_iteration/mio_icif/uu/VanillaRecipeResolver.java"
+  ],
+  "fullCleanBuild": false,
+  "fullModRelease": false,
+  "newGameTestsRun": false,
+  "productionDeployed": false
+}

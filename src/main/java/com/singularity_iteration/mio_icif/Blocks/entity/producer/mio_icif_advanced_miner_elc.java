@@ -8,6 +8,12 @@ import com.singularity_iteration.mio_icif.Blocks.mio_icif_blocks;
 import com.singularity_iteration.mio_icif.Items.Tools.mio_icif_od_scanner;
 import com.singularity_iteration.mio_icif.Items.Tools.mio_icif_ov_scanner;
 import com.singularity_iteration.mio_icif.energy.EnergyUnit.CableTier;
+import dev.scex.si.processing.PendingDrops;
+import dev.scex.si.processing.MiningLoot;
+import dev.scex.si.processing.MiningPayment;
+import dev.scex.si.processing.MiningLayer;
+import dev.scex.si.energy.ToolEnergy;
+import dev.scex.si.energy.ContainerToTank;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
@@ -45,6 +51,13 @@ import com.mojang.logging.LogUtils;
  * - 自动处理液体（不需要泵 * - 更大的扫描范围（9x9 * - HV电压等级
  */
 public class mio_icif_advanced_miner_elc extends mio_icif_producer {
+    private final MiningPayment scexMiningPayment = new MiningPayment(() -> ContainerToTank.markUnsaved(this));
+    private boolean scexScanConfigurationDirty = true;
+    private final int[] scexOutputCursors = new int[6];
+    private final boolean[] scexOutputScanned = new boolean[6];
+    private ItemStack scexOutputHead = ItemStack.EMPTY;
+    private final PendingDrops scexPendingDrops = new PendingDrops(() -> ContainerToTank.markUnsaved(this));
+
     private static final Logger LOGGER = LogUtils.getLogger();
 
     private static final SlotLayout LAYOUT = SlotLayout.builder()
@@ -137,7 +150,7 @@ private int currentDepth = 0;           // 当前挖掘深度
 */
     public ItemStack getFilterStack(int index) {
         if (index >= 0 && index < FILTER_COUNT) {
-            return filterStacks[index];
+            return filterStacks[index].copy();
         }
         return ItemStack.EMPTY;
     }
@@ -147,7 +160,7 @@ private int currentDepth = 0;           // 当前挖掘深度
 */
     public void setFilterStack(int index, ItemStack stack) {
         if (index >= 0 && index < FILTER_COUNT) {
-            filterStacks[index] = stack.copy();
+            filterStacks[index] = stack.isEmpty() ? ItemStack.EMPTY : stack.copyWithCount(1);
             setChanged();
             if (level != null && !level.isClientSide) {
                 level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 3);
@@ -180,17 +193,10 @@ private int currentDepth = 0;           // 当前挖掘深度
      * 获取扫描器类
 */
     private ScannerType getScannerType() {
-        ItemStack scannerStack = itemHandler.getStackInSlot(SLOT_SCANNER);
-        if (scannerStack.isEmpty()) {
-            return ScannerType.NONE;
-        }
-        // 根据物品名称判断扫描器类
-   String itemName = scannerStack.getItem().toString().toLowerCase();
-        if (itemName.contains("ov") || itemName.contains("ov_scanner")) {
-            return ScannerType.OV;
-        }
-        // 默认OD扫描
-   return ScannerType.OD;
+        var scanner = itemHandler.getStackInSlot(SLOT_SCANNER);
+        if (scanner.getItem() instanceof mio_icif_ov_scanner) return ScannerType.OV;
+        if (scanner.getItem() instanceof mio_icif_od_scanner) return ScannerType.OD;
+        return ScannerType.NONE;
     }
 
     /**
@@ -247,6 +253,7 @@ private int currentDepth = 0;           // 当前挖掘深度
 
     @Override
     protected boolean canWork() {
+        if (scexMiningPayment.isBusy() || scexPendingDrops.isBusy() || !scexPendingDrops.isEmpty()) return false;
         // 检查基本条
    if (level == null || level.isClientSide) {
             return false;
@@ -293,109 +300,60 @@ private int currentDepth = 0;           // 当前挖掘深度
        effectiveScanRadius = getScanRadiusByScanner();
 
         // 对齐IC2 1.12.2: 每周期扫描方块数 = 5 * (overclockerCount + 1)
-        maxBlockScanCount = 5 * (overclockerCount + 1);
+        maxBlockScanCount = MiningLayer.cycleBudget(overclockerCount);
 
-        long newCapacity = DEFAULT_CAPACITY + (energyStorageCount * 100000L);
+        long newCapacity = DEFAULT_CAPACITY + (Math.max(0, energyStorageCount) * 100000L);
         if (energyStorage.getCapacity() != newCapacity) {
             energyStorage.setCapacity(newCapacity);
         }
     }
 
     @Override
+    protected void onTick() {
+        if (level instanceof ServerLevel && (scexScanConfigurationDirty || level.getGameTime() % 100 == 0)) {
+            scanUpgrades(); scexScanConfigurationDirty = false;
+        }
+        flushPendingLoot();
+    }
+
+    @Override
     protected void doWork() {
-        if (level == null || level.isClientSide) return;
-
-        // �?00 ticks扫描一次升
-       if (level.getGameTime() % 100 == 0) {
+        if (!(level instanceof ServerLevel serverLevel) || !serverLevel.getServer().isSameThread()) return;
+        if (scexMiningPayment.isBusy() || scexPendingDrops.isBusy() || !scexPendingDrops.isEmpty()) { stopWork(); return; }
+        if (tipPos == null) {
             scanUpgrades();
-        }
-
-        ServerLevel serverLevel = (ServerLevel) level;
-
-        // 初始化采矿位
-       if (tipPos == null) {
-            scanUpgrades();
-            tipPos = worldPosition.below();
-            currentDepth = 0;
-            currentOreIndex = 0;
+            tipPos = worldPosition.below(); currentDepth = 0; currentOreIndex = 0;
             generateLayerBlocks();
         }
-
-        // 如果当前层列表为空（比如从旧存档加载），重新生成
-        if (oresInCurrentLayer.isEmpty()) {
+        if (tipPos.getY() < level.getMinBuildHeight() || tipPos.getY() >= level.getMaxBuildHeight()) { stopWork(); return; }
+        if (oresInCurrentLayer.isEmpty()) generateLayerBlocks();
+        if (currentOreIndex >= oresInCurrentLayer.size()) {
+            if (tipPos.getY() <= level.getMinBuildHeight()) { stopWork(); return; }
+            tipPos = tipPos.below(); currentDepth = Math.max(0, worldPosition.getY() - tipPos.getY() - 1); currentOreIndex = 0;
             generateLayerBlocks();
         }
-
-        // 如果当前层挖掘完成，进入下一
-       if (currentOreIndex >= oresInCurrentLayer.size()) {
-            tipPos = tipPos.below();
-            currentDepth++;
-            currentOreIndex = 0;
-            generateLayerBlocks();
-
-            if (tipPos.getY() < level.getMinBuildHeight()) {
-                stopWork();
-                return;
-            }
-
-            if (oresInCurrentLayer.isEmpty()) {
-                return;
-            }
-        }
-
-        // 对齐IC2 1.12.2: �?0 ticks为一个工作周期，每周期扫描并挖掘最多maxBlockScanCount个方
-       workTicker++;
-        if (workTicker < DEFAULT_WORK_TIME) {
-            isWorking = true;
-            return;
-        }
+        workTicker++;
+        ContainerToTank.markUnsaved(this);
+        if (workTicker < DEFAULT_WORK_TIME) { isWorking = true; return; }
         workTicker = 0;
-
-        // 批量扫描并挖掘（对齐IC2: 每周期最多扫描maxBlockScanCount个方块）
         int scanned = 0;
-        int blocksMined = 0;
-        while (scanned < maxBlockScanCount && currentOreIndex < oresInCurrentLayer.size()) {
+        while (scanned < maxBlockScanCount && currentOreIndex < oresInCurrentLayer.size() && scexPendingDrops.isEmpty()) {
             BlockPos targetPos = oresInCurrentLayer.get(currentOreIndex);
-            BlockState targetState = level.getBlockState(targetPos);
+            if (!serverLevel.getWorldBorder().isWithinBounds(targetPos)) { currentOreIndex++; scanned++; continue; }
+            // Do not load a chunk to scan it, and do not permanently skip an unloaded coordinate.
+            if (!serverLevel.getChunkSource().hasChunk(targetPos.getX() >> 4, targetPos.getZ() >> 4)) { stopWork(); return; }
+            BlockState targetState = serverLevel.getBlockState(targetPos);
             scanned++;
-
-            // 跳过不可挖掘的方块（空气、基岩、黑名单等）
-            if (!canMineBlock(targetState, targetPos)) {
-                currentOreIndex++;
-                continue;
-            }
-
-            // 消耗扫描器能量（原版IC2: 64 EU/次扫描）
-            ItemStack scannerStack = itemHandler.getStackInSlot(SLOT_SCANNER);
-            if (!scannerStack.isEmpty() && getItemAPI().isElectricTool(scannerStack)) {
-                if (getItemAPI().getElectricToolStored(scannerStack) < SCANNER_ENERGY_COST) {
-                    LOGGER.info("[AdvancedMiner] 扫描器能量不足，停止工作");
-                    stopWork();
-                    return;
-                }
-                getItemAPI().dischargeElectricTool(scannerStack, SCANNER_ENERGY_COST, false);
-            }
-
-            // 消耗机器能量（原版IC2: 512 EU/次挖掘）
-            long energyBefore = energyStorage.getAmount();
-            if (energyBefore < BASE_ENERGY_COST) {
-                stopWork();
-                return;
-            }
-            long actuallyExtracted = energyStorage.extract(BASE_ENERGY_COST, false);
-            if (actuallyExtracted <= 0) {
-                stopWork();
-                return;
-            }
-
-            // 挖掘方块
-            if (mineBlock(serverLevel, targetPos)) {
-                blocksMined++;
-            }
+            if (!canMineBlock(targetState, targetPos)) { currentOreIndex++; continue; }
+            if (!mineBlock(serverLevel, targetPos)) { stopWork(); return; }
             currentOreIndex++;
         }
+        isWorking = scanned > 0;
+    }
 
-        isWorking = blocksMined > 0 || scanned > 0;
+    @Override
+    protected void updateProgress() {
+        // This machine schedules work with its persisted workTicker, not the generic recipe counter.
     }
     /**
      * tip 移动到新位置
@@ -424,41 +382,10 @@ private int currentDepth = 0;           // 当前挖掘深度
 */
     private void generateLayerBlocks() {
         oresInCurrentLayer.clear();
-
-        if (level == null || tipPos == null) {
-            return;
-        }
-
-        // 使用 effectiveScanRadius（已包含扫描器类型和牵引光束升级
-   int radius = effectiveScanRadius;
-        if (radius == 0) {
-            // 无扫描器，只挖正下方
-            oresInCurrentLayer.add(tipPos);
-            return;
-        }
-
-        // 扫描以采矿机为中心（XZ），tip 所在的这一层（Y）正方形区域
-        BlockPos center = new BlockPos(worldPosition.getX(), tipPos.getY(), worldPosition.getZ());
-
-        // 从中心向外螺旋扫描，确保先挖中心再挖边缘
-        for (int r = 0; r <= radius; r++) {
-            for (int x = -r; x <= r; x++) {
-                for (int z = -r; z <= r; z++) {
-                    // 只处理当前环的方块（避免重复
-               if (Math.abs(x) != r && Math.abs(z) != r) {
-                        continue;
-                    }
-
-                    BlockPos checkPos = center.offset(x, 0, z);
-                    BlockState state = level.getBlockState(checkPos);
-
-                    // 高级采矿机挖掘几乎所有方块（除了空气和基岩），同时检查黑白名
-               if (canMineBlock(state, checkPos)) {
-                        oresInCurrentLayer.add(checkPos);
-                    }
-                }
-            }
-        }
+        if (tipPos == null) return;
+        var center = new BlockPos(worldPosition.getX(), tipPos.getY(), worldPosition.getZ());
+        oresInCurrentLayer.addAll(MiningLayer.positions(center, Math.clamp(effectiveScanRadius, 0, MiningLayer.MAX_RADIUS)));
+        ContainerToTank.markUnsaved(this);
     }
 
     /**
@@ -500,7 +427,7 @@ private int currentDepth = 0;           // 当前挖掘深度
      */
     private boolean canMineBlock(BlockState state, BlockPos pos) {
         // 不能挖掘空气、基
-   if (state.isAir() || state.is(Blocks.BEDROCK)) {
+   if (state.isAir() || state.is(Blocks.BEDROCK) || state.getBlock() instanceof net.minecraft.world.level.block.LiquidBlock) {
             return false;
         }
 
@@ -555,117 +482,68 @@ private int currentDepth = 0;           // 当前挖掘深度
      * 挖掘方块并收集掉落物
      */
     private boolean mineBlock(ServerLevel serverLevel, BlockPos pos) {
-        BlockState state = serverLevel.getBlockState(pos);
-
-        if (!canMineBlock(state, pos)) {
-            return false;
-        }
-
-        // 获取掉落
-   List<ItemStack> drops;
-
+        if (!serverLevel.getChunkSource().hasChunk(pos.getX() >> 4, pos.getZ() >> 4)
+                || !canMineBlock(serverLevel.getBlockState(pos), pos)) return false;
+        ItemStack tool = ItemStack.EMPTY;
         if (silkTouchMode) {
-            // 精确采集模式：直接获取方块物品本
-       // 不使用附魔，直接获取方块的物品形
-       ItemStack blockItem = new ItemStack(state.getBlock().asItem());
-            drops = new ArrayList<>();
-            if (!blockItem.isEmpty()) {
-                drops.add(blockItem);
-            }
-        } else {
-            // 普通模式：正常掉落
-            LootParams.Builder builder = new LootParams.Builder(serverLevel)
-                .withParameter(LootContextParams.ORIGIN, Vec3.atCenterOf(pos))
-                .withParameter(LootContextParams.TOOL, ItemStack.EMPTY);
-
-            drops = state.getDrops(builder);
+            tool = new ItemStack(net.minecraft.world.item.Items.DIAMOND_PICKAXE);
+            var silk = serverLevel.registryAccess().lookupOrThrow(net.minecraft.core.registries.Registries.ENCHANTMENT)
+                .get(net.minecraft.world.item.enchantment.Enchantments.SILK_TOUCH);
+            if (silk.isPresent()) tool.enchant(silk.get(), 1);
         }
-
-        // 将掉落物存入存储
-   for (ItemStack drop : drops) {
-            if (!insertItemToStorage(drop)) {
-                // 存储槽已
-           return false;
-            }
-        }
-
-        // 移除方块
-        serverLevel.removeBlock(pos, false);
-
-        return true;
+        final ItemStack lootTool = tool;
+        boolean removed = scexMiningPayment.attempt(energyStorage, itemHandler, SLOT_SCANNER, getItemAPI(),
+            BASE_ENERGY_COST, SCANNER_ENERGY_COST,
+            payment -> MiningLoot.capture(serverLevel, pos, lootTool, scexPendingDrops, drops -> true, payment));
+        if (removed) flushPendingLoot();
+        return removed;
     }
 
     /**
      * 将物品插入相邻容器或掉落在地
 * 高级采矿机没有内部存储槽，挖掘的方块需要输出到相邻容器或掉
 */
-    private boolean insertItemToStorage(ItemStack stack) {
-        if (stack.isEmpty()) return true;
-
-        // 尝试输出到相邻容
-   if (level != null && !level.isClientSide) {
-            for (Direction direction : Direction.values()) {
-                IItemHandler neighborHandler = getAdjacentItemHandler(worldPosition.relative(direction), direction.getOpposite());
-                if (neighborHandler != null) {
-                    for (int i = 0; i < neighborHandler.getSlots(); i++) {
-                        stack = neighborHandler.insertItem(i, stack, false);
-                        if (stack.isEmpty()) return true;
-                    }
-                }
-            }
-        }
-
-        // 如果无法输出到容器，掉落在地
-   if (!stack.isEmpty() && level != null && !level.isClientSide) {
-            BlockPos dropPos = worldPosition.above();
-            net.minecraft.world.entity.item.ItemEntity itemEntity = new net.minecraft.world.entity.item.ItemEntity(
-                level, dropPos.getX() + 0.5, dropPos.getY() + 0.5, dropPos.getZ() + 0.5, stack.copy());
-            level.addFreshEntity(itemEntity);
-            return true;
-        }
-
-        return false;
+    private void resetLootOutputScan() {
+        java.util.Arrays.fill(scexOutputCursors, 0);
+        java.util.Arrays.fill(scexOutputScanned, false);
+        scexOutputHead = scexPendingDrops.first();
     }
 
-    /**
-     * 处理液体（高级采矿机自动处理，不需要泵
-*/
-    private void handleFluid(FluidState fluidState, BlockPos fluidPos) {
-        // 高级采矿机当前直接清除扫描范围内的源液体
-   if (level != null) {
-            level.setBlock(fluidPos, Blocks.AIR.defaultBlockState(), 3);
-        }
-    }
-
-    /**
-     * 检查并抽取当前层的液体
-     */
-    @SuppressWarnings("unused")
-    private boolean checkAndExtractLayerFluid() {
-        if (level == null || tipPos == null) return false;
-
-        BlockPos center = new BlockPos(worldPosition.getX(), tipPos.getY(), worldPosition.getZ());
-        boolean foundFluid = false;
-
-        for (int x = -effectiveScanRadius; x <= effectiveScanRadius; x++) {
-            for (int z = -effectiveScanRadius; z <= effectiveScanRadius; z++) {
-                BlockPos checkPos = center.offset(x, 0, z);
-                FluidState fluidState = level.getFluidState(checkPos);
-
-                if (!fluidState.isEmpty() && fluidState.isSource()) {
-                    // 发现液体，处理它
-                    handleFluid(fluidState, checkPos);
-                    foundFluid = true;
-                }
+    private void flushPendingLoot() {
+        if (!(level instanceof ServerLevel server) || !server.getServer().isSameThread() || scexPendingDrops.isEmpty()) return;
+        if (!ItemStack.matches(scexOutputHead, scexPendingDrops.first())) resetLootOutputScan();
+        boolean allScanned = true;
+        for (Direction direction : Direction.values()) {
+            int face = direction.ordinal();
+            BlockPos neighborPos = worldPosition.relative(direction);
+            var target = getAdjacentItemHandler(neighborPos, direction.getOpposite());
+            if (target == null) { scexOutputScanned[face] = true; continue; }
+            int size = target.getSlots();
+            int start = Math.min(Math.max(0, scexOutputCursors[face]), size);
+            int end = (int) Math.min(size, (long) start + 64);
+            int moved = scexPendingDrops.deliverRange(target, start, end - start);
+            if (moved > 0) {
+                var neighbor = level.getBlockEntity(neighborPos);
+                if (neighbor != null) ContainerToTank.markUnsaved(neighbor);
+                resetLootOutputScan();
+                return;
             }
+            scexOutputCursors[face] = end;
+            if (end >= size) scexOutputScanned[face] = true;
+            allScanned &= scexOutputScanned[face];
         }
-
-        return foundFluid;
+        if (allScanned) {
+            // Scan every slot, across ticks for large handlers, before using the existing ground-output fallback.
+            scexPendingDrops.spawn(server, worldPosition.above());
+            resetLootOutputScan();
+        }
     }
 
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
+        tag.put("scex_pending_mining_drops", scexPendingDrops.save(registries));
+        tag.put("scex_mining_payment", scexMiningPayment.save());
         tag.putInt("currentDepth", currentDepth);
         tag.putInt("currentOreIndex", currentOreIndex);
         tag.putBoolean("silkTouchMode", silkTouchMode);
@@ -689,22 +567,35 @@ private int currentDepth = 0;           // 当前挖掘深度
     @Override
     public void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
-        currentDepth = tag.getInt("currentDepth");
-        currentOreIndex = tag.getInt("currentOreIndex");
+        scexPendingDrops.load(registries, tag.getList("scex_pending_mining_drops", net.minecraft.nbt.Tag.TAG_COMPOUND));
+        scexMiningPayment.load(tag.getCompound("scex_mining_payment"));
+        scexScanConfigurationDirty = true;
+        currentDepth = Math.max(0, tag.getInt("currentDepth"));
+        currentOreIndex = Math.max(0, tag.getInt("currentOreIndex"));
         silkTouchMode = tag.getBoolean("silkTouchMode");
         autoEjectMode = tag.getBoolean("autoEjectMode");
         whitelistMode = tag.getBoolean("whitelistMode");
-        workTicker = tag.getInt("workTicker");
+        workTicker = Math.clamp(tag.getInt("workTicker"), 0, DEFAULT_WORK_TIME - 1);
+        tipPos = null;
         if (tag.contains("tipPos")) {
             tipPos = BlockPos.of(tag.getLong("tipPos"));
         }
         oresInCurrentLayer.clear();
         if (tag.contains("oresInCurrentLayer")) {
             long[] orePositions = tag.getLongArray("oresInCurrentLayer");
-            for (long pos : orePositions) {
-                oresInCurrentLayer.add(BlockPos.of(pos));
+            if (tipPos != null && tipPos.getX() == worldPosition.getX() && tipPos.getZ() == worldPosition.getZ()
+                    && orePositions.length <= MiningLayer.MAX_POSITIONS) {
+                var unique = new java.util.HashSet<BlockPos>();
+                for (long packed : orePositions) {
+                    var position = BlockPos.of(packed);
+                    if (!MiningLayer.contains(tipPos, position) || !unique.add(position)) { oresInCurrentLayer.clear(); break; }
+                    oresInCurrentLayer.add(position);
+                }
             }
         }
+        currentOreIndex = Math.min(currentOreIndex, oresInCurrentLayer.size());
+        if (tipPos != null && (tipPos.getX() != worldPosition.getX() || tipPos.getZ() != worldPosition.getZ())) tipPos = null;
+        resetLootOutputScan();
         loadFilterStacks(tag, registries);
     }
 
@@ -776,7 +667,7 @@ private int currentDepth = 0;           // 当前挖掘深度
 
         if (!level.isClientSide()) {
             blockEntity.chargeTool();
-            
+
             boolean isLit = state.getValue(com.singularity_iteration.mio_icif.Blocks.Producer.mio_icif_block_advanced_miner_elc.LIT);
             if (blockEntity.isWorking() != isLit) {
                 level.setBlock(pos, state.setValue(com.singularity_iteration.mio_icif.Blocks.Producer.mio_icif_block_advanced_miner_elc.LIT, blockEntity.isWorking()), 3);
@@ -785,21 +676,8 @@ private int currentDepth = 0;           // 当前挖掘深度
     }
 
     private void chargeTool() {
-        ItemStack scannerStack = itemHandler.getStackInSlot(SLOT_SCANNER);
-        if (!scannerStack.isEmpty() && getItemAPI().isElectricTool(scannerStack)) {
-            long availableEnergy = energyStorage.getAmount();
-            if (availableEnergy > 0) {
-                long scannerMaxEnergy = getItemAPI().getElectricToolMaxEnergy(scannerStack);
-                long currentScannerEnergy = getItemAPI().getElectricToolStored(scannerStack);
-                long canAdd = Math.min(scannerMaxEnergy - currentScannerEnergy, availableEnergy);
-                if (canAdd > 0) {
-                    long added = getItemAPI().chargeElectricTool(scannerStack, canAdd, false);
-                    if (added > 0) {
-                        apiUseEnergy(added, false);
-                    }
-                }
-            }
-        }
+        if (scexMiningPayment.isBusy() || scexPendingDrops.isBusy()) return;
+        ToolEnergy.charge(itemHandler, SLOT_SCANNER, energyStorage, getItemAPI());
     }
 
     /**
@@ -810,7 +688,7 @@ private int currentDepth = 0;           // 当前挖掘深度
      */
     public void handleButtonClick(int id) {
         if (level == null || level.isClientSide) return;
-        
+
         switch (id) {
             case 0 -> {
                 tipPos = null;

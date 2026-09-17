@@ -62,6 +62,27 @@ public class MachineItemHandler extends ItemStackHandler {
         return layout;
     }
 
+    /** Owner-side slot commit: validate all snapshots and publish all values before notifying observers. */
+    public boolean scexCommitSlots(int[] indices, ItemStack[] expected, ItemStack[] replacement) {
+        return scexCommitSlots(indices, expected, replacement, () -> {});
+    }
+
+    /** Owner state is published before inventory-change notifications can observe the commit. */
+    public boolean scexCommitSlots(int[] indices, ItemStack[] expected, ItemStack[] replacement, Runnable publishOwnerState) {
+        java.util.Objects.requireNonNull(publishOwnerState, "owner state publication");
+        if (indices.length != expected.length || indices.length != replacement.length) return false;
+        for (int i = 0; i < indices.length; i++) {
+            int slot = indices[i];
+            if (slot < 0 || slot >= getSlots() || expected[i] == null || replacement[i] == null
+                    || !ItemStack.matches(stacks.get(slot), expected[i])) return false;
+            for (int j = 0; j < i; j++) if (indices[j] == slot) return false;
+        }
+        for (int i = 0; i < indices.length; i++) stacks.set(indices[i], replacement[i].copy());
+        publishOwnerState.run();
+        for (int slot : indices) onContentsChanged(slot);
+        return true;
+    }
+
     @Override
     public boolean isItemValid(int slot, ItemStack stack) {
         if (stack.isEmpty()) return true;
@@ -125,7 +146,8 @@ public class MachineItemHandler extends ItemStackHandler {
 
     protected boolean isBattery(ItemStack stack) {
         return MioIcifAPI.instance().getItemAPI().isBattery(stack)
-            || stack.getItem() == net.minecraft.world.item.Items.REDSTONE;
+            || stack.getItem() == net.minecraft.world.item.Items.REDSTONE
+            || dev.scex.si.energy.FeMachineBridge.dischargeable(stack);
     }
 
     protected boolean isUpgrade(ItemStack stack) {

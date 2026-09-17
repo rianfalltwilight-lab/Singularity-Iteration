@@ -105,185 +105,15 @@ public class mio_icif_pipe_item_extract extends mio_icif_pipe_item implements IE
      * 根据存储的能量计算当前传输速率
      * 每tick消耗能量来维持速度
      */
-    private void updatePowerState() {
-        if (storedEnergy > 0) {
-            // 有能量存储，根据能量计算速度
-            // 计算可提升的速率 = 可用能量 / 每物品所需能量
-            int rateBoost = (int) (storedEnergy / EU_PER_ITEM);
-            // 限制在基础速率和最大速率之间
-            currentTransferRate = Math.min(BASE_TRANSFER_RATE + rateBoost, MAX_TRANSFER_RATE);
-
-            // 消耗能量来维持当前速率
-            int rateAboveBase = currentTransferRate - BASE_TRANSFER_RATE;
-            if (rateAboveBase > 0) {
-                long energyConsumed = (long) (rateAboveBase * EU_PER_ITEM);
-                storedEnergy = Math.max(0, storedEnergy - energyConsumed);
-            }
-        } else {
-            // 无能量，使用基础速率
-            currentTransferRate = BASE_TRANSFER_RATE;
-        }
-    }
-
-    /**
-     * 获取当前传输速率
-     */
-    public int getCurrentTransferRate() {
+    public int getCurrentTransferRate() { return currentTransferRate; }
+    @Override protected int extractionLimit() {
+        currentTransferRate = Math.min(64, BASE_TRANSFER_RATE + (int)(Math.max(0,storedEnergy) / 2));
         return currentTransferRate;
     }
-
-    @Override
-    protected void doTransfer() {
-        if (level == null || level.isClientSide()) return;
-
-        // 更新电力状
-        updatePowerState();
-
-        // 减少冷却计数
-        if (transferCooldown > 0) {
-            transferCooldown--;
-            return;
-        }
-
-        // 执行传输
-        boolean transferred = extractAndTransferItem();
-        if (transferred) {
-            // 根据是否有电力决定冷却时
-            // 有电力时使用快速冷8 tick)，无电力时使用慢速冷20 tick)
-            if (storedEnergy > 0) {
-                transferCooldown = TRANSFER_COOLDOWN; // 8 tick
-            } else {
-                transferCooldown = BASE_TRANSFER_COOLDOWN; // 20 tick
-            }
-        }
-    }
-
-    /**
-     * 从容器提取物品并传输到运输管
-     * 根据电力决定每次提取和传输的物品数量
-     */
-    @Override
-    protected boolean extractAndTransferItem() {
-        // 收集所有源和需求方
-        List<ItemSource> containerSources = new ArrayList<>();
-        List<mio_icif_pipe_item> pipeNeighbors = new ArrayList<>();
-
-        for (Direction dir : Direction.values()) {
-            if (!isConnected(dir)) continue;
-
-            BlockPos adjacentPos = worldPosition.relative(dir);
-
-            // 检查是否是其他管道
-            if (level.getBlockEntity(adjacentPos) instanceof mio_icif_pipe_item otherPipe) {
-                pipeNeighbors.add(otherPipe);
-                continue;
-            }
-
-            // 获取容器的能
-            IItemHandler handler = level.getCapability(
-                Capabilities.ItemHandler.BLOCK, adjacentPos, dir.getOpposite()
-            );
-
-            if (handler == null) continue;
-
-            // 收集容器作为
-            for (int slot = 0; slot < handler.getSlots(); slot++) {
-                ItemStack available = handler.extractItem(slot, currentTransferRate, true);
-                if (!available.isEmpty() && available.getCount() > 0) {
-                    containerSources.add(new ItemSource(adjacentPos, dir, handler, slot, available, false));
-                    break;
-                }
-            }
-        }
-
-        // 输入型：从容器提取，输出给运输型管道
-        if (!containerSources.isEmpty()) {
-            // 使用访问记录防止循环
-            Set<BlockPos> visited = new HashSet<>();
-            visited.add(worldPosition);
-
-            // 首先检查是否有可接收的运输型管
-            List<PipeTarget> acceptingPipes = new ArrayList<>();
-            for (mio_icif_pipe_item pipe : pipeNeighbors) {
-                // 管道需要能接受物品（运输型
-                if (!pipe.canInsert() || visited.contains(pipe.getBlockPos())) continue;
-                if (pipe.isProcessing()) continue;
-
-                // 计算从当前管道指向目标管道的方向，目标管道收到物品时来源方向是反方向
-                Direction toPipeDir = Direction.fromDelta(
-                    pipe.getBlockPos().getX() - worldPosition.getX(),
-                    pipe.getBlockPos().getY() - worldPosition.getY(),
-                    pipe.getBlockPos().getZ() - worldPosition.getZ()
-                );
-                IItemHandler pipeHandler = pipe.getItemHandlerCapability(toPipeDir != null ? toPipeDir.getOpposite() : null);
-                if (pipeHandler == null) continue;
-
-                // 测试是否可以插入
-                ItemStack testStack = new ItemStack(net.minecraft.world.item.Items.STONE, 1);
-                ItemStack remainingTest = pipeHandler.insertItem(0, testStack, true);
-                if (!remainingTest.isEmpty()) continue;
-
-                acceptingPipes.add(new PipeTarget(pipe, pipeHandler, toPipeDir));
-            }
-
-            // 没有可接收的管道，不提取物品
-            if (acceptingPipes.isEmpty()) {
-                return false;
-            }
-
-            // 使用轮询方式选择源容
-            int sourceIndex = inputSourceIndex % containerSources.size();
-            ItemSource source = containerSources.get(sourceIndex);
-            inputSourceIndex = (inputSourceIndex + 1) % containerSources.size();
-
-            // 根据当前速率决定提取数量
-            int extractAmount = Math.min(currentTransferRate, source.item.getCount());
-            ItemStack extracted = source.handler.extractItem(source.slot, extractAmount, false);
-            if (extracted.isEmpty()) {
-                return false;
-            }
-
-            // 使用轮询方式选择目标管道
-            int targetIndex = roundRobinIndex % acceptingPipes.size();
-            PipeTarget target = acceptingPipes.get(targetIndex);
-            roundRobinIndex = (roundRobinIndex + 1) % acceptingPipes.size();
-
-            // 尝试插入物品
-            target.pipe.setProcessing(true);
-            try {
-                ItemStack toInsert = extracted.copy();
-                ItemStack notInserted = target.handler.insertItem(0, toInsert, false);
-                
-                if (notInserted.isEmpty()) {
-                    // 全部插入成功
-                    return true;
-                } else {
-                    // 部分插入成功，剩余物品需要处
- // 由于输入管道不应该存物品，尝试将剩余物品返回给源容
-                    int insertedCount = extracted.getCount() - notInserted.getCount();
-                    if (insertedCount > 0) {
-                        // 至少插入了一部分，算作成
-                        // 将剩余物品尝试返回给源容
-                        ItemStack returned = source.handler.insertItem(source.slot, notInserted, false);
-                        if (!returned.isEmpty()) {
-                            // 如果源容器无法接受剩余物品，掉落它们
-                            double x = worldPosition.getX() + 0.5;
-                            double y = worldPosition.getY() + 0.5;
-                            double z = worldPosition.getZ() + 0.5;
-                            net.minecraft.world.entity.item.ItemEntity itemEntity = 
-                                new net.minecraft.world.entity.item.ItemEntity(level, x, y, z, returned);
-                            level.addFreshEntity(itemEntity);
-                        }
-                        return true;
-                    }
-                    return false;
-                }
-            } finally {
-                target.pipe.setProcessing(false);
-            }
-        }
-
-        return false;
+    @Override protected int extractionCooldown() { return currentTransferRate > 1 ? TRANSFER_COOLDOWN : BASE_TRANSFER_COOLDOWN; }
+    @Override protected void extracted(int count) {
+        storedEnergy = Math.max(0, storedEnergy - Math.max(0,count-1) * 2L);
+        dirty();
     }
 
     // ========== IEnergySink 接口实现 ==========
@@ -298,15 +128,12 @@ public class mio_icif_pipe_item_extract extends mio_icif_pipe_item implements IE
 
     @Override
     public double injectEnergy(Direction directionFrom, double amount, double voltage) {
-        // 接收能量并存
-        double canReceive = Math.min(amount, MAX_RECEIVE);
-        double overflow = amount - canReceive;
-        storedEnergy += canReceive;
-        if (storedEnergy > ENERGY_CAPACITY) {
-            overflow += storedEnergy - ENERGY_CAPACITY;
-            storedEnergy = ENERGY_CAPACITY;
-        }
-        return overflow;
+        if (!Double.isFinite(amount) || amount <= 0.0D) return amount;
+        long requested = Math.min((long) Math.floor(amount), MAX_RECEIVE);
+        long accepted = Math.min(requested, Math.max(0L, ENERGY_CAPACITY - storedEnergy));
+        storedEnergy += accepted;
+        // Return both capacity overflow and any fractional EU the long buffer cannot hold.
+        return amount - accepted;
     }
 
     @Override
@@ -339,45 +166,11 @@ public class mio_icif_pipe_item_extract extends mio_icif_pipe_item implements IE
     public void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
         if (tag.contains("current_transfer_rate", CompoundTag.TAG_INT)) {
-            currentTransferRate = tag.getInt("current_transfer_rate");
+            currentTransferRate = Math.clamp(tag.getInt("current_transfer_rate"),1,64);
         }
         if (tag.contains("stored_energy", CompoundTag.TAG_LONG)) {
-            storedEnergy = tag.getLong("stored_energy");
+            storedEnergy = Math.clamp(tag.getLong("stored_energy"),0,ENERGY_CAPACITY);
         }
     }
 
-    // ========== 辅助==========
-
-    @SuppressWarnings("unused")
-    private static class ItemSource {
-        final BlockPos pos;
-        final Direction direction;
-        final IItemHandler handler;
-        final int slot;
-        final ItemStack item;
-        final boolean isPipe;
-
-        ItemSource(BlockPos pos, Direction direction, IItemHandler handler, int slot, ItemStack item, boolean isPipe) {
-            this.pos = pos;
-            this.direction = direction;
-            this.handler = handler;
-            this.slot = slot;
-            this.item = item;
-            this.isPipe = isPipe;
-        }
-    }
-
-    @SuppressWarnings("unused")
-    private static class PipeTarget {
-        final mio_icif_pipe_item pipe;
-        final IItemHandler handler;
-        final Direction direction;
-
-        PipeTarget(mio_icif_pipe_item pipe, IItemHandler handler, Direction direction) {
-            this.pipe = pipe;
-            this.handler = handler;
-            this.direction = direction;
-        }
-    }
 }
-

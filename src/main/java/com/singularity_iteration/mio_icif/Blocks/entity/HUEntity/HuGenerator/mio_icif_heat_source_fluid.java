@@ -77,7 +77,7 @@ public class mio_icif_heat_source_fluid extends com.singularity_iteration.mio_ic
     public static final int FLUID_CAPACITY = 2000;          // 每个�?000mB容纳??
 
     // ??��??存�??
-    protected MachineItemHandler itemHandler;
+    // Uses the inherited inventory; no shadow copy.
 
     // 输�?��??体�??- ?��??�岩�???��?��?�却�?
     protected final FluidTank inputTank;
@@ -113,12 +113,16 @@ public class mio_icif_heat_source_fluid extends com.singularity_iteration.mio_ic
         // ??��?��?��?��?��??体槽 - ?��??�岩�???��?��?�却�?
         this.inputTank = new FluidTank(FLUID_CAPACITY, fluidStack ->
             fluidStack.getFluid() == Fluids.LAVA ||
-            fluidStack.getFluid() == mio_icif_fluids.HOTCOOLANT.get());
+            fluidStack.getFluid() == mio_icif_fluids.HOTCOOLANT.get()) {
+                @Override protected void onContentsChanged() { dev.scex.si.energy.ContainerToTank.markUnsaved(mio_icif_heat_source_fluid.this); }
+            };
 
         // ??��?��?��?�出�?体槽 - ?��??��?�却液�?��?�岩岩�??
         this.outputTank = new FluidTank(FLUID_CAPACITY, fluidStack ->
             fluidStack.getFluid() == mio_icif_fluids.COOLANT.get() ||
-            fluidStack.getFluid() == mio_icif_fluids.PAHOEHOELAVA.get());
+            fluidStack.getFluid() == mio_icif_fluids.PAHOEHOELAVA.get()) {
+                @Override protected void onContentsChanged() { dev.scex.si.energy.ContainerToTank.markUnsaved(mio_icif_heat_source_fluid.this); }
+            };
 
         // ??��?��?��?�交?��?��?���?
         updateConductorCount();
@@ -163,6 +167,7 @@ public class mio_icif_heat_source_fluid extends com.singularity_iteration.mio_ic
 
         // �??��?��?���???��??�?
         blockEntity.checkOverheat();
+        if (blockEntity.isRemoved()) return;
 
         // ?��?��工�?�状态??
         boolean wasWorking = blockEntity.isWorking;
@@ -211,7 +216,15 @@ public class mio_icif_heat_source_fluid extends com.singularity_iteration.mio_ic
      * �??????�交换?- ?���???��?��?��??体�?��?�交?��?��就产??��?��??
      */
     private void processHeatExchange() {
-        com.singularity_iteration.mio_icif.Singularity_Iteration.LOGGER.info(
+        if (dev.scex.si.energy.ThermalOutput.enabled()) {
+            if (conductorCount <= 0 || inputTank.isEmpty()) return;
+            var fluid = inputTank.getFluid().getFluid();
+            var result = fluid == Fluids.LAVA ? new FluidStack(mio_icif_fluids.PAHOEHOELAVA.get(), FLUID_PER_OPERATION)
+                : fluid == mio_icif_fluids.HOTCOOLANT.get() ? new FluidStack(mio_icif_fluids.COOLANT.get(), FLUID_PER_OPERATION) : FluidStack.EMPTY;
+            if (dev.scex.si.energy.OwnedHeatExchange.exchange(inputTank, outputTank, heatStorage, FLUID_PER_OPERATION, result, HU_PER_BUCKET)) setChanged();
+            return;
+        }
+        com.singularity_iteration.mio_icif.Singularity_Iteration.LOGGER.debug(
             "[HeatSourceFluid] processHeatExchange tick=" + level.getGameTime() + " pos=" + worldPosition +
             " conductorCount=" + conductorCount + " inputAmount=" + inputTank.getFluidAmount() +
             " outputAmount=" + outputTank.getFluidAmount() + " heatStored=" + heatStorage.getHeatStored());
@@ -273,6 +286,10 @@ public class mio_icif_heat_source_fluid extends com.singularity_iteration.mio_ic
      * 输出??��??
      */
     private void outputHeat() {
+        if (dev.scex.si.energy.ThermalOutput.enabled()) {
+            if (dev.scex.si.energy.ThermalOutput.move(heatStorage, dev.scex.si.energy.ThermalOutput.front(this), currentHeatOutput) > 0) setChanged();
+            return;
+        }
         if (heatStorage.getHeatStored() <= 0 || currentHeatOutput <= 0) {
             return;
         }
@@ -288,7 +305,7 @@ public class mio_icif_heat_source_fluid extends com.singularity_iteration.mio_ic
                 level.getBlockEntity(adjacentPos));
         }
 
-        com.singularity_iteration.mio_icif.Singularity_Iteration.LOGGER.info(
+        com.singularity_iteration.mio_icif.Singularity_Iteration.LOGGER.debug(
             "[HeatSourceFluid] outputHeat tick=" + level.getGameTime() + " pos=" + worldPosition + " facing=" + facing +
             " heatStored=" + heatStorage.getHeatStored() + " currentHeatOutput=" + currentHeatOutput +
             " adjacentPos=" + adjacentPos + " adjacentHeat=" + (adjacentHeat != null ? "found" : "null"));
@@ -299,23 +316,23 @@ public class mio_icif_heat_source_fluid extends com.singularity_iteration.mio_ic
                     adjacentHeat.getMaxHeatStored() - adjacentHeat.getHeatStored()));
 
             if (heatToOutput > 0) {
-                com.singularity_iteration.mio_icif.Singularity_Iteration.LOGGER.info(
+                com.singularity_iteration.mio_icif.Singularity_Iteration.LOGGER.debug(
                     "[HeatSourceFluid] Sending " + heatToOutput + " HU to " + adjacentPos +
                     " (adjStored=" + adjacentHeat.getHeatStored() + "/" + adjacentHeat.getMaxHeatStored() + ")");
                 adjacentHeat.receiveHeat(heatToOutput, false);
                 heatStorage.consumeHeatInternal(heatToOutput, false);
                 setChanged();
             } else {
-                com.singularity_iteration.mio_icif.Singularity_Iteration.LOGGER.info(
+                com.singularity_iteration.mio_icif.Singularity_Iteration.LOGGER.debug(
                     "[HeatSourceFluid] heatToOutput=0 at " + adjacentPos +
                     " (stored=" + heatStorage.getHeatStored() + "/" + heatStorage.getMaxHeatStored() +
                     ", adjStored=" + adjacentHeat.getHeatStored() + "/" + adjacentHeat.getMaxHeatStored() + ")");
             }
         } else if (adjacentHeat != null) {
-            com.singularity_iteration.mio_icif.Singularity_Iteration.LOGGER.info(
+            com.singularity_iteration.mio_icif.Singularity_Iteration.LOGGER.debug(
                 "[HeatSourceFluid] adjacent.canReceiveHeat()=false at " + adjacentPos);
         } else {
-            com.singularity_iteration.mio_icif.Singularity_Iteration.LOGGER.info(
+            com.singularity_iteration.mio_icif.Singularity_Iteration.LOGGER.debug(
                 "[HeatSourceFluid] NO adjacent heat storage at " + adjacentPos + " facing=" + facing);
         }
     }
@@ -348,6 +365,16 @@ public class mio_icif_heat_source_fluid extends com.singularity_iteration.mio_ic
      * �????输�?�液体�??
      */
     private void handleInputFluidSlot() {
+        if (dev.scex.si.energy.ThermalOutput.enabled()) {
+            var input = itemHandler.getStackInSlot(INPUT_FLUID_BUCKET_SLOT);
+            if (input.isEmpty()) return;
+            boolean cell = mio_icif_cells.isFluidCell(input);
+            var content = cell ? mio_icif_cells.getCellFluid(input.copyWithCount(1))
+                : input.is(Items.LAVA_BUCKET) ? new FluidStack(Fluids.LAVA, FLUID_PER_OPERATION) : FluidStack.EMPTY;
+            var empty = cell ? mio_icif_cells.getEmptyCellForStack(input.copyWithCount(1)) : new ItemStack(Items.BUCKET);
+            if (dev.scex.si.energy.ContainerToTank.transfer(itemHandler, INPUT_FLUID_BUCKET_SLOT, INPUT_EMPTY_BUCKET_SLOT, inputTank, content, empty)) setChanged();
+            return;
+        }
         ItemStack bucketStack = itemHandler.getStackInSlot(INPUT_FLUID_BUCKET_SLOT);
         if (bucketStack.isEmpty()) {
             return;
@@ -438,6 +465,14 @@ public class mio_icif_heat_source_fluid extends com.singularity_iteration.mio_ic
      * �????输出液�?��??
      */
     private void handleOutputFluidSlot() {
+        if (dev.scex.si.energy.ThermalOutput.enabled()) {
+            var empty = itemHandler.getStackInSlot(OUTPUT_FLUID_BUCKET_SLOT);
+            if (!mio_icif_cells.isEmptyCell(empty) || outputTank.isEmpty() || !outputTank.isFluidValid(outputTank.getFluid())) return;
+            var full = mio_icif_cells.getFilledCellForFluidStack(outputTank.getFluid().getFluid());
+            var content = mio_icif_cells.getCellFluid(full);
+            if (dev.scex.si.energy.ContainerToTank.drainToContainer(itemHandler, OUTPUT_FLUID_BUCKET_SLOT, OUTPUT_FULL_BUCKET_SLOT, outputTank, content, full)) setChanged();
+            return;
+        }
         // �??��输出槽是?��??�空??��??/桶可以填充?
         ItemStack emptyStack = itemHandler.getStackInSlot(OUTPUT_FLUID_BUCKET_SLOT);
         if (emptyStack.isEmpty()) {
@@ -509,7 +544,7 @@ public class mio_icif_heat_source_fluid extends com.singularity_iteration.mio_ic
     public boolean isItemValidForSlot(int slot, ItemStack stack) {
         if (slot == INPUT_FLUID_BUCKET_SLOT) {
             // 输�?�槽：接??�岩�?桶�?��?��?�却?????��??
-            return stack.is(Items.LAVA_BUCKET) || mio_icif_cells.isCellContainingFluid(stack, mio_icif_fluids.HOTCOOLANT.get());
+            return stack.is(Items.LAVA_BUCKET) || mio_icif_cells.isCellContainingAnyFluid(stack, Fluids.LAVA, mio_icif_fluids.HOTCOOLANT.get());
         } else if (slot == INPUT_EMPTY_BUCKET_SLOT) {
             // 空容?��输出槽位?��?��??许�?�动?��???
             return false;
@@ -542,6 +577,18 @@ public class mio_icif_heat_source_fluid extends com.singularity_iteration.mio_ic
     }
 
     @Override
+    public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
+        var tag = super.getUpdateTag(registries);
+        saveAdditional(tag, registries);
+        return tag;
+    }
+
+    @Override
+    public void handleUpdateTag(CompoundTag tag, HolderLookup.Provider registries) {
+        loadAdditional(tag, registries);
+    }
+
+    @Override
     public void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
         if (tag.contains("Items")) {
@@ -556,8 +603,8 @@ public class mio_icif_heat_source_fluid extends com.singularity_iteration.mio_ic
         if (tag.contains("HeatStored")) {
             heatStorage.setHeat(tag.getInt("HeatStored"));
         }
-        conductorCount = tag.getInt("ConductorCount");
-        overheatTimer = tag.getInt("OverheatTimer");
+        updateConductorCount();
+        overheatTimer = Math.max(0, Math.min(EXPLOSION_WARNING_TICKS, tag.getInt("OverheatTimer")));
         currentHeatOutput = Math.min(conductorCount * HEAT_PER_CONDUCTOR, MAX_HEAT_OUTPUT);
     }
 
@@ -774,6 +821,7 @@ public class mio_icif_heat_source_fluid extends com.singularity_iteration.mio_ic
 
     @Override
     public ItemStack removeItem(int slot, int amount) {
+        if (amount <= 0 || slot < 0 || slot >= itemHandler.getSlots()) return ItemStack.EMPTY;
         ItemStack stack = itemHandler.getStackInSlot(slot);
         if (stack.isEmpty()) {
             return ItemStack.EMPTY;

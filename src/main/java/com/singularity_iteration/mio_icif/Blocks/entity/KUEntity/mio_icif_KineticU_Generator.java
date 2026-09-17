@@ -52,7 +52,7 @@ public abstract class mio_icif_KineticU_Generator extends mio_icif_KineticU_Bloc
 
     @Override
     public void setBurnTime(int ticks) {
-        this.burnTime = ticks;
+        this.burnTime = Math.max(0, ticks);
         this.setChanged();
     }
 
@@ -114,6 +114,7 @@ public abstract class mio_icif_KineticU_Generator extends mio_icif_KineticU_Bloc
 
         Direction facing = getBlockState().getValue(com.singularity_iteration.mio_icif.Blocks.mio_icif_entity_block.FACING);
         BlockPos frontPos = worldPosition.relative(facing);
+        if (!level.hasChunkAt(frontPos)) return false;
 
         IMioIcifCapabilities.IKineticStorage frontKinetic = level.getCapability(
             IMioIcifCapabilities.KINETIC_STORAGE_BLOCK, frontPos, facing.getOpposite());
@@ -187,6 +188,7 @@ public abstract class mio_icif_KineticU_Generator extends mio_icif_KineticU_Bloc
 
         Direction facing = getBlockState().getValue(com.singularity_iteration.mio_icif.Blocks.mio_icif_entity_block.FACING);
         BlockPos frontPos = worldPosition.relative(facing);
+        if (!level.hasChunkAt(frontPos)) return;
         IMioIcifCapabilities.IKineticStorage frontKinetic = level.getCapability(
             IMioIcifCapabilities.KINETIC_STORAGE_BLOCK, frontPos, facing.getOpposite());
         if (frontKinetic == null) {
@@ -211,6 +213,7 @@ public abstract class mio_icif_KineticU_Generator extends mio_icif_KineticU_Bloc
                 if (direction == facing) continue;
 
                 BlockPos adjacentPos = worldPosition.relative(direction);
+                if (!level.hasChunkAt(adjacentPos)) continue;
                 IMioIcifCapabilities.IKineticStorage adjacentKinetic = level.getCapability(
                     IMioIcifCapabilities.KINETIC_STORAGE_BLOCK, adjacentPos, direction.getOpposite());
                 if (adjacentKinetic == null) {
@@ -358,6 +361,7 @@ public abstract class mio_icif_KineticU_Generator extends mio_icif_KineticU_Bloc
 
     @Override
     public ItemStack removeItem(int slot, int amount) {
+        if (amount <= 0 || slot < 0 || slot >= itemHandler.getSlots()) return ItemStack.EMPTY;
         ItemStack stack = itemHandler.getStackInSlot(slot);
         if (stack.isEmpty()) {
             return ItemStack.EMPTY;

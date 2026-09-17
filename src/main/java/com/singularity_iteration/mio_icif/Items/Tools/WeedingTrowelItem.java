@@ -102,7 +102,7 @@ public static final float ATTACK_DAMAGE_BONUS = 1.0F;
 
             // 消耗耐久（如果有耐久度）
             if (player != null && !player.getAbilities().instabuild) {
-                context.getItemInHand().hurtAndBreak(1, player, null);
+                context.getItemInHand().hurtAndBreak(1, player, net.minecraft.world.entity.LivingEntity.getSlotForHand(context.getHand()));
             }
 
             if (player != null) {

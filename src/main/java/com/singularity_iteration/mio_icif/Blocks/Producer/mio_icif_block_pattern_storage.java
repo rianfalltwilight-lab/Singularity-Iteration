@@ -6,9 +6,7 @@ import com.singularity_iteration.mio_icif.Blocks.mio_icif_entity_block;
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.core.BlockPos;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionResult;
-import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BaseEntityBlock;
@@ -22,8 +20,6 @@ import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.phys.BlockHitResult;
 import org.jetbrains.annotations.Nullable;
-import org.slf4j.Logger;
-import com.mojang.logging.LogUtils;
 
 /**
  * 模式存储机方块类
@@ -31,7 +27,6 @@ import com.mojang.logging.LogUtils;
  */
 @SuppressWarnings("null")
 public class mio_icif_block_pattern_storage extends mio_icif_entity_block {
-    private static final Logger LOGGER = LogUtils.getLogger();
 
     public static final BooleanProperty LIT = BooleanProperty.create("lit");
 
@@ -61,61 +56,33 @@ public class mio_icif_block_pattern_storage extends mio_icif_entity_block {
 
     @Override
     protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player, BlockHitResult hitResult) {
-        BlockEntity blockEntity = level.getBlockEntity(pos);
-
-        // 调试输出：显示存储信息
-    if (blockEntity instanceof mio_icif_pattern_storage storage) {
-            String side = level.isClientSide() ? "客户端? ": "服务�?";
-            LOGGER.info("[模式存储机调�?" + side + "] 位置: " + pos);
-            LOGGER.info("[模式存储机调�?" + side + "] 存储数量: " + storage.getStoredCount() + "/" + mio_icif_pattern_storage.MAX_PATTERNS);
-            LOGGER.info("[模式存储机调�?" + side + "] 当前索引: " + storage.getCurrentIndex());
-
-            // 显示存储的物品信息
-        var patterns = storage.getStoredPatterns();
-            if (!patterns.isEmpty()) {
-                LOGGER.info("[模式存储机调�?" + side + "] 存储的物�?");
-                for (int i = 0; i < patterns.size(); i++) {
-                    var result = patterns.get(i);
-                    LOGGER.info("[模式存储机调�?" + side + "]   [" + i + "] " + result.item.getHoverName().getString() +
-                        " - UU: " + result.uuMatterCostBuckets + "B, EU: " + result.energyCost);
-                }
-            } else {
-                LOGGER.info("[模式存储机调�?" + side + "] 存储列表为空");
-            }
-
-            // 向玩家发送聊天信息
-        player.sendSystemMessage(Component.translatable("message.mio_icif.pattern_storage.info_header", side));
-            player.sendSystemMessage(Component.translatable("message.mio_icif.pattern_storage.stored_count", storage.getStoredCount(), mio_icif_pattern_storage.MAX_PATTERNS));
-            player.sendSystemMessage(Component.translatable("message.mio_icif.pattern_storage.current_index", storage.getCurrentIndex()));
-
-            if (!patterns.isEmpty()) {
-                player.sendSystemMessage(Component.translatable("message.mio_icif.pattern_storage.stored_items"));
-                for (int i = 0; i < Math.min(patterns.size(), 5); i++) {
-                    var result = patterns.get(i);
-                    player.sendSystemMessage(Component.translatable("message.mio_icif.pattern_storage.item_entry", i, result.item.getHoverName().getString()));
-                }
-                if (patterns.size() > 5) {
-                    player.sendSystemMessage(Component.translatable("message.mio_icif.pattern_storage.more_items", patterns.size() - 5));
-                }
-            } else {
-                player.sendSystemMessage(Component.translatable("message.mio_icif.pattern_storage.empty"));
-            }
-        }
-
-        if (!level.isClientSide()) {
-            if (blockEntity instanceof MenuProvider) {
-                player.openMenu((MenuProvider) blockEntity);
-            } else {
-                player.sendSystemMessage(Component.literal("This block does not have a GUI!"));
-            }
-        }
+        if (!level.isClientSide() && level.getBlockEntity(pos) instanceof mio_icif_pattern_storage storage
+                && dev.scex.si.processing.MachineMenuAccess.valid(player, storage)) player.openMenu(storage);
         return InteractionResult.sidedSuccess(level.isClientSide());
+    }
+
+    @Override
+    public java.util.List<net.minecraft.world.item.ItemStack> getDrops(BlockState state, net.minecraft.world.level.storage.loot.LootParams.Builder params) {
+        var drops = super.getDrops(state, params);
+        var tile = params.getOptionalParameter(net.minecraft.world.level.storage.loot.parameters.LootContextParams.BLOCK_ENTITY);
+        if (tile instanceof mio_icif_pattern_storage storage) {
+            for (var stack : drops) if (stack.is(this.asItem())) {
+                var data = stack.getOrDefault(net.minecraft.core.component.DataComponents.BLOCK_ENTITY_DATA, net.minecraft.world.item.component.CustomData.EMPTY).copyTag();
+                data.putString("id", net.minecraft.core.registries.BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(storage.getType()).toString());
+                data.putLong("energy", storage.getEnergyStorageInternal().getAmount());
+                data.putLong("scex_energy_fraction", storage.getEnergyStorageInternal().scexSavedFraction());
+                storage.savePatternData(data, params.getLevel().registryAccess());
+                // The memory slot drops separately through the normal Container removal path.
+                stack.set(net.minecraft.core.component.DataComponents.BLOCK_ENTITY_DATA, net.minecraft.world.item.component.CustomData.of(data));
+            }
+        }
+        return drops;
     }
 
     @Override
     protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
         if (state.getBlock() != newState.getBlock()) {
-            // 模式存储机不需要掉落物品，因为它没有物品栏
+            // The actual memory Container is dropped by the base removal path.
             super.onRemove(state, level, pos, newState, movedByPiston);
         }
     }
@@ -151,6 +118,7 @@ public class mio_icif_block_pattern_storage extends mio_icif_entity_block {
         }
         return (lvl, pos, blockState, blockEntity) -> {
             if (blockEntity instanceof mio_icif_pattern_storage storage) {
+                mio_icif_pattern_storage.tick(lvl, pos, blockState, storage);
                 // 更新方块状态
             boolean hasData = storage.getStoredCount() > 0;
                 if (blockState.getValue(LIT) != hasData) {

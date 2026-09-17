@@ -30,7 +30,10 @@ public final class ConductorRegistry implements AutoCloseable {
     private final Thread owner = Thread.currentThread();
     private final int maximumNodes;
     private final int maximumCachedSources;
-    private final Map<Position, Long> conductors = new HashMap<>();
+    /** Face bits: down, up, north (-Z), south (+Z), west (-X), east (+X). */
+    public static final int ALL_FACES = 63;
+    private record Conductor(long loss, int faces) { }
+    private final Map<Position, Conductor> conductors = new HashMap<>();
     private final Map<Long, HashSet<Position>> chunks = new HashMap<>();
     private Snapshot cached;
     private boolean closed;
@@ -60,14 +63,18 @@ public final class ConductorRegistry implements AutoCloseable {
     }
 
     /** Register or replace a loss. Identical updates retain valid cached work. */
-    public boolean put(Position at, long lossMilli) {
+    public boolean put(Position at, long lossMilli) { return put(at, lossMilli, ALL_FACES); }
+
+    /** Changing only a face mask invalidates every old route lease before publication. */
+    public boolean put(Position at, long lossMilli, int openFaces) {
         active(); Objects.requireNonNull(at, "at");
+        if ((openFaces & ~ALL_FACES) != 0) throw new IllegalArgumentException("Invalid conductor face mask");
         if (lossMilli < 0) { throw new IllegalArgumentException("Negative conductor loss"); }
-        Long previous = conductors.get(at);
-        if (previous != null && previous.longValue() == lossMilli) { return false; }
+        Conductor previous = conductors.get(at);
+        if (previous != null && previous.loss == lossMilli && previous.faces == openFaces) { return false; }
         if (previous == null && conductors.size() >= maximumNodes) { throw new IllegalStateException("Registry capacity reached"); }
         changed();
-        conductors.put(at, lossMilli);
+        conductors.put(at, new Conductor(lossMilli, openFaces));
         if (previous == null) { chunks.computeIfAbsent(chunkKey(at), key -> new HashSet<>()).add(at); }
         return true;
     }
@@ -94,6 +101,14 @@ public final class ConductorRegistry implements AutoCloseable {
     public int size() { active(); return conductors.size(); }
     /** Cheap membership observation without constructing or retaining a graph snapshot. */
     public boolean containsRegistered(Position at) { active(); return conductors.containsKey(Objects.requireNonNull(at, "at")); }
+    /** Constant-time contact query; an absent conductor has no open face. */
+    public boolean permitsRegistered(Position at, int face) {
+        active(); checkFace(face); var conductor = conductors.get(Objects.requireNonNull(at, "at"));
+        return conductor != null && (conductor.faces & (1 << face)) != 0;
+    }
+    private static void checkFace(int face) {
+        if (face < 0 || face >= 6) throw new IllegalArgumentException("Unknown conductor face");
+    }
     public long revision() { active(); return revision; }
     public long rebuildCount() { active(); return rebuilds; }
 
@@ -105,24 +120,29 @@ public final class ConductorRegistry implements AutoCloseable {
         Position[] positions = conductors.keySet().toArray(Position[]::new);
         Arrays.sort(positions);
         var ids = new HashMap<Position, Integer>();
-        long[] losses = new long[positions.length];
-        for (int i = 0; i < positions.length; i++) { ids.put(positions[i], i); losses[i] = conductors.get(positions[i]); }
+        long[] losses = new long[positions.length]; int[] faces = new int[positions.length];
+        for (int i = 0; i < positions.length; i++) {
+            ids.put(positions[i], i); var conductor = conductors.get(positions[i]);
+            losses[i] = conductor.loss; faces[i] = conductor.faces;
+        }
         var links = new ArrayList<int[]>();
         for (int i = 0; i < positions.length; i++) {
             Position at = positions[i];
-            if (at.x < Integer.MAX_VALUE) { link(links, ids, i, new Position(at.x + 1, at.y, at.z)); }
-            if (at.y < Integer.MAX_VALUE) { link(links, ids, i, new Position(at.x, at.y + 1, at.z)); }
-            if (at.z < Integer.MAX_VALUE) { link(links, ids, i, new Position(at.x, at.y, at.z + 1)); }
+            if (at.x < Integer.MAX_VALUE) { link(links, ids, faces, i, 5, new Position(at.x + 1, at.y, at.z)); }
+            if (at.y < Integer.MAX_VALUE) { link(links, ids, faces, i, 1, new Position(at.x, at.y + 1, at.z)); }
+            if (at.z < Integer.MAX_VALUE) { link(links, ids, faces, i, 3, new Position(at.x, at.y, at.z + 1)); }
         }
         ConductorGraph graph = positions.length == 0 ? null : new ConductorGraph(losses, links.toArray(int[][]::new));
-        cached = new Snapshot(owner, revision, Map.copyOf(ids), positions, graph, maximumCachedSources);
+        cached = new Snapshot(owner, revision, Map.copyOf(ids), positions, faces, graph, maximumCachedSources);
         rebuilds = nextRebuild;
         return cached;
     }
 
-    private static void link(ArrayList<int[]> links, Map<Position, Integer> ids, int from, Position to) {
+    private static void link(ArrayList<int[]> links, Map<Position, Integer> ids, int[] faces, int from, int face, Position to) {
         Integer target = ids.get(to);
-        if (target != null) { links.add(new int[]{from, target}); }
+        if (target != null && (faces[from] & (1 << face)) != 0 && (faces[target] & (1 << (face ^ 1))) != 0) {
+            links.add(new int[]{from, target});
+        }
     }
 
     /** Must be checked again by a future world adapter before committing energy. */
@@ -148,13 +168,14 @@ public final class ConductorRegistry implements AutoCloseable {
         private final long revision;
         private final Map<Position, Integer> ids;
         private final Position[] positions;
+        private final int[] faces;
         private final ConductorGraph graph;
         private final int maximumCachedSources;
         private final LinkedHashMap<Integer, ConductorGraph.Routes> routes = new LinkedHashMap<>(16, .75f, true);
         private boolean valid = true;
 
-        private Snapshot(Thread owner, long revision, Map<Position, Integer> ids, Position[] positions, ConductorGraph graph, int limit) {
-            this.owner = owner; this.revision = revision; this.ids = ids; this.positions = positions; this.graph = graph; maximumCachedSources = limit;
+        private Snapshot(Thread owner, long revision, Map<Position, Integer> ids, Position[] positions, int[] faces, ConductorGraph graph, int limit) {
+            this.owner = owner; this.revision = revision; this.ids = ids; this.positions = positions; this.faces = faces; this.graph = graph; maximumCachedSources = limit;
         }
 
         private void active() {
@@ -169,6 +190,9 @@ public final class ConductorRegistry implements AutoCloseable {
             if (result == null) { throw new IllegalArgumentException("Unregistered conductor position"); }
             return result;
         }
+        /** A wire-to-machine contact must also be allowed by the wire's facing side. */
+        public boolean permits(Position at, int face) { checkFace(face); return (faces[vertex(at)] & (1 << face)) != 0; }
+        public int openFaces(Position at) { return faces[vertex(at)]; }
         public int cachedSources() { active(); return routes.size(); }
         public Position position(int vertex) {
             active();

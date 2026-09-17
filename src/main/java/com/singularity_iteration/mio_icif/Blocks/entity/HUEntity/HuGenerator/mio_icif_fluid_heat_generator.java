@@ -50,10 +50,11 @@ public class mio_icif_fluid_heat_generator extends com.singularity_iteration.mio
     public static final int FUEL_PER_BUCKET = 1000;
     public static final int HU_PER_BUCKET = 64000;
 
-    protected MachineItemHandler itemHandler;
+    // Uses the inherited inventory; no shadow copy.
     protected final FluidTank fuelTank;
 
     private int burnTime = 0;
+    private long scexHeatCredit;
     private int maxBurnTime = 0;
     private boolean isWorking = false;
 
@@ -68,7 +69,9 @@ public class mio_icif_fluid_heat_generator extends com.singularity_iteration.mio
         this.itemHandler.setValidator((slot, stack, slotType) -> mio_icif_fluid_heat_generator.this.isItemValidForSlot(slot, stack));
 
         this.fuelTank = new FluidTank(FUEL_CAPACITY, fluidStack ->
-            fluidStack.getFluid() == mio_icif_fluids.BIOGAS.get());
+            fluidStack.getFluid() == mio_icif_fluids.BIOGAS.get()) {
+                @Override protected void onContentsChanged() { dev.scex.si.energy.ContainerToTank.markUnsaved(mio_icif_fluid_heat_generator.this); }
+            };
     }
 
     public static void tick(Level level, BlockPos pos, BlockState state, mio_icif_fluid_heat_generator blockEntity) {
@@ -88,7 +91,35 @@ public class mio_icif_fluid_heat_generator extends com.singularity_iteration.mio
         }
     }
 
+    private void scexFillFuel() {
+        var input = itemHandler.getStackInSlot(FUEL_BUCKET_SLOT);
+        if (input.isEmpty() || !isFuelBucket(input)) return;
+        boolean cell = mio_icif_cells.isFluidCell(input);
+        var content = cell ? mio_icif_cells.getCellFluid(input.copyWithCount(1)) : new FluidStack(mio_icif_fluids.BIOGAS.get(), FUEL_PER_BUCKET);
+        var empty = cell ? mio_icif_cells.getEmptyCellForStack(input.copyWithCount(1)) : new ItemStack(Items.BUCKET);
+        if (dev.scex.si.energy.ContainerToTank.transfer(itemHandler, FUEL_BUCKET_SLOT, EMPTY_BUCKET_SLOT, fuelTank, content, empty)) setChanged();
+    }
+
+    private void scexBurnFluid() {
+        long previousCredit = scexHeatCredit;
+        boolean previousWorking = isWorking;
+        var receiver = dev.scex.si.energy.ThermalOutput.front(this);
+        long wanted = Math.min(MAX_HEAT_GENERATION_RATE, dev.scex.si.energy.ThermalOutput.room(receiver));
+        if (scexHeatCredit < wanted && fuelTank.isFluidValid(fuelTank.getFluid()) && fuelTank.getFluidAmount() > 0) {
+            // SI's existing 64,000 HU per 1,000 mB setting; reference parity is still pending.
+            if (fuelTank.drain(1, IFluidHandler.FluidAction.EXECUTE).getAmount() == 1) scexHeatCredit += HU_PER_BUCKET / FUEL_PER_BUCKET;
+        }
+        long accepted = dev.scex.si.energy.ThermalOutput.offer(receiver, Math.min(wanted, scexHeatCredit));
+        scexHeatCredit -= accepted;
+        burnTime = (int) ((scexHeatCredit + MAX_HEAT_GENERATION_RATE - 1) / MAX_HEAT_GENERATION_RATE);
+        maxBurnTime = Math.max(burnTime, 1);
+        currentFuelBurning = 0; currentFuelHeatGenerated = 0;
+        isWorking = accepted > 0;
+        if (previousCredit != scexHeatCredit || previousWorking != isWorking || accepted > 0) setChanged();
+    }
+
     private void handleFuelBucketSlot() {
+        if (dev.scex.si.energy.ThermalOutput.enabled()) { scexFillFuel(); return; }
         ItemStack fuelBucketStack = itemHandler.getStackInSlot(FUEL_BUCKET_SLOT);
         if (fuelBucketStack.isEmpty() || !isFuelBucket(fuelBucketStack)) {
             return;
@@ -163,6 +194,7 @@ public class mio_icif_fluid_heat_generator extends com.singularity_iteration.mio
     }
 
     private void handleBurning() {
+        if (dev.scex.si.energy.ThermalOutput.enabled()) { scexBurnFluid(); return; }
         if (burnTime > 0) {
             if (hasHeatConsumer()) {
                 burnTime--;
@@ -233,9 +265,22 @@ public class mio_icif_fluid_heat_generator extends com.singularity_iteration.mio
         tag.putInt("burnTime", burnTime);
         tag.putInt("maxBurnTime", maxBurnTime);
         tag.putBoolean("isWorking", isWorking);
+        if (dev.scex.si.energy.ThermalOutput.enabled() || scexHeatCredit > 0) tag.putLong("scex_heat_credit_hu", scexHeatCredit);
         tag.put("fuelTank", fuelTank.writeToNBT(registries, new CompoundTag()));
         tag.putInt("currentFuelBurning", currentFuelBurning);
         tag.putInt("currentFuelHeatGenerated", currentFuelHeatGenerated);
+    }
+
+    @Override
+    public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
+        var tag = super.getUpdateTag(registries);
+        saveAdditional(tag, registries);
+        return tag;
+    }
+
+    @Override
+    public void handleUpdateTag(CompoundTag tag, HolderLookup.Provider registries) {
+        loadAdditional(tag, registries);
     }
 
     @Override
@@ -244,7 +289,10 @@ public class mio_icif_fluid_heat_generator extends com.singularity_iteration.mio
         if (tag.contains("Items")) {
             itemHandler.deserializeNBT(registries, tag.getCompound("Items"));
         }
-        burnTime = tag.getInt("burnTime");
+        burnTime = Math.max(0, tag.getInt("burnTime"));
+        scexHeatCredit = tag.contains("scex_heat_credit_hu", net.minecraft.nbt.Tag.TAG_LONG)
+            ? dev.scex.energy.BoundedUnits.clamp(tag.getLong("scex_heat_credit_hu"), HU_PER_BUCKET)
+            : (dev.scex.si.energy.ThermalOutput.enabled() ? Math.min(HU_PER_BUCKET, (long) burnTime * MAX_HEAT_GENERATION_RATE) : 0);
         maxBurnTime = tag.getInt("maxBurnTime");
         isWorking = tag.getBoolean("isWorking");
         if (tag.contains("fuelTank")) {
@@ -356,6 +404,7 @@ public class mio_icif_fluid_heat_generator extends com.singularity_iteration.mio
 
     @Override
     public ItemStack removeItem(int slot, int amount) {
+        if (amount <= 0 || slot < 0 || slot >= itemHandler.getSlots()) return ItemStack.EMPTY;
         ItemStack stack = itemHandler.getStackInSlot(slot);
         if (stack.isEmpty()) {
             return ItemStack.EMPTY;

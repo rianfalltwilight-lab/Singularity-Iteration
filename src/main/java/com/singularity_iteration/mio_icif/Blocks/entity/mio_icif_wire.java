@@ -312,18 +312,19 @@ public class mio_icif_wire extends mio_icif_Energy_Block implements IEnergyCondu
 
     @Override
     public boolean emitsEnergyTo(IEnergyAcceptor acceptor, Direction direction) {
-        return !blockedDirections.contains(direction);
+        return !energyStorage.scexNetworkControlled() && !blockedDirections.contains(direction);
     }
 
     @Override
     public boolean acceptsEnergyFrom(IEnergyEmitter emitter, Direction direction) {
-        return !blockedDirections.contains(direction);
+        return !energyStorage.scexNetworkControlled() && !blockedDirections.contains(direction);
     }
 
     // ============ IEnergySink override for bridge ============
 
     @Override
     public double getDemandedEnergy() {
+        if (energyStorage.scexNetworkControlled()) return 0.0D;
         if (!energyBridge.hasAdjacentCompatSinks()) return 0.0D;
         long spaceAvailable = getEffectiveCapacity() - energyStorage.getAmount();
         if (spaceAvailable <= 0) return 0.0D;
@@ -332,6 +333,7 @@ public class mio_icif_wire extends mio_icif_Energy_Block implements IEnergyCondu
 
     @Override
     public double injectEnergy(Direction direction, double amount, double voltage) {
+        if (energyStorage.scexNetworkControlled()) return amount;
         if (!energyBridge.hasAdjacentCompatSinks()) return amount;
         long spaceAvailable = getEffectiveCapacity() - energyStorage.getAmount();
         long accepted = Math.min((long) amount, spaceAvailable);
@@ -347,6 +349,10 @@ public class mio_icif_wire extends mio_icif_Energy_Block implements IEnergyCondu
         if (blockEntity.poweredTicksRemaining > 0) {
             blockEntity.poweredTicksRemaining--;
         }
+
+        // The independent engine owns transfer for this reviewed wire.
+        // Do not register a second FE/AE2 tile or run legacy electrical work.
+        if (blockEntity.energyStorage.scexNetworkControlled()) return;
 
         if (state.getBlock() instanceof mio_icif_block_wire) {
             blockEntity.ticksUntilElectricCheck--;
@@ -492,6 +498,7 @@ public class mio_icif_wire extends mio_icif_Energy_Block implements IEnergyCondu
     public void blockDirection(Direction dir) {
         if (blockedDirections.add(dir)) {
             setChanged();
+            dev.scex.si.energy.IndependentSiEnergy.conductorPortsChanged(this);
             refreshRegistration();
         }
     }
@@ -499,6 +506,7 @@ public class mio_icif_wire extends mio_icif_Energy_Block implements IEnergyCondu
     public void unblockDirection(Direction dir) {
         if (blockedDirections.remove(dir)) {
             setChanged();
+            dev.scex.si.energy.IndependentSiEnergy.conductorPortsChanged(this);
             refreshRegistration();
         }
     }
@@ -524,6 +532,8 @@ public class mio_icif_wire extends mio_icif_Energy_Block implements IEnergyCondu
         } else {
             this.disguisedBlockId = null;
         }
+        // Live NBT reload and ordinary saved-world construction share this path.
+        dev.scex.si.energy.IndependentSiEnergy.conductorPortsChanged(this);
     }
 
     @Override

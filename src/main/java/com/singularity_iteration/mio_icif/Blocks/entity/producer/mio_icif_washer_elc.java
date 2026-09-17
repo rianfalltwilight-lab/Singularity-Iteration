@@ -97,7 +97,9 @@ public class mio_icif_washer_elc extends mio_icif_producer {
 
         // 创建流体槽只接受水
         this.fluidTank = new FluidTank(FLUID_CAPACITY, fluidStack ->
-            fluidStack.getFluid() == Fluids.WATER);
+            fluidStack.getFluid() == Fluids.WATER) {
+                @Override protected void onContentsChanged() { dev.scex.si.energy.ContainerToTank.markUnsaved(mio_icif_washer_elc.this); }
+            };
     }
 
     public mio_icif_washer_elc(BlockPos pos, BlockState state, BlockEntityType<?> type,
@@ -107,7 +109,9 @@ public class mio_icif_washer_elc extends mio_icif_producer {
 
         // 创建流体槽只接受水
         this.fluidTank = new FluidTank(FLUID_CAPACITY, fluidStack ->
-            fluidStack.getFluid() == Fluids.WATER);
+            fluidStack.getFluid() == Fluids.WATER) {
+                @Override protected void onContentsChanged() { dev.scex.si.energy.ContainerToTank.markUnsaved(mio_icif_washer_elc.this); }
+            };
     }
 
 
@@ -275,7 +279,7 @@ public class mio_icif_washer_elc extends mio_icif_producer {
      * 检查是否有足够水来工作
      */
     protected boolean hasEnoughWater() {
-        if (fluidTank.isEmpty()) {
+        if (fluidTank.isEmpty() || fluidTank.getFluid().getFluid() != Fluids.WATER) {
             return false;
         }
         return fluidTank.getFluidAmount() >= WATER_PER_OPERATION;
@@ -297,42 +301,12 @@ public class mio_icif_washer_elc extends mio_icif_producer {
      * 将水桶/水单元中的水转移到流体槽，空容器移到空桶输出槽
      */
     private void handleWaterBucketSlot() {
-        ItemStack waterBucketStack = itemHandler.getStackInSlot(WATER_BUCKET_SLOT);
-        if (waterBucketStack.isEmpty() || !isWaterBucket(waterBucketStack)) {
-            return;
-        }
-
-        // 检查流体槽是否已经满了
-        if (fluidTank.getFluidAmount() >= fluidTank.getCapacity()) {
-            return;
-        }
-
-        // 判断输入是桶还是单元
-        boolean isCell = mio_icif_cells.isFluidCell(waterBucketStack);
-        ItemStack emptyContainer = isCell ? mio_icif_cells.getEmptyCellForStack(waterBucketStack) : new ItemStack(Items.BUCKET);
-
-        // 检查空桶输出槽是否可以容纳
-        ItemStack emptyBucketStack = itemHandler.getStackInSlot(EMPTY_BUCKET_SLOT);
-        if (!emptyBucketStack.isEmpty()) {
-            // 检查槽位已有相同类别空容器，且未达最大堆叠数
-            if (!ItemStack.isSameItem(emptyBucketStack, emptyContainer) || emptyBucketStack.getCount() >= emptyBucketStack.getMaxStackSize()) {
-                return;
-            }
-        }
-
-        // 转移水1000mb = 1桶
-        int filled = fluidTank.fill(new FluidStack(Fluids.WATER, 1000), IFluidHandler.FluidAction.EXECUTE);
-        if (filled > 0) {
-            // 消耗水桶/水单元
-            waterBucketStack.shrink(1);
-            // 添加空桶/空单元到空桶输出槽
-            if (emptyBucketStack.isEmpty()) {
-                itemHandler.setStackInSlot(EMPTY_BUCKET_SLOT, emptyContainer);
-            } else {
-                emptyBucketStack.grow(1);
-            }
-            setChanged();
-        }
+        var input = itemHandler.getStackInSlot(WATER_BUCKET_SLOT);
+        if (input.isEmpty() || !isWaterBucket(input)) return;
+        boolean cell = mio_icif_cells.isFluidCell(input);
+        var content = cell ? mio_icif_cells.getCellFluid(input.copyWithCount(1)) : new FluidStack(Fluids.WATER, 1000);
+        var empty = cell ? mio_icif_cells.getEmptyCellForStack(input.copyWithCount(1)) : new ItemStack(Items.BUCKET);
+        if (dev.scex.si.energy.ContainerToTank.transfer(itemHandler, WATER_BUCKET_SLOT, EMPTY_BUCKET_SLOT, fluidTank, content, empty)) setChanged();
     }
 
     /**
@@ -352,58 +326,10 @@ public class mio_icif_washer_elc extends mio_icif_producer {
 
     @Override
     protected boolean canWork() {
-        // 检查是否有待洗物品
-        ItemStack input = itemHandler.getStackInSlot(INPUT_SLOT);
-        if (input.isEmpty()) {
-            return false;
-        }
-
-        // 检查物品是否可以洗矿
-        if (!isWashable(input)) {
-            return false;
-        }
-
-        // 检查是否有足够能量
-        if (!hasEnoughEnergy()) {
-            return false;
-        }
-
-        // 检查是否有足够水
-        if (!hasEnoughWater()) {
-            return false;
-        }
-
-        // 检查是否有足够输出槽空间容纳产物
-        List<ItemStack> results = getWashingResults(input);
-        if (results.isEmpty()) {
-            return false;
-        }
-        
-        // 检查每个输出槽是否有足够空间
-        for (int i = 0; i < results.size() && i < 3; i++) {
-            ItemStack result = results.get(i);
-            int outputSlot = OUTPUT_SLOT_1 + i;
-            ItemStack currentOutput = itemHandler.getStackInSlot(outputSlot);
-            
-            if (result.isEmpty()) {
-                continue; // 空气不需要空间
-            }
-            
-            if (currentOutput.isEmpty()) {
-                continue; // 空槽可以容纳
-            }
-            
-            if (ItemStack.isSameItem(currentOutput, result) && 
-                ItemStack.isSameItemSameComponents(currentOutput, result)) {
-                int newCount = currentOutput.getCount() + result.getCount();
-                if (newCount > currentOutput.getMaxStackSize()) {
-                    return false; // 空间不足
-                }
-            } else {
-                return false; // 槽位已被其他物品占用
-            }
-        }
-        return true;
+        var input = itemHandler.getStackInSlot(INPUT_SLOT);
+        if (input.isEmpty() || !hasEnoughEnergy() || !hasEnoughWater()) return false;
+        return dev.scex.si.processing.RecipeSlots.prepare(itemHandler, INPUT_SLOT, 1,
+            new int[]{OUTPUT_SLOT_1, OUTPUT_SLOT_2, OUTPUT_SLOT_3}, getWashingResults(input)).isPresent();
     }
 
     /**
@@ -440,52 +366,15 @@ public class mio_icif_washer_elc extends mio_icif_producer {
      * 完成一次洗矿，产出多个结果
      */
     private void finishWashing() {
-        ItemStack input = itemHandler.getStackInSlot(INPUT_SLOT);
-        if (input.isEmpty()) {
-            stopWork();
-            return;
-        }
-
-        // 消耗水
-        if (!consumeWater()) {
-            stopWork();
-            return;
-        }
-
-        // 获取配方输出结果
-        List<ItemStack> results = getWashingResults(input);
-        if (results.isEmpty()) {
-            stopWork();
-            return;
-        }
-
-        // 尝试将结果放入对应输出槽
-        boolean allPlaced = true;
-        for (int i = 0; i < results.size() && i < 3; i++) {
-            ItemStack result = results.get(i);
-            int outputSlot = OUTPUT_SLOT_1 + i;
-            
-            if (!tryPlaceResult(outputSlot, result)) {
-                allPlaced = false;
-                break;
-            }
-        }
-
-        if (!allPlaced) {
-            stopWork();
-            return;
-        }
-
-        // 消耗输入物品
-        input.shrink(1);
-
-        // 重置进度
+        var input = itemHandler.getStackInSlot(INPUT_SLOT);
+        var plan = dev.scex.si.processing.RecipeSlots.prepare(itemHandler, INPUT_SLOT, 1,
+            new int[]{OUTPUT_SLOT_1, OUTPUT_SLOT_2, OUTPUT_SLOT_3}, getWashingResults(input));
+        if (plan.isEmpty()) { stopWork(); return; }
+        int completedProgress = progress;
+        progress = 0; // An inventory observer must never save completed work against the next input.
+        if (!plan.get().commitWithFluid(fluidTank, new FluidStack(Fluids.WATER, WATER_PER_OPERATION))) { progress = completedProgress; stopWork(); return; }
         finishWork();
-
-        // 如果还可以继续工作则继续
-        if (canWork()) {
-            isWorking = true;
-        }
+        if (canWork()) isWorking = true;
     }
 
     /**

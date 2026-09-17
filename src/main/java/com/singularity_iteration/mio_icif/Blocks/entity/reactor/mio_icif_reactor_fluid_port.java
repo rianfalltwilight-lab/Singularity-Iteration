@@ -100,15 +100,19 @@ tick 更新逻辑
  */
     @Nullable
     public com.singularity_iteration.mio_icif.Blocks.entity.generator.mio_icif_nuclear_reactor_generator getReactor() {
-        if (level == null) return null;
+        if (!(level instanceof net.minecraft.server.level.ServerLevel server)||!server.getServer().isSameThread()||isRemoved())return null;
+        var ownChunk=server.getChunkSource().getChunkNow(worldPosition.getX()>>4,worldPosition.getZ()>>4);
+        if(ownChunk==null||ownChunk.getBlockEntity(worldPosition,net.minecraft.world.level.chunk.LevelChunk.EntityCreationType.CHECK)!=this)return null;
 
         // 
     for (int x = -2; x <= 2; x++) {
             for (int y = -2; y <= 2; y++) {
                 for (int z = -2; z <= 2; z++) {
                     BlockPos checkPos = worldPosition.offset(x, y, z);
+                    if(!level.getChunkSource().hasChunk(checkPos.getX()>>4,checkPos.getZ()>>4))continue;
                     if (level.getBlockEntity(checkPos) instanceof com.singularity_iteration.mio_icif.Blocks.entity.generator.mio_icif_nuclear_reactor_generator reactor) {
-                        return reactor;
+                        var structure=reactor.getFluidReactorMultiblock();
+                        if(reactor.isValidFluidReactorStructure()&&structure!=null&&structure.isPartOfStructure(worldPosition))return reactor;
                     }
                 }
             }

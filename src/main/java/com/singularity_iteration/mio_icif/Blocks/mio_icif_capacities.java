@@ -263,6 +263,13 @@ public class mio_icif_capacities {
      * @param event 能力注册事件
      */
     public static void registerCapabilities(RegisterCapabilitiesEvent event) {
+        // Register once per SI type. The provider selects real machine/storage owners;
+        // it returns null for wires, proxy parts and the dedicated energy converter.
+        for (var type : net.minecraft.core.registries.BuiltInRegistries.BLOCK_ENTITY_TYPE) {
+            if (!net.minecraft.core.registries.BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(type).getNamespace().equals("mio_icif")) continue;
+            event.registerBlockEntity(Capabilities.EnergyStorage.BLOCK, type,
+                (tile, side) -> tile instanceof mio_icif_Energy_Block machine ? machine.scexFeCapability(side) : null);
+        }
         registerFEAndLongCapabilities(event);
 
         // Register EU energy storage capability for Thermal Generator
@@ -1310,7 +1317,7 @@ public class mio_icif_capacities {
             }
         );
 
-        registerAPIHeatCapability(event, mio_icif_block_entities.HEAT_GENERATOR_ELC.get());
+        // R106: the explicit directional provider above owns this capability; no fallback may bypass it.
         Singularity_Iteration.LOGGER.info("Registered EU energy, item handler and HU heat capabilities for Heat Generator Electric");
 
         // Register capabilities for Solid Heat Generator (固体加热机)
@@ -1434,7 +1441,7 @@ public class mio_icif_capacities {
             }
         );
 
-        registerAPIHeatCapability(event, mio_icif_block_entities.STIRLING_GENERATOR_ENTITY_TYPE.get());
+
         Singularity_Iteration.LOGGER.info("Registered EU energy and HU heat capabilities for Stirling Generator");
 
         event.registerBlockEntity(
@@ -1534,7 +1541,7 @@ public class mio_icif_capacities {
             }
         );
 
-        registerAPIKineticCapability(event, mio_icif_block_entities.KINETIC_GENERATOR_ENTITY_TYPE.get());
+
         Singularity_Iteration.LOGGER.info("Registered KU kinetic and EU energy capabilities for Kinetic Generator");
 
         // Register capabilities for Turbo Kinetic Generator (涡轮增压动能发电机)
@@ -1670,7 +1677,7 @@ public class mio_icif_capacities {
             }
         );
 
-        registerAPIKineticCapability(event, mio_icif_block_entities.KINETIC_GENERATOR_ELC_ENTITY_TYPE.get());
+
         Singularity_Iteration.LOGGER.info("Registered EU energy, item handler and KU kinetic capabilities for Electric Kinetic Generator");
 
         // Register capabilities for Stirling Kinetic Generator (斯特林动能发生机)
@@ -2255,7 +2262,7 @@ public class mio_icif_capacities {
             mio_icif_block_entities.MATTER_ELC_ENTITY_TYPE.get(),
             (blockEntity, direction) -> {
                 if (blockEntity instanceof com.singularity_iteration.mio_icif.Blocks.entity.producer.mio_icif_matter_elc matterElc) {
-                    return matterElc.getUuMatterTank();
+                    return matterElc.getFluidHandlerCapability(direction);
                 }
                 return null;
             }

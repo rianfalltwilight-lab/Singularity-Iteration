@@ -57,9 +57,7 @@ public interface IHeatStorage {
      * 用于显示和某些特殊机器
      */
     default int getTemperature() {
-        if (getMaxHeatStored() == 0) return 20;
-        long heatPercent = (getHeatStored() * 100) / getMaxHeatStored();
-        return 20 + (int)((heatPercent * 980) / 100);
+        return dev.scex.energy.BoundedUnits.gauge(getHeatStored(), getMaxHeatStored(), 20, 1000);
     }
     
     /**

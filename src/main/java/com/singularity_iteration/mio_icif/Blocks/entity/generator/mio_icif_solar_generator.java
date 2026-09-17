@@ -58,6 +58,8 @@ public class mio_icif_solar_generator extends mio_icif_Energy_Generator {
 
     // 当前是否正在发电（用于客户端同步和方块状态更新）
     private boolean isGenerating = false;
+    private float scexSolarRate;
+    private int scexRefreshWait;
 
     /**
      * 构造函数（用于 BlockEntityType.Builder）
@@ -78,7 +80,8 @@ public class mio_icif_solar_generator extends mio_icif_Energy_Generator {
      */
     public mio_icif_solar_generator(BlockPos pos, BlockState state, BlockEntityType<?> type, CableTier cableTier) {
         super(pos, state, type != null ? type : mio_icif_block_entities.SOLAR_GENERATOR_ENTITY_TYPE.get(),
-              SlotLayout.builder().battery().build(), ENERGY_GENERATION_RATE, ENERGY_CAPACITY, MAX_RECEIVE, MAX_EXTRACT, cableTier);
+              SlotLayout.builder().battery().build(), ENERGY_GENERATION_RATE,
+              dev.scex.si.energy.IndependentSiEnergy.controls(state) ? 2L : ENERGY_CAPACITY, MAX_RECEIVE, MAX_EXTRACT, cableTier);
     }
 
     /**
@@ -90,6 +93,7 @@ public class mio_icif_solar_generator extends mio_icif_Energy_Generator {
      * 4. 正上方没有非透明方块阻挡
      */
     public boolean canGenerate(Level level, BlockPos pos) {
+        if (energyStorage.scexNetworkControlled()) return scexCurrentRate(level, pos) > 0;
         // 检查是否在主世界
         if (!isOverworld(level)) {
             return false;
@@ -112,6 +116,26 @@ public class mio_icif_solar_generator extends mio_icif_Energy_Generator {
         }
 
         return true;
+    }
+
+    /** Family hooks keep the R29 fractional model and 2 EU buffer specific to basic solar. */
+    protected float scexIndependentRate(Level level, BlockPos pos) { return scexCurrentRate(level, pos); }
+    protected int scexRefreshTicks() { return 128; }
+    protected boolean scexClampBasicBuffer() { return true; }
+
+    private static float scexCurrentRate(Level level, BlockPos pos) {
+        if (level.dimension() != Level.OVERWORLD) return 0;
+        int light = dev.scex.energy.SolarColumnLight.sample(pos.getY() + 1, level.getMaxBuildHeight(), y -> {
+            var at = new BlockPos(pos.getX(), y, pos.getZ());
+            var state = level.getBlockState(at);
+            int opacity = state.getLightBlock(level, at);
+            // The observed reference water column attenuates by three per cell.
+            if (state.getFluidState().is(net.minecraft.tags.FluidTags.WATER)) opacity = Math.max(3, opacity);
+            return Math.min(15, Math.max(0, opacity));
+        });
+        return dev.scex.energy.SolarOutputModel.rate(level.getDayTime(),
+            light,
+            level.getRainLevel(1F), level.getThunderLevel(1F));
     }
 
     /**
@@ -201,13 +225,21 @@ public class mio_icif_solar_generator extends mio_icif_Energy_Generator {
         blockEntity.chargeItems();
         
         // 只有当发电机需要直接向相邻方块输出能量时，才调用distributeEnergy()
-        if (blockEntity.shouldDirectlyDistributeEnergy()) {
+        if (!blockEntity.energyStorage.scexNetworkControlled() && blockEntity.shouldDirectlyDistributeEnergy()) {
             blockEntity.distributeEnergy();
         }
 
         // 分配完能量后再检查是否可以发电
         // 检查是否可以发电
-        boolean canGenerate = blockEntity.canGenerate(level, pos);
+        boolean controlled = blockEntity.energyStorage.scexNetworkControlled();
+        if (controlled && blockEntity.scexRefreshWait-- <= 0) {
+            blockEntity.scexSolarRate = blockEntity.scexIndependentRate(level, pos);
+            blockEntity.scexRefreshWait = blockEntity.scexRefreshTicks() - 1;
+        }
+        boolean canGenerate = controlled ? blockEntity.scexSolarRate > 0 : blockEntity.canGenerate(level, pos);
+        if (controlled && blockEntity.scexClampBasicBuffer() && canGenerate
+                && blockEntity.energyStorage.scexExactAmount().compareTo(dev.scex.energy.EnergyAmount.of(2)) > 0)
+            blockEntity.energyStorage.setEnergy(2);
 
         // 检查能量存储是否已满
         boolean isEnergyFull = blockEntity.getEnergyStorage().getAmount() >=
@@ -218,7 +250,8 @@ public class mio_icif_solar_generator extends mio_icif_Energy_Generator {
 
         // 如果可以发电且能量未满，则生成能量
         if (blockEntity.isGenerating) {
-            blockEntity.generateEnergy();
+            if (controlled) blockEntity.energyStorage.scexGenerateEnergy(dev.scex.energy.EnergyAmount.fromDouble(blockEntity.scexSolarRate), false);
+            else blockEntity.generateEnergy();
         }
 
         // 检查发电状态是否改变
@@ -291,12 +324,14 @@ public class mio_icif_solar_generator extends mio_icif_Energy_Generator {
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
         tag.putBoolean("IsGenerating", isGenerating);
+        if (energyStorage.scexNetworkControlled()) tag.putFloat("scex_solar_rate", scexSolarRate);
     }
 
     @Override
     public void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
         isGenerating = tag.getBoolean("IsGenerating");
+        if (energyStorage.scexNetworkControlled()) { scexSolarRate = 0; scexRefreshWait = 0; }
     }
 
     @Override

@@ -76,6 +76,19 @@ private int currentHeatRate = 0;
             return;
         }
 
+        if (dev.scex.si.energy.ThermalOutput.enabled()) {
+            int count = blockEntity.countPellets();
+            boolean changed = count != blockEntity.cachedPelletCount;
+            blockEntity.cachedPelletCount = count;
+            blockEntity.currentHeatRate = HEAT_RATES[count];
+            long accepted = dev.scex.si.energy.ThermalOutput.offer(dev.scex.si.energy.ThermalOutput.front(blockEntity), blockEntity.currentHeatRate);
+            boolean active = accepted > 0;
+            var property = com.singularity_iteration.mio_icif.Blocks.HUGenerator.mio_icif_block_rt_heat_generator.ACTIVE;
+            if (state.getValue(property) != active) { level.setBlock(pos, state.setValue(property, active), 3); changed = true; }
+            if (changed) blockEntity.setChanged();
+            return;
+        }
+
         // 计算当前放入的靶丸数
     int pelletCount = blockEntity.countPellets();
 
@@ -267,9 +280,9 @@ private int currentHeatRate = 0;
     @Override
     public void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
-        this.cachedPelletCount = tag.getInt("CachedPelletCount");
-        this.currentHeatRate = tag.getInt("CurrentHeatRate");
-        if (tag.contains("RTGItems")) {
+        this.cachedPelletCount = -1;
+        this.currentHeatRate = 0;
+        if (!tag.contains("Items") && tag.contains("RTGItems")) {
             com.singularity_iteration.mio_icif.Blocks.entity.slot.MachineItemHandler tempHandler = new com.singularity_iteration.mio_icif.Blocks.entity.slot.MachineItemHandler(RTG_LAYOUT);
             tempHandler.deserializeNBT(registries, tag.getCompound("RTGItems"));
             for (int i = 0; i < SLOT_COUNT; i++) {

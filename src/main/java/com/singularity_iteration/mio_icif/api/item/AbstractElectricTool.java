@@ -92,7 +92,7 @@ public class AbstractElectricTool extends AbstractBattery implements IElectricTo
      * @return 是否有足够能量
      */
     public boolean hasEnoughEnergy(ItemStack stack, long amount) {
-        return getEnergy(stack) >= amount;
+        return amount >= 0 && getEnergy(stack) >= amount;
     }
 
     /**
@@ -102,11 +102,7 @@ public class AbstractElectricTool extends AbstractBattery implements IElectricTo
      * @return 是否成功消耗
      */
     public boolean consumeEnergy(ItemStack stack) {
-        if (hasEnoughEnergy(stack)) {
-            extractEnergy(stack, energyPerUse);
-            return true;
-        }
-        return false;
+        return consumeEnergy(stack, energyPerUse);
     }
 
     /**
@@ -117,11 +113,7 @@ public class AbstractElectricTool extends AbstractBattery implements IElectricTo
      * @return 是否成功消耗
      */
     public boolean consumeEnergy(ItemStack stack, long amount) {
-        if (getEnergy(stack) >= amount) {
-            extractEnergy(stack, amount);
-            return true;
-        }
-        return false;
+        return dev.scex.si.energy.BatteryTransfer.consume(stack, this, amount);
     }
 
     /**
@@ -177,7 +169,7 @@ public class AbstractElectricTool extends AbstractBattery implements IElectricTo
         for (int i = 0; i < inventory.length; i++) {
             if (inventory[i] != null && !inventory[i].isEmpty()) {
                 CompoundTag slotNbt = new CompoundTag();
-                slotNbt.putByte("Slot", (byte) i);
+                slotNbt.putInt("Slot", i);
                 Tag itemTag = inventory[i].save(registries);
                 if (itemTag instanceof CompoundTag compound) {
                     slotNbt.put("Item", compound);
@@ -198,6 +190,7 @@ public class AbstractElectricTool extends AbstractBattery implements IElectricTo
      * @param registries     注册表访问器
      */
     public static void loadHandHeldInventory(ItemStack containerStack, ItemStack[] inventory, net.minecraft.core.HolderLookup.Provider registries) {
+        java.util.Arrays.fill(inventory, ItemStack.EMPTY);
         if (containerStack.isEmpty()) return;
 
         CustomData customData = containerStack.get(DataComponents.CUSTOM_DATA);
@@ -209,7 +202,8 @@ public class AbstractElectricTool extends AbstractBattery implements IElectricTo
         ListTag contentList = rootTag.getList("HandHeldItems", Tag.TAG_COMPOUND);
         for (int i = 0; i < contentList.size(); i++) {
             CompoundTag slotNbt = contentList.getCompound(i);
-            int slot = slotNbt.getByte("Slot");
+            if (!slotNbt.contains("Slot", Tag.TAG_BYTE) && !slotNbt.contains("Slot", Tag.TAG_INT)) continue;
+            int slot = slotNbt.contains("Slot", Tag.TAG_BYTE) ? Byte.toUnsignedInt(slotNbt.getByte("Slot")) : slotNbt.getInt("Slot");
             if (slot >= 0 && slot < inventory.length) {
                 inventory[slot] = ItemStack.parseOptional(registries, slotNbt.getCompound("Item"));
             }

@@ -122,7 +122,7 @@ public class FluidReactorMenu extends mio_icif_base_menu {
         addCustomPlayerInventory(playerInventory, 26, 161, 219);
 
         if (blockEntity != null) {
-            this.data = blockEntity.getContainerData();
+            this.data = blockEntity.getFluidContainerData();
         } else {
             this.data = new ContainerData() {
                 private final int[] data = new int[5];

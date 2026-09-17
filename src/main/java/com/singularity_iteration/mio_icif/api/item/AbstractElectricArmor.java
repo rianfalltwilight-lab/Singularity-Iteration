@@ -117,7 +117,7 @@ public abstract class AbstractElectricArmor extends ArmorItem implements IElectr
                                     long maxEnergy, long initialEnergy, long chargeRate,
                                     long energyPerTick, int armorTier, String texturePrefix) {
         super(material, type, buildArmorProperties(properties, maxEnergy, initialEnergy));
-        this.maxEnergy = maxEnergy;
+        this.maxEnergy = Math.max(0, maxEnergy);
         this.chargeRate = chargeRate;
         this.energyPerTick = energyPerTick;
         this.armorTier = armorTier;
@@ -128,7 +128,7 @@ public abstract class AbstractElectricArmor extends ArmorItem implements IElectr
 
     private static Properties buildArmorProperties(Properties properties, long maxEnergy, long initialEnergy) {
         int durability = capToInt(maxEnergy, "armor durability");
-        int damage = capToInt(Math.max(0, maxEnergy - initialEnergy), "armor initial damage");
+        int damage = capToInt(Math.max(0, maxEnergy) - Math.clamp(initialEnergy, 0L, Math.max(0, maxEnergy)), "armor initial damage");
         return properties
                 .durability(durability)
                 .component(DataComponents.DAMAGE, damage)
@@ -158,7 +158,8 @@ public abstract class AbstractElectricArmor extends ArmorItem implements IElectr
 
     @Override
     public long getEnergy(ItemStack stack) {
-        return maxEnergy - stack.getDamageValue();
+        if (stack.isEmpty()) return 0;
+        return Math.clamp(maxEnergy - Math.max(0, stack.getDamageValue()), 0L, Math.max(0, maxEnergy));
     }
 
     @Override
@@ -170,25 +171,27 @@ public abstract class AbstractElectricArmor extends ArmorItem implements IElectr
 
     @Override
     public long addEnergy(ItemStack stack, long amount) {
+        if (stack.isEmpty() || stack.getCount() != 1 || amount <= 0) return 0;
         long currentEnergy = getEnergy(stack);
-        long newEnergy = Math.min(maxEnergy, currentEnergy + amount);
-        long addedEnergy = newEnergy - currentEnergy;
-        setEnergy(stack, newEnergy);
-        return addedEnergy;
+        long accepted = Math.min(amount, Math.max(0, maxEnergy - currentEnergy));
+        if (accepted == 0) return 0;
+        setEnergy(stack, currentEnergy + accepted);
+        return getEnergy(stack) - currentEnergy;
     }
 
     @Override
     public long extractEnergy(ItemStack stack, long amount) {
+        if (stack.isEmpty() || stack.getCount() != 1 || amount <= 0) return 0;
         long currentEnergy = getEnergy(stack);
-        long newEnergy = Math.max(0, currentEnergy - amount);
-        long extractedEnergy = currentEnergy - newEnergy;
-        setEnergy(stack, newEnergy);
-        return extractedEnergy;
+        long extracted = Math.min(amount, currentEnergy);
+        if (extracted == 0) return 0;
+        setEnergy(stack, currentEnergy - extracted);
+        return currentEnergy - getEnergy(stack);
     }
 
     @Override
     public boolean isFull(ItemStack stack) {
-        return getEnergy(stack) >= maxEnergy;
+        return getEnergy(stack) >= getMaxEnergy(stack);
     }
 
     @Override
@@ -220,11 +223,7 @@ public abstract class AbstractElectricArmor extends ArmorItem implements IElectr
 
     @Override
     public boolean consumeEnergy(ItemStack stack, long amount) {
-        if (getEnergy(stack) >= amount) {
-            extractEnergy(stack, amount);
-            return true;
-        }
-        return false;
+        return dev.scex.si.energy.BatteryTransfer.consume(stack, this, amount);
     }
 
     @Override

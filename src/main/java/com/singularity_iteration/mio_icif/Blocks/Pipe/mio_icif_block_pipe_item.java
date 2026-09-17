@@ -215,11 +215,52 @@ public class mio_icif_block_pipe_item extends mio_icif_entity_block {
     }
 
     @Override
+    public java.util.List<net.minecraft.world.item.ItemStack> getDrops(BlockState state, net.minecraft.world.level.storage.loot.LootParams.Builder params) {
+        var tile=params.getOptionalParameter(net.minecraft.world.level.storage.loot.parameters.LootContextParams.BLOCK_ENTITY);
+        // The single packed pipe is emitted by removal, which also covers replacement
+        // without a loot call. Pure loot queries must never consume or copy custody.
+        if(tile instanceof mio_icif_pipe_item pipe && requiresPackedDrop(pipe))return java.util.List.of();
+        return super.getDrops(state,params);
+    }
+
+    @Override
+    protected net.minecraft.world.InteractionResult useWithoutItem(BlockState state,Level level,BlockPos pos,
+            net.minecraft.world.entity.player.Player player,net.minecraft.world.phys.BlockHitResult hit) {
+        if(level.getBlockEntity(pos) instanceof mio_icif_pipe_item pipe && pipe.hasUncertainTransfer()) {
+            if(!level.isClientSide())player.displayClientMessage(net.minecraft.network.chat.Component.literal(
+                "管道已暂停：外部库存的转移结果不确定。拆除可保留记录；管理员核对库存后使用 /mio_icif pipe inspect。"),false);
+            return net.minecraft.world.InteractionResult.sidedSuccess(level.isClientSide());
+        }
+        return net.minecraft.world.InteractionResult.PASS;
+    }
+
+    @Override
+    protected void addBlockTooltip(net.minecraft.world.item.ItemStack stack,java.util.List<net.minecraft.network.chat.Component> tooltip) {
+        super.addBlockTooltip(stack,tooltip);
+        var data=stack.get(net.minecraft.core.component.DataComponents.BLOCK_ENTITY_DATA);
+        if(data!=null && data.copyTag().contains("scex_pipe_phase"))tooltip.add(net.minecraft.network.chat.Component.literal(
+            "包含待核对的物品转移记录；重新放置后仍暂停。").withStyle(net.minecraft.ChatFormatting.YELLOW));
+    }
+
+    private static boolean requiresPackedDrop(mio_icif_pipe_item pipe) {
+        var buffer=pipe.getBufferItem();
+        return pipe.hasUncertainTransfer() || buffer.getCount()>buffer.getMaxStackSize();
+    }
+
+    @Override
     protected void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean movedByPiston) {
-        if (!state.is(newState.getBlock())) {
+        if (!level.isClientSide() && !state.is(newState.getBlock())) {
             // 清理物品（如果有的话）?
             BlockEntity blockEntity = level.getBlockEntity(pos);
             if (blockEntity instanceof mio_icif_pipe_item pipe) {
+                if(requiresPackedDrop(pipe)) {
+                    var packed=new net.minecraft.world.item.ItemStack(this);
+                    packed.set(net.minecraft.core.component.DataComponents.BLOCK_ENTITY_DATA,
+                        net.minecraft.world.item.component.CustomData.of(pipe.saveWithId(level.registryAccess())));
+                    level.addFreshEntity(new net.minecraft.world.entity.item.ItemEntity(level,pos.getX()+0.5,pos.getY()+0.5,pos.getZ()+0.5,packed));
+                    super.onRemove(state,level,pos,newState,movedByPiston);
+                    return;
+                }
  // 物品管道被破坏时，存的物品掉落
                 net.minecraft.world.item.ItemStack bufferItem = pipe.getBufferItem();
                 if (!bufferItem.isEmpty()) {

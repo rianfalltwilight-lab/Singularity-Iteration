@@ -18,8 +18,6 @@ import com.singularity_iteration.mio_icif.network.mio_icif_Network;
 import com.singularity_iteration.mio_icif.particle.mio_icif_Particles;
 import com.singularity_iteration.mio_icif.recipe.mio_icif_ModRecipes;
 import com.singularity_iteration.mio_icif.recipe.mio_icif_IngredientTypes;
-import com.singularity_iteration.mio_icif.uu.UuIndex;
-import com.singularity_iteration.mio_icif.uu.UuScanValues;
 import com.singularity_iteration.mio_icif.world.feature.WorldGeneration;
 import com.singularity_iteration.mio_icif.world.feature.mio_icif_foliage_placers;
 import com.singularity_iteration.mio_icif.world.feature.mio_icif_tree_decorators;
@@ -35,7 +33,6 @@ import com.singularity_iteration.mio_icif.Items.mio_icif_items;
 import com.mojang.logging.LogUtils;
 
 import net.minecraft.core.RegistrySetBuilder;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.FireBlock;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -48,7 +45,6 @@ import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.BlockEntityTypeAddBlocksEvent;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
-import java.nio.file.Path;
 import java.util.Set;
 
 // The value here should match an entry in the META-INF/neoforge.mods.toml file
@@ -173,9 +169,11 @@ public class Singularity_Iteration {
 
         modEventBus.register(com.singularity_iteration.mio_icif.event.CropRegistryEvent.class);
 
-        // 初始化电网系统（IC2 风格 Node/Grid 架构）
+        // Transitional compatibility remains for endpoints not independently implemented.
+        // Removing this call is blocked until their side/packet/ABI adapters exist.
         GridEventHandler.init();
         dev.scex.si.energy.IndependentSiEnergy.install();
+        dev.scex.si.processing.UuPricingLifecycle.install();
 
         // 初始化 AE2 兼容层
         com.singularity_iteration.mio_icif.integration.ae2.Ae2Plugin.init();
@@ -240,29 +238,8 @@ com.singularity_iteration.mio_icif.entity.dynamite.mio_icif_dynamite_item.regist
     public void onServerStarting(ServerStartingEvent event) {
         LOGGER.info("Server starting for Singularity Iteration");
 
-        // 初始化UU物质记录系统
-        MinecraftServer server = event.getServer();
-        if (server != null) {
-            // 获取已加载的overworld
-            var overworld = server.getLevel(net.minecraft.world.level.Level.OVERWORLD);
-            if (overworld != null) {
-                // 加载UU扫描值配置
-                UuScanValues scanValues = new UuScanValues();
-                scanValues.loadDefaultValues();
-
-                // 从配置文件目录加载用户自定义值
-                Path configDir = server.getWorldPath(net.minecraft.world.level.storage.LevelResource.ROOT)
-                        .resolve("config").resolve(MOD_ID);
-                scanValues.loadFromFile(configDir);
-
-                // 初始化UU Index（配置值会在init内部先加载到图中）
-                UuIndex.INSTANCE.init(overworld, scanValues);
-
-                LOGGER.info("[UU] UU Matter system initialized.");
-            } else {
-                LOGGER.warn("[UU] Overworld not available, UU system initialization skipped.");
-            }
-        }
+        // Authoritative UU initialization belongs to UuPricingLifecycle after recipes are ready.
+        // The quarantined predecessor graph is no longer initialized as an alternate authority.
     }
 
     @SubscribeEvent
@@ -275,6 +252,7 @@ com.singularity_iteration.mio_icif.entity.dynamite.mio_icif_dynamite_item.regist
     @SubscribeEvent
     public void onRegisterCommands(RegisterCommandsEvent event) {
         com.singularity_iteration.mio_icif.command.ToggleCommand.register(event.getDispatcher());
+        dev.scex.si.processing.PipeRecoveryCommand.register(event.getDispatcher());
     }
 
     private void onBlockEntityTypeAddBlocks(BlockEntityTypeAddBlocksEvent event) {

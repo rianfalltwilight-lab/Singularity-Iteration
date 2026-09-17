@@ -205,7 +205,8 @@ public abstract class mio_icif_machine_menu extends mio_icif_base_menu {
     @Override
     protected boolean isBattery(ItemStack stack) {
         return MioIcifAPI.instance().getItemAPI().isBattery(stack)
-            || stack.getItem() == net.minecraft.world.item.Items.REDSTONE;
+            || stack.getItem() == net.minecraft.world.item.Items.REDSTONE
+            || dev.scex.si.energy.FeMachineBridge.dischargeable(stack);
     }
 
     /**

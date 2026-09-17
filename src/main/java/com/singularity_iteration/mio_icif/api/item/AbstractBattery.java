@@ -93,7 +93,7 @@ public class AbstractBattery extends Item implements IBatteryItem {
      */
     protected AbstractBattery(Properties properties, long maxEnergy, long initialEnergy, long chargeRate, int maxStackSize) {
         super(buildProperties(properties, maxEnergy, initialEnergy, maxStackSize));
-        this.maxEnergy = maxEnergy;
+        this.maxEnergy = Math.max(0, maxEnergy);
         this.chargeRate = chargeRate;
         this.stackable = maxStackSize > 1;
     }
@@ -104,7 +104,7 @@ public class AbstractBattery extends Item implements IBatteryItem {
                 .stacksTo(maxStackSize);
         } else {
             int durability = capToInt(maxEnergy, "durability");
-            int damage = capToInt(Math.max(0, maxEnergy - initialEnergy), "initial damage");
+            int damage = capToInt(Math.max(0, maxEnergy) - Math.clamp(initialEnergy, 0L, Math.max(0, maxEnergy)), "initial damage");
             return properties
                 .durability(durability)
                 .component(DataComponents.DAMAGE, damage)
@@ -135,10 +135,11 @@ public class AbstractBattery extends Item implements IBatteryItem {
 
     @Override
     public long getEnergy(ItemStack stack) {
+        if (stack.isEmpty()) return 0;
         if (stackable) {
-            return getStackableEnergy(stack);
+            return Math.clamp(getStackableEnergy(stack), 0L, Math.max(0, maxEnergy));
         } else {
-            return maxEnergy - stack.getDamageValue();
+            return Math.clamp(maxEnergy - Math.max(0, stack.getDamageValue()), 0L, Math.max(0, maxEnergy));
         }
     }
 
@@ -155,25 +156,27 @@ public class AbstractBattery extends Item implements IBatteryItem {
 
     @Override
     public long addEnergy(ItemStack stack, long amount) {
+        if (stack.isEmpty() || stack.getCount() != 1 || amount <= 0) return 0;
         long currentEnergy = getEnergy(stack);
-        long newEnergy = Math.min(maxEnergy, currentEnergy + amount);
-        long addedEnergy = newEnergy - currentEnergy;
-        setEnergy(stack, newEnergy);
-        return addedEnergy;
+        long accepted = Math.min(amount, Math.max(0, maxEnergy - currentEnergy));
+        if (accepted == 0) return 0;
+        setEnergy(stack, currentEnergy + accepted);
+        return getEnergy(stack) - currentEnergy;
     }
 
     @Override
     public long extractEnergy(ItemStack stack, long amount) {
+        if (stack.isEmpty() || stack.getCount() != 1 || amount <= 0) return 0;
         long currentEnergy = getEnergy(stack);
-        long newEnergy = Math.max(0L, currentEnergy - amount);
-        long extractedEnergy = currentEnergy - newEnergy;
-        setEnergy(stack, newEnergy);
-        return extractedEnergy;
+        long extracted = Math.min(amount, currentEnergy);
+        if (extracted == 0) return 0;
+        setEnergy(stack, currentEnergy - extracted);
+        return currentEnergy - getEnergy(stack);
     }
 
     @Override
     public boolean isFull(ItemStack stack) {
-        return getEnergy(stack) >= maxEnergy;
+        return getEnergy(stack) >= getMaxEnergy(stack);
     }
 
     @Override
@@ -255,7 +258,7 @@ public class AbstractBattery extends Item implements IBatteryItem {
     @Override
     public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
-        if (!level.isClientSide && player.isShiftKeyDown()) {
+        if (!level.isClientSide && player.isShiftKeyDown() && stack.getCount() == 1) {
             long batteryEnergy = getEnergy(stack);
             if (batteryEnergy > 0) {
                 distributeEnergyToItems(player, stack, batteryEnergy);
@@ -278,18 +281,17 @@ public class AbstractBattery extends Item implements IBatteryItem {
      * @param totalEnergy   可分配的总能量
      */
     protected void distributeEnergyToItems(Player player, ItemStack batteryStack, long totalEnergy) {
+        if (batteryStack.isEmpty() || batteryStack.getCount() != 1) return;
+        totalEnergy = Math.min(Math.max(0, totalEnergy), getEnergy(batteryStack));
+        if (totalEnergy == 0) return;
         List<ItemStack> targets = new ArrayList<>();
         Inventory inv = player.getInventory();
-        var api = com.singularity_iteration.mio_icif.api.MioIcifAPI.instance().getItemAPI();
 
         for (int i = 0; i < inv.getContainerSize(); i++) {
             ItemStack s = inv.getItem(i);
             if (s.isEmpty() || s == batteryStack) continue;
-            if (api.isBattery(s) && !api.isElectricTool(s)) continue;
-            if (api.isBattery(s)) {
-                if (!api.isBatteryFull(s)) targets.add(s);
-            } else if (api.isElectricArmor(s)) {
-                if (api.getElectricArmorStored(s) < api.getElectricArmorMaxEnergy(s)) targets.add(s);
+            if (dev.scex.si.energy.BatteryTransfer.isEquipment(s) && s.getItem() instanceof IBatteryItem item) {
+                if (item.getEnergy(s) < item.getMaxEnergy(s)) targets.add(s);
             }
         }
 
@@ -298,18 +300,9 @@ public class AbstractBattery extends Item implements IBatteryItem {
         long energyPerTarget = totalEnergy / targets.size();
         if (energyPerTarget <= 0) return;
 
-        long actuallyDistributed = 0;
         for (ItemStack target : targets) {
-            if (api.isBattery(target)) {
-                long added = api.chargeBattery(target, energyPerTarget, false);
-                actuallyDistributed += added;
-            } else if (api.isElectricArmor(target)) {
-                long added = api.chargeElectricArmor(target, energyPerTarget, false);
-                actuallyDistributed += added;
-            }
+            dev.scex.si.energy.BatteryTransfer.move(batteryStack, this, target, (IBatteryItem)target.getItem(), energyPerTarget);
         }
-
-        extractEnergy(batteryStack, actuallyDistributed);
     }
 
     // ==================== Tooltip ====================

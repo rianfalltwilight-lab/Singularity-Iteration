@@ -110,38 +110,38 @@ public class mio_icif_reactors {
     // ???- ?????5 EU/t, 4 HU/t, 10000 tick???
     public static final DeferredItem<mio_icif_nuclear_reactor> URANIUM_SIMPLE = ITEMS.register("reactor/item_reactor_uranium_simple",
         () -> new mio_icif_nuclear_reactor(
-            new Item.Properties().component(mio_icif_data_components.FUEL_ROD_DURABILITY.get(), FuelRodDurability.full(10000)),
-            10000, 5, 4, mio_icif_nuclear_reactor.FuelRodType.SINGLE, () -> URANIUM_SIMPLE_DEPLETED.get()));
+            new Item.Properties().component(mio_icif_data_components.FUEL_ROD_DURABILITY.get(), FuelRodDurability.full(20000)),
+            20000, 5, 4, mio_icif_nuclear_reactor.FuelRodType.SINGLE, () -> URANIUM_SIMPLE_DEPLETED.get()));
 
     // IC2 fuel rods all consume one durability per 20-tick reactor cycle.
     public static final DeferredItem<mio_icif_nuclear_reactor> URANIUM_DUAL = ITEMS.register("reactor/item_reactor_uranium_dual",
         () -> new mio_icif_nuclear_reactor(
-            new Item.Properties().component(mio_icif_data_components.FUEL_ROD_DURABILITY.get(), FuelRodDurability.full(10000)),
-            10000, 5, 4, mio_icif_nuclear_reactor.FuelRodType.DUAL, () -> URANIUM_DUAL_DEPLETED.get()));
+            new Item.Properties().component(mio_icif_data_components.FUEL_ROD_DURABILITY.get(), FuelRodDurability.full(20000)),
+            20000, 5, 4, mio_icif_nuclear_reactor.FuelRodType.DUAL, () -> URANIUM_DUAL_DEPLETED.get()));
 
     // Quad rods have the same cycle lifetime; their advantage is output density, not total lifetime.
     public static final DeferredItem<mio_icif_nuclear_reactor> URANIUM_QUAD = ITEMS.register("reactor/item_reactor_uranium_quad",
         () -> new mio_icif_nuclear_reactor(
-            new Item.Properties().component(mio_icif_data_components.FUEL_ROD_DURABILITY.get(), FuelRodDurability.full(10000)),
-            10000, 5, 4, mio_icif_nuclear_reactor.FuelRodType.QUAD, () -> URANIUM_QUAD_DEPLETED.get()));
+            new Item.Properties().component(mio_icif_data_components.FUEL_ROD_DURABILITY.get(), FuelRodDurability.full(20000)),
+            20000, 5, 4, mio_icif_nuclear_reactor.FuelRodType.QUAD, () -> URANIUM_QUAD_DEPLETED.get()));
 
     // ???- MOX????10 EU/t, 8 HU/t, 10000 tick??????????????
     public static final DeferredItem<mio_icif_mox_reactor> MOX_SIMPLE = ITEMS.register("reactor/item_reactor_mox_simple",
         () -> new mio_icif_mox_reactor(
             new Item.Properties().component(mio_icif_data_components.FUEL_ROD_DURABILITY.get(), FuelRodDurability.full(10000)),
-            10000, 10, 8, mio_icif_nuclear_reactor.FuelRodType.SINGLE, () -> MOX_SIMPLE_DEPLETED.get()));
+            10000, 5, 4, mio_icif_nuclear_reactor.FuelRodType.SINGLE, () -> MOX_SIMPLE_DEPLETED.get()));
 
     // MOX???????
     public static final DeferredItem<mio_icif_mox_reactor> MOX_DUAL = ITEMS.register("reactor/item_reactor_mox_dual",
         () -> new mio_icif_mox_reactor(
             new Item.Properties().component(mio_icif_data_components.FUEL_ROD_DURABILITY.get(), FuelRodDurability.full(10000)),
-            10000, 10, 8, mio_icif_nuclear_reactor.FuelRodType.DUAL, () -> MOX_DUAL_DEPLETED.get()));
+            10000, 5, 4, mio_icif_nuclear_reactor.FuelRodType.DUAL, () -> MOX_DUAL_DEPLETED.get()));
 
     // MOX???????
     public static final DeferredItem<mio_icif_mox_reactor> MOX_QUAD = ITEMS.register("reactor/item_reactor_mox_quad",
         () -> new mio_icif_mox_reactor(
             new Item.Properties().component(mio_icif_data_components.FUEL_ROD_DURABILITY.get(), FuelRodDurability.full(10000)),
-            10000, 10, 8, mio_icif_nuclear_reactor.FuelRodType.QUAD, () -> MOX_QUAD_DEPLETED.get()));
+            10000, 5, 4, mio_icif_nuclear_reactor.FuelRodType.QUAD, () -> MOX_QUAD_DEPLETED.get()));
 
     // ?????
     // ????????30000???????????????????????

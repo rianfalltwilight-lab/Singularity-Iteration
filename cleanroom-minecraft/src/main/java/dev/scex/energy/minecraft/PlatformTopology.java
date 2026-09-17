@@ -38,6 +38,8 @@ public final class PlatformTopology implements AutoCloseable {
     /** Index-only callbacks on the server thread; they must not mutate the world. */
     public interface Observer {
         default void position(ServerLevel level, LevelChunk chunk, BlockPos at) { }
+        /** Called only for an already loaded conductor chunk, on the server thread. */
+        default int conductorFaces(ServerLevel level, LevelChunk chunk, BlockPos at) { return ConductorRegistry.ALL_FACES; }
         default void blockChanged(ServerLevel level, BlockPos at, BlockState before, BlockState after) { }
         default void chunkRemoved(ServerLevel level, int chunkX, int chunkZ) { }
         default void levelRemoved(ServerLevel level) { }
@@ -252,7 +254,7 @@ public final class PlatformTopology implements AutoCloseable {
         if (loss != null) {
             if (!chunk.getBlockState(at).hasBlockEntity()) { throw new IllegalStateException("Registered conductor requires a block entity"); }
             if (registry == null) { registry = new ConductorRegistry(maximumNodes, maximumSources); worlds.put(level, registry); }
-            registry.put(new ConductorRegistry.Position(at.getX(), at.getY(), at.getZ()), loss);
+            registry.put(new ConductorRegistry.Position(at.getX(), at.getY(), at.getZ()), loss, observer.conductorFaces(level, chunk, at));
         } else if (registry != null) { registry.remove(new ConductorRegistry.Position(at.getX(), at.getY(), at.getZ())); }
         sampledPositions++;
         observer.position(level, chunk, at);

@@ -3,12 +3,16 @@ package dev.scex.si.energy;
 
 import com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_Energy_Block;
 import com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_Energy_Container;
+import com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_wire;
 import com.singularity_iteration.mio_icif.energy.CustomEUEnergyStorage;
 import dev.scex.energy.ConductorRegistry;
 import dev.scex.energy.DeferredEntries;
 import dev.scex.energy.DomainDistributor;
+import dev.scex.energy.EnergyAmount;
+import dev.scex.energy.FractionalDistributor;
 import dev.scex.energy.ReceiverOrder;
 import dev.scex.energy.RouteCosts;
+import dev.scex.energy.SolarGeneratorProfile;
 import dev.scex.energy.minecraft.PlatformTopology;
 import dev.scex.energy.minecraft.ContactOrder;
 import dev.scex.energy.minecraft.SmallBlastField;
@@ -52,16 +56,56 @@ import net.neoforged.neoforge.event.tick.LevelTickEvent;
 public final class IndependentSiEnergy implements PlatformTopology.Observer {
     private static final ResourceLocation BATBOX = id("wiring/block_bat_box");
     private static final ResourceLocation GENERATOR = id("generator/block_thermal_generator");
+    private static final ResourceLocation GEOTHERMAL = id("generator/block_geo_generator");
+    private static final ResourceLocation RTG = id("generator/block_rt_generator");
+    private static final ResourceLocation SOLAR = id("generator/block_solar_generator");
+    private static final ResourceLocation STIRLING = id("generator/block_stirling_generator");
+    private static final Set<ResourceLocation> AMBIENT_GENERATORS = Set.of(
+        id("generator/block_wind_generator"), id("generator/block_water_generator"));
+    // Candidate limits retained from the allowed SI constructors; fuel behavior awaits grouped reference validation.
+    private static final Map<ResourceLocation, Long> FUEL_GENERATOR_PACKETS = Map.of(
+        id("generator/block_semifluid_generator"), 16L,
+        id("generator/block_advanced_semifluid_generator"), 128L,
+        id("generator/block_diesel_generator"), 512L);
+    private static final Map<ResourceLocation, Long> WORLD_FUEL_GENERATOR_PACKETS = Map.of(
+        id("generator/block_drop_generator"), 128L,
+        id("generator/block_advanced_drop_generator"), 512L,
+        id("generator/block_experience_generator"), 512L,
+        id("generator/block_advanced_experience_generator"), 2048L);
+    private static final Map<ResourceLocation, Long> GENERATOR_PACKETS = generatorPackets();
+    private static final Set<ResourceLocation> GENERATORS = GENERATOR_PACKETS.keySet();
+    private static Map<ResourceLocation, Long> generatorPackets() {
+        var packets = new HashMap<ResourceLocation, Long>();
+        for (var type : List.of(GENERATOR, GEOTHERMAL, RTG, SOLAR)) packets.put(type, 32L);
+        packets.put(id("generator/block_kinetic_generator"), 250L); // R110/R111 observed variable offers up to 250 EU.
+        packets.put(id("generator/block_nuclear_reactor_generator"), 8192L); // SI public extraction ceiling; actual per-tick offer is demand quoted.
+        packets.put(STIRLING, 128L); // Retained public SI packet setting; reference maximum remains open.
+        for (var type : AMBIENT_GENERATORS) packets.put(type, 32L);
+        packets.putAll(FUEL_GENERATOR_PACKETS);
+        packets.putAll(WORLD_FUEL_GENERATOR_PACKETS);
+        for (var profile : SolarGeneratorProfile.all())
+            packets.put(ResourceLocation.parse(profile.registryId()), profile.outputPacket());
+        return Map.copyOf(packets);
+    }
     private static final Set<ResourceLocation> TRANSFORMERS = Set.of(id("wiring/transformer_lv_mv"),
         id("wiring/transformer_mv_hv"), id("wiring/transformer_hv_ev"), id("wiring/transformer_ev_sc"));
     private static final Set<ResourceLocation> SPECIAL_CABLES = Set.of(id("wiring/block_eu_detector_cable"), id("wiring/block_eu_splitter_cable"));
+    private static final Set<ResourceLocation> KINETIC_CONVERTERS = Set.of(id("kugenerator/block_kinetic_generator_elc"), id("generator/block_kinetic_generator"));
+    private static final Set<ResourceLocation> EXTENDED_PROCESSORS = Set.of(id("producer/block_matter_elc"), id("hugenerator/block_heat_generator_elc"), id("producer/block_scanner_elc"),
+        id("producer/block_replicator_elc"), id("producer/block_centrifuge_elc"),
+        id("producer/block_washer_elc"), id("producer/block_molecular_transformer"),
+        id("producer/block_compressor_advanced_elc"), id("producer/block_powder_advanced_elc"),
+        id("producer/block_oil_refinery_elc"), id("producer/block_metal_former"),
+        id("producer/block_metal_former_advanced"), id("producer/block_block_cutter"),
+        id("producer/block_recycler_elc"), id("producer/block_induction_elc"),
+        id("producer/block_miner_elc"), id("producer/block_advanced_miner_elc"), id("producer/block_electrolyzer_elc"), id("producer/block_condenser"), id("producer/block_pump_elc"), id("producer/block_pattern_storage"));
     private static final Set<ResourceLocation> BASIC_PROCESSORS = Set.of(id("producer/block_furnace_elc"),
         id("producer/block_powder_elc"), id("producer/block_extractor_elc"), id("producer/block_compressor_elc"));
     // Packet sizes are explicit public-game observations, not old grid tiers.
     private static final Map<ResourceLocation, Long> STORAGE_PACKETS = Map.of(
         BATBOX, 32L, id("wiring/block_cesu"), 128L,
         id("wiring/block_mfe"), 512L, id("wiring/block_mfsu"), 2048L);
-    private static final Set<ResourceLocation> ENDPOINTS = Set.of(BATBOX, GENERATOR, id("producer/block_furnace_elc"),
+    private static final Set<ResourceLocation> ENDPOINTS = Set.of(BATBOX, GENERATOR, GEOTHERMAL, RTG, SOLAR, id("producer/block_furnace_elc"),
         id("wiring/block_cesu"), id("wiring/block_mfe"), id("wiring/block_mfsu"),
         id("producer/block_powder_elc"), id("producer/block_extractor_elc"), id("producer/block_compressor_elc"));
     private static final Map<ResourceLocation, Long> CONDUCTORS = Map.ofEntries(
@@ -72,7 +116,7 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
         Map.entry(id("wiring/cable/block_glass_cable"), 25L),
         Map.entry(id("wiring/block_eu_detector_cable"), 500L), Map.entry(id("wiring/block_eu_splitter_cable"), 500L));
     // Only measured fuse thresholds are enabled. Iron/glass ultimate limits
-    // remain open; the currently controlled sources offer at most 2048 EU.
+    // remain open, including extended-solar candidate packets up to 8192 EU.
     private static final Map<ResourceLocation, Long> FUSE_LIMITS = Map.of(
         id("wiring/cable/block_tin_cable"), 33L, id("wiring/cable/block_tin_cable_1"), 33L,
         id("wiring/cable/block_cable"), 129L, id("wiring/cable/block_cable_o"), 129L,
@@ -85,14 +129,24 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
     private static ResourceLocation id(String path) { return ResourceLocation.fromNamespaceAndPath("mio_icif", path); }
     public static boolean controls(BlockState state) {
         var type = BuiltInRegistries.BLOCK.getKey(state.getBlock());
-        return Boolean.getBoolean("scex.independent.energy") && (ENDPOINTS.contains(type)
-            || Boolean.getBoolean("scex.independent.transformers") && TRANSFORMERS.contains(type)
-            || Boolean.getBoolean("scex.independent.specialCables") && SPECIAL_CABLES.contains(type));
+        return dev.scex.energy.IndependentEnergyMode.enabled() && (ENDPOINTS.contains(type)
+            || CONDUCTORS.containsKey(type) && (!SPECIAL_CABLES.contains(type)
+                || dev.scex.energy.IndependentEnergyMode.feature("specialCables"))
+            || dev.scex.energy.IndependentEnergyMode.feature("ambientGenerators") && AMBIENT_GENERATORS.contains(type)
+            || dev.scex.energy.IndependentEnergyMode.feature("fuelGenerators") && FUEL_GENERATOR_PACKETS.containsKey(type)
+            || dev.scex.energy.IndependentEnergyMode.feature("worldFuelGenerators") && WORLD_FUEL_GENERATOR_PACKETS.containsKey(type)
+            || dev.scex.energy.IndependentEnergyMode.feature("nuclearReactors") && id("generator/block_nuclear_reactor_generator").equals(type)
+            || dev.scex.energy.IndependentEnergyMode.feature("kineticGenerators") && KINETIC_CONVERTERS.contains(type)
+            || dev.scex.energy.IndependentEnergyMode.feature("processingMachines") && EXTENDED_PROCESSORS.contains(type)
+            || dev.scex.energy.IndependentEnergyMode.feature("thermalConverters") && STIRLING.equals(type)
+            || dev.scex.energy.IndependentEnergyMode.feature("extendedSolar") && SolarGeneratorProfile.find(type.toString()).isPresent()
+            || dev.scex.energy.IndependentEnergyMode.feature("transformers") && TRANSFORMERS.contains(type)
+            || dev.scex.energy.IndependentEnergyMode.feature("specialCables") && SPECIAL_CABLES.contains(type));
     }
     public static synchronized void install() {
         if (installed) return; installed = true;
         NeoForge.EVENT_BUS.addListener((ServerAboutToStartEvent event) -> {
-            if (Boolean.getBoolean("scex.independent.energy")) attach(event.getServer());
+            if (dev.scex.energy.IndependentEnergyMode.enabled()) attach(event.getServer());
         });
     }
     public static synchronized IndependentSiEnergy attach(MinecraftServer server) {
@@ -101,9 +155,55 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
     }
     public static synchronized IndependentSiEnergy current(MinecraftServer server) { return SERVERS.get(server); }
     public static void changed(mio_icif_Energy_Block tile) {
+        changed((BlockEntity) tile);
+    }
+    public static void changed(BlockEntity tile) {
         if (tile.getLevel() instanceof ServerLevel level) {
             var engine = current(level.getServer()); if (engine != null) engine.topology.changed(level, tile.getBlockPos());
         }
+    }
+    private static CustomEUEnergyStorage ownedStorage(BlockEntity tile) {
+        return tile instanceof DemandEnergySource source ? source.ownedEnergy()
+            : tile instanceof mio_icif_Energy_Block machine ? machine.getEnergyStorageInternal() : null;
+    }
+    private static long ownedCapacity(BlockEntity tile) {
+        return tile instanceof DemandEnergySource source ? source.ownedEnergy().getCapacity()
+            : ((mio_icif_Energy_Block)tile).getEffectiveCapacity();
+    }
+
+    private static int conductorFaces(BlockEntity tile) {
+        int result = ConductorRegistry.ALL_FACES;
+        if (tile instanceof mio_icif_wire wire) {
+            for (Direction side : Direction.values()) if (wire.isDirectionBlocked(side))
+                result &= ~(1 << side.get3DDataValue());
+        }
+        return result;
+    }
+
+    /** Port edits revoke stale routes immediately; no chunk is acquired or created. */
+    public static void conductorPortsChanged(mio_icif_wire tile) {
+        if (!(tile.getLevel() instanceof ServerLevel level) || !level.getServer().isSameThread()
+                || tile.isRemoved() || !tile.getEnergyStorageInternal().scexNetworkControlled()) return;
+        var engine = current(level.getServer());
+        if (engine == null || engine.closed || !engine.failure.isEmpty()) return;
+        var at = tile.getBlockPos();
+        var chunk = level.getChunkSource().getChunkNow(at.getX() >> 4, at.getZ() >> 4);
+        if (chunk == null || chunk.getBlockEntity(at, LevelChunk.EntityCreationType.CHECK) != tile) return;
+        var grid = engine.worlds.get(level);
+        Long loss = CONDUCTORS.get(BuiltInRegistries.BLOCK.getKey(tile.getBlockState().getBlock()));
+        if (grid != null && loss != null && grid.conductorOwners.get(at) == tile
+                && grid.conductors.containsRegistered(point(at))) {
+            int faces = conductorFaces(tile);
+            grid.conductors.put(point(at), loss, faces);
+            grid.contactOrder.putConductor(point(at), loss, faces);
+        }
+        engine.topology.changed(level, at);
+    }
+
+    @Override public int conductorFaces(ServerLevel level, LevelChunk chunk, BlockPos at) {
+        // The FULL chunk is supplied by the topology. Materializing its own saved
+        // block entity does not request or keep another chunk loaded.
+        return conductorFaces(chunk.getBlockEntity(at, LevelChunk.EntityCreationType.IMMEDIATE));
     }
 
     /** Server-authoritative mode selection through the ordinary block interaction event. */
@@ -142,6 +242,7 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
     // receiver selection. This is not the reference game's PRNG or seed.
     private final SplittableRandom blockDropRandom = new SplittableRandom(selectionSeed ^ 0x5343455844524f50L);
     private long ticks, commits, rejected, debited, credited, dissipated;
+    private EnergyAmount totalDebit = EnergyAmount.ZERO, totalCredit = EnergyAmount.ZERO, totalLoss = EnergyAmount.ZERO;
     private long deliveryCount, deliveryWireVisits, fusedWires, destroyedReceivers, blastBlocks;
     private String failure = "";
     private boolean closed;
@@ -155,16 +256,23 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
     }
     public record Metrics(long ticks, long commits, long rejected, long debited, long credited, long dissipated,
                           int dimensions, int endpoints, boolean closed, String failure, long selectionSeed,
-                          long deliveryCount, long deliveryWireVisits, long fusedWires, long destroyedReceivers, long blastBlocks) { }
+                          long deliveryCount, long deliveryWireVisits, long fusedWires, long destroyedReceivers, long blastBlocks,
+                          long debitedFraction, long creditedFraction, long dissipatedFraction) { }
     private record Port(BlockEntity tile, BlockPos position, BlockState state,
                         CustomEUEnergyStorage storage, CustomEUEnergyStorage.NetworkQuote quote,
                         long capacity, int inputs, int outputs, long packet, int packets,
-                        IndependentTransformerBlockEntity.Snapshot transformer) { }
-    private record Element(ResourceLocation type, long conductorLoss, BlockEntity tile, int routing) {
-        @Override public boolean equals(Object other) {
-            return other instanceof Element e && type.equals(e.type) && conductorLoss == e.conductorLoss && tile == e.tile && routing == e.routing;
+                        IndependentTransformerBlockEntity.Snapshot transformer, FeLedger.OutputQuote outputBudget,
+                        EnergyAmount potential) {
+        EnergyAmount offered() {
+            if (potential != null) return potential;
+            return outputBudget == null ? quote.exactAmount() : outputBudget.limitOffer(quote.exactAmount());
         }
-        @Override public int hashCode() { return 31 * type.hashCode() + Long.hashCode(conductorLoss) + System.identityHashCode(tile) + routing; }
+    }
+    private record Element(ResourceLocation type, long conductorLoss, BlockEntity tile, int routing, int faces) {
+        @Override public boolean equals(Object other) {
+            return other instanceof Element e && type.equals(e.type) && conductorLoss == e.conductorLoss && tile == e.tile && routing == e.routing && faces == e.faces;
+        }
+        @Override public int hashCode() { return 31 * type.hashCode() + Long.hashCode(conductorLoss) + System.identityHashCode(tile) + routing + 31 * faces; }
     }
     private static final class WorldGrid implements AutoCloseable {
         final DeferredEntries<BlockPos, Element> entries = new DeferredEntries<>(104_096, 65_536);
@@ -179,6 +287,7 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
         final Map<BlockPos, Set<BlockPos>> initialGeneratorContacts = new HashMap<>();
         final Map<Long, Integer> conductorChunks = new HashMap<>();
         final Map<BlockPos, ResourceLocation> conductorTypes = new HashMap<>();
+        final Map<BlockPos, BlockEntity> conductorOwners = new HashMap<>();
         boolean catchUp;
         long effectPauseFrame = -1;
         // Unlike ordinary physical add/remove coalescing, measured splitter
@@ -222,6 +331,14 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
         void apply(List<DeferredEntries.Change<BlockPos, Element>> changes) {
             for (var change : changes) {
                 var at = change.key(); long chunk = ChunkPos.asLong(at);
+                var before = change.before(); var next = change.after();
+                if (before != null && next != null && before.conductorLoss >= 0
+                        && before.conductorLoss == next.conductorLoss && before.tile == next.tile
+                        && before.type.equals(next.type) && before.routing == next.routing) {
+                    conductors.put(point(at), next.conductorLoss, next.faces);
+                    contactOrder.putConductor(point(at), next.conductorLoss, next.faces);
+                    continue;
+                }
                 contactOrder.remove(point(at));
                 if (change.before() != null && change.before().conductorLoss >= 0) {
                     for (Direction side : Direction.values()) {
@@ -230,6 +347,7 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
                     }
                     conductors.remove(point(at));
                     conductorTypes.remove(at);
+                    conductorOwners.remove(at);
                     conductorChunks.compute(chunk, (key, count) -> count == 1 ? null : count - 1);
                 }
                 machines.remove(at);
@@ -240,20 +358,21 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
                 if (after == null) continue;
                 if (after.tile instanceof IndependentSpecialCableBlockEntity cable) specialCables.put(at, cable);
                 if (after.conductorLoss >= 0) {
-                    conductors.put(point(at), after.conductorLoss);
-                    contactOrder.putConductor(point(at), after.conductorLoss);
+                    conductors.put(point(at), after.conductorLoss, after.faces);
+                    contactOrder.putConductor(point(at), after.conductorLoss, after.faces);
                     conductorTypes.put(at, after.type);
+                    conductorOwners.put(at, after.tile);
                     conductorChunks.merge(chunk, 1, Integer::sum);
                 } else if (!(after.tile instanceof IndependentSpecialCableBlockEntity)) {
                     if (machines.size() >= 4096) throw new IllegalStateException("Endpoint limit reached");
                     machines.put(at, after.tile);
                     contactOrder.putEndpoint(point(at));
                     if (after.tile instanceof IndependentTransformerBlockEntity) transformerRouting.put(at, after.routing);
-                    if (after.type.equals(GENERATOR)) {
+                    if (GENERATORS.contains(after.type)) {
                         var initial = new HashSet<BlockPos>();
                         for (Direction side : Direction.values()) {
                             var neighbour = at.relative(side);
-                            if (conductors.containsRegistered(point(neighbour))) initial.add(neighbour);
+                            if (conductors.permitsRegistered(point(neighbour), side.getOpposite().get3DDataValue())) initial.add(neighbour);
                         }
                         initialGeneratorContacts.put(at, initial);
                     }
@@ -261,7 +380,7 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
             }
         }
         @Override public void close() {
-            entries.close(); conductors.close(); contactOrder.close(); machines.clear(); transformerRouting.clear(); specialCables.clear(); specialObserved.clear(); specialPublished.clear(); specialPending.clear(); initialGeneratorContacts.clear(); conductorChunks.clear(); conductorTypes.clear(); catchUp = false; effectPauseFrame = -1;
+            entries.close(); conductors.close(); contactOrder.close(); machines.clear(); transformerRouting.clear(); specialCables.clear(); specialObserved.clear(); specialPublished.clear(); specialPending.clear(); initialGeneratorContacts.clear(); conductorChunks.clear(); conductorTypes.clear(); conductorOwners.clear(); catchUp = false; effectPauseFrame = -1;
         }
     }
     private IndependentSiEnergy(MinecraftServer server) {
@@ -273,13 +392,12 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
         if (Thread.currentThread().threadId() != ownerThread) throw new IllegalStateException("Read engine metrics on server thread");
         return new Metrics(ticks, commits, rejected, debited, credited, dissipated,
             worlds.size(), worlds.values().stream().mapToInt(grid -> grid.machines.size()).sum(), closed, failure, selectionSeed,
-            deliveryCount, deliveryWireVisits, fusedWires, destroyedReceivers, blastBlocks);
+            deliveryCount, deliveryWireVisits, fusedWires, destroyedReceivers, blastBlocks,
+            totalDebit.fraction(), totalCredit.fraction(), totalLoss.fraction());
     }
     @Override
     public void blockChanged(ServerLevel level, BlockPos at, BlockState before, BlockState after) {
-        var type = BuiltInRegistries.BLOCK.getKey(after.getBlock());
-        boolean recognized = controls(after) || CONDUCTORS.containsKey(type)
-            && (!SPECIAL_CABLES.contains(type) || Boolean.getBoolean("scex.independent.specialCables"));
+        boolean recognized = controls(after);
         var grid = worlds.get(level);
         if (recognized) {
             if (grid == null) { grid = new WorldGrid(selectionSeed ^ 0x5343455848495354L); worlds.put(level, grid); }
@@ -289,8 +407,7 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
     @Override
     public void position(ServerLevel level, LevelChunk chunk, BlockPos at) {
         var state = chunk.getBlockState(at); var type = BuiltInRegistries.BLOCK.getKey(state.getBlock());
-        var loss = CONDUCTORS.get(type); Element element = null;
-        if (SPECIAL_CABLES.contains(type) && !Boolean.getBoolean("scex.independent.specialCables")) loss = null;
+        var loss = controls(state) ? CONDUCTORS.get(type) : null; Element element = null;
         var grid = worlds.get(level);
         // The chunk is already FULL. This can materialize its saved block entity,
         // without loading another chunk or renewing a world lookup ticket.
@@ -300,7 +417,7 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
             if (SPECIAL_CABLES.contains(type) && !(tile instanceof IndependentSpecialCableBlockEntity))
                 throw new IllegalStateException("Special conductor lacks independent entity at " + at);
             if (loss == null && !(tile instanceof IndependentTransformerBlockEntity)
-                    && (!(tile instanceof mio_icif_Energy_Block machine) || !machine.getEnergyStorageInternal().scexNetworkControlled()))
+                    && (ownedStorage(tile) == null || !ownedStorage(tile).scexNetworkControlled()))
                 throw new IllegalStateException("Controlled endpoint lacks the new storage boundary at " + at);
             int routing = 0;
             if (tile instanceof IndependentTransformerBlockEntity transformer) {
@@ -311,7 +428,7 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
                 // occur at onLoad or the server world tick boundary.
                 if (!cable.conductsNow()) loss = -2L;
             }
-            element = new Element(type, loss == null ? -1 : loss, tile, routing);
+            element = new Element(type, loss == null ? -1 : loss, tile, routing, conductorFaces(tile));
             if (grid == null) { grid = new WorldGrid(selectionSeed ^ 0x5343455848495354L); worlds.put(level, grid); }
         }
         // A late server-post observation belongs to the next publication frame
@@ -404,6 +521,9 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
         return true;
     }
     private void settle(ServerLevel level, WorldGrid grid) {
+        settle(level, grid, true);
+    }
+    private void settle(ServerLevel level, WorldGrid grid, boolean prepareDemand) {
         if (!accessible(level, grid)) return;
         var ports = new ArrayList<Port>();
         for (var entry : grid.machines.entrySet()) {
@@ -427,14 +547,15 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
                 var quote = new CustomEUEnergyStorage.NetworkQuote(level, at, saved.energy().amount(),
                     limits.capacity(), limits.inputLimit(), limits.outputPacket(), limits.outputPacket(), true, true, saved.energy());
                 ports.add(new Port(tile, at, saved.state(), null, quote, limits.capacity(), input, output,
-                    limits.outputPacket(), limits.outputPackets(), saved));
+                    limits.outputPacket(), limits.outputPackets(), saved, null, null));
                 continue;
             }
-            var machine = (mio_icif_Energy_Block) tile;
+            var machine = tile;
             int inputs = 63, outputs = 0;
             var type = BuiltInRegistries.BLOCK.getKey(tile.getBlockState().getBlock());
-            boolean generator = type.equals(GENERATOR);
+            boolean generator = GENERATORS.contains(type);
             if (generator) { inputs = 0; outputs = 63; }
+            if (tile instanceof DemandEnergySource demand) outputs &= demand.outputFaces();
             if (tile instanceof mio_icif_Energy_Container storageBox && STORAGE_PACKETS.containsKey(type)) {
                 inputs = 0;
                 for (var side : Direction.values()) {
@@ -442,21 +563,27 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
                     if (storageBox.canConsumePowerFromSide(side)) inputs |= 1 << side.ordinal();
                 }
             }
-            var storage = machine.getEnergyStorageInternal(); var quote = storage.scexNetworkQuote();
+            var storage = ownedStorage(machine); var quote = storage.scexNetworkQuote();
             if (!quote.outputEnabled()) outputs = 0;
             // Original binary observations distinguish generator residual offers
             // from the BatBox full-packet reserve rule, including a 1 EU offer.
-            long packet = generator ? Math.min(32, quote.amount()) : STORAGE_PACKETS.getOrDefault(type, 32L);
-            ports.add(new Port(tile, at, tile.getBlockState(), storage, quote, machine.getEffectiveCapacity(), inputs, outputs, packet, 1, null));
+            // Extended solar packet limits are SI candidate settings, pending loaded reference runs.
+            long packet = generator ? GENERATOR_PACKETS.get(type) : STORAGE_PACKETS.getOrDefault(type, 32L);
+            var outputBudget = outputs != 0 && machine instanceof mio_icif_Energy_Container container
+                ? container.scexFeBridge().quoteNativeOutput() : null;
+            var potential = prepareDemand && machine instanceof DemandEnergySource demand ? demand.potentialEnergy() : null;
+            ports.add(new Port(tile, at, tile.getBlockState(), storage, quote, ownedCapacity(machine), inputs, outputs, packet, 1, null, outputBudget, potential));
         }
-        var sources = ports.stream().filter(p -> p.outputs != 0 && p.packet > 0 && p.quote.amount() >= p.packet).toList();
+        var sources = ports.stream().filter(p -> p.outputs != 0 && p.packet > 0
+            && (GENERATORS.contains(BuiltInRegistries.BLOCK.getKey(p.state.getBlock()))
+                ? !p.offered().isZero() : p.offered().whole() >= p.packet)).toList();
         var sinks = ports.stream().filter(p -> p.inputs != 0).toList();
         if (sources.isEmpty() || sinks.isEmpty()) return;
-        var snapshot = grid.conductors.snapshot(); long[] room = new long[sinks.size()];
+        var snapshot = grid.conductors.snapshot(); var room = new ArrayList<EnergyAmount>();
         int[] receivers = new int[sinks.size()];
-        for (int i = 0; i < room.length; i++) { room[i] = Math.max(0, sinks.get(i).capacity - sinks.get(i).quote.amount()); receivers[i] = i; }
-        var quotes = sources.stream().map(source -> new DomainDistributor.Source(source.quote.amount(), source.packet,
-            BuiltInRegistries.BLOCK.getKey(source.state.getBlock()).equals(GENERATOR), source.packets)).toList();
+        for (int i = 0; i < sinks.size(); i++) { room.add(sinks.get(i).quote.exactAmount().roomBelow(sinks.get(i).capacity)); receivers[i] = i; }
+        var quotes = sources.stream().map(source -> new DomainDistributor.Source(source.offered().whole(), source.packet,
+            GENERATORS.contains(BuiltInRegistries.BLOCK.getKey(source.state.getBlock())), source.packets)).toList();
         var effectPaths = new ArrayList<List<ConductorRegistry.Path[]>>();
         var domains = domains(sources, sinks, snapshot, receivers, level.getGameTime(), grid, effectPaths);
         var shared = new ArrayList<DomainDistributor.SharedStorage>();
@@ -467,33 +594,50 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
             if (source.transformer != null && receiver != null)
                 shared.add(new DomainDistributor.SharedStorage(i, receiver, source.capacity));
         }
-        var round = DomainDistributor.allocateTraced(quotes, domains, receivers, room, shared, selectionRandom);
-        var deltas = new IdentityHashMap<Port, Long>();
-        long loss = round.dissipated(), debit = 0, credit = 0;
+        var round = FractionalDistributor.allocateTraced(quotes, sources.stream().map(Port::offered).toList(),
+            domains, receivers, room, shared, selectionRandom);
+        var deltas = new IdentityHashMap<Port, java.math.BigInteger>();
+        var outputDebits = new ArrayList<FeLedger.OutputDebit>();
+        EnergyAmount loss = round.dissipated(), debit = EnergyAmount.ZERO, credit = EnergyAmount.ZERO;
         for (int i = 0; i < sources.size(); i++) {
-            long value = round.debit(i); debit = Math.addExact(debit, value);
-            deltas.merge(sources.get(i), -value, Math::addExact);
+            var value = round.debit(i); debit = debit.add(value);
+            deltas.merge(sources.get(i), value.units().negate(), java.math.BigInteger::add);
+            if (!value.isZero() && sources.get(i).outputBudget != null)
+                outputDebits.add(new FeLedger.OutputDebit(sources.get(i).outputBudget, value));
         }
         for (int receiver = 0; receiver < sinks.size(); receiver++) {
-            long value = round.credit(receiver); credit = Math.addExact(credit, value);
-            deltas.merge(sinks.get(receiver), value, Math::addExact);
+            var value = round.credit(receiver); credit = credit.add(value);
+            deltas.merge(sinks.get(receiver), value.units(), java.math.BigInteger::add);
         }
-        if (debit == 0) return;
-        long traceDebit = 0, traceCredit = 0, traceLoss = 0;
+        if (debit.isZero()) return;
+        // External HU is acquired only for a routable, nonzero demand. It is credited to owned EU first;
+        // a fresh bounded second plan then settles only actual owned balances, never simulated fuel.
+        boolean acquired = false;
+        if (prepareDemand) {
+            if (!valid(level, grid, snapshot, ports)) { rejected++; return; }
+            for (int i = 0; i < sources.size(); i++) {
+                var source = sources.get(i);
+                if (source.tile instanceof DemandEnergySource demand && round.debit(i).compareTo(source.quote.exactAmount()) > 0) {
+                    demand.prepareEnergy(round.debit(i)); acquired = true;
+                }
+            }
+            if (acquired) { settle(level, grid, false); return; }
+        }
+        EnergyAmount traceDebit = EnergyAmount.ZERO, traceCredit = EnergyAmount.ZERO, traceLoss = EnergyAmount.ZERO;
         long[] wireVisits = {0};
         var fusePlan = new LinkedHashMap<BlockPos, ResourceLocation>();
         var receiverPlan = new LinkedHashMap<BlockPos, Port>();
         var detectorDeliveries = new HashSet<IndependentSpecialCableBlockEntity>();
         for (var delivery : round.deliveries()) {
-            traceDebit = Math.addExact(traceDebit, delivery.sourceDebit());
-            traceCredit = Math.addExact(traceCredit, delivery.credit());
-            traceLoss = Math.addExact(traceLoss, delivery.pathLoss());
+            traceDebit = traceDebit.add(delivery.sourceDebit());
+            traceCredit = traceCredit.add(delivery.credit());
+            traceLoss = traceLoss.add(delivery.pathLoss());
             var path = effectPaths.get(delivery.domain()).get(delivery.entry())[delivery.receiver()];
             long[] weakestMeasuredLimit = {Long.MAX_VALUE};
             if (path == null) {
-                if (delivery.pathLoss() != 0) throw new IllegalStateException("Direct delivery has conductor loss");
+                if (!delivery.pathLoss().isZero()) throw new IllegalStateException("Direct delivery has conductor loss");
             } else {
-                if (path.lossMilli() / 1000 != delivery.pathLoss()) throw new IllegalStateException("Delivery path and quoted loss differ");
+                if (!EnergyAmount.of(path.lossMilli() / 1000).equals(delivery.pathLoss())) throw new IllegalStateException("Delivery path and quoted loss differ");
                 path.visit(position -> {
                     wireVisits[0] = Math.incrementExact(wireVisits[0]);
                     var at = new BlockPos(position.x(), position.y(), position.z());
@@ -504,7 +648,7 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
                     Long limit = FUSE_LIMITS.get(type);
                     if (limit != null) {
                         weakestMeasuredLimit[0] = Math.min(weakestMeasuredLimit[0], limit);
-                        if (delivery.sourceDebit() > limit) fusePlan.put(at, type);
+                        if (delivery.sourceDebit().compareTo(EnergyAmount.of(limit)) > 0) fusePlan.put(at, type);
                     }
                 });
             }
@@ -521,28 +665,30 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
             // A fuse protects the receiver; the measured conductor boundary
             // can destroy it even when the credited energy fits its tier.
             // Mixed/multi-source effects and collateral blast remain unverified.
-            boolean fused = delivery.sourceDebit() > weakestMeasuredLimit[0];
-            boolean boundary = path != null && delivery.sourceDebit() == weakestMeasuredLimit[0];
-            if (receiverLimit != null && !fused && delivery.sourceDebit() > receiverLimit
-                    && (delivery.credit() > receiverLimit || boundary)) {
+            boolean fused = delivery.sourceDebit().compareTo(EnergyAmount.of(weakestMeasuredLimit[0])) > 0;
+            boolean boundary = path != null && delivery.sourceDebit().equals(EnergyAmount.of(weakestMeasuredLimit[0]));
+            if (receiverLimit != null && !fused && delivery.sourceDebit().compareTo(EnergyAmount.of(receiverLimit)) > 0
+                    && (delivery.credit().compareTo(EnergyAmount.of(receiverLimit)) > 0 || boundary)) {
                 receiverPlan.put(sink.position, sink);
             }
         }
-        if (traceDebit != debit || traceCredit != credit || traceLoss != loss)
+        if (!traceDebit.equals(debit) || !traceCredit.equals(credit) || !traceLoss.equals(loss))
             throw new IllegalStateException("Delivery trace does not reconcile with the round");
         var writes = new ArrayList<CustomEUEnergyStorage.NetworkWrite>();
         var additional = new ArrayList<NetworkCell.Write>();
         for (var port : ports) {
-            long delta = deltas.getOrDefault(port, 0L);
-            long next = Math.addExact(port.quote.amount(), delta);
+            var delta = deltas.getOrDefault(port, java.math.BigInteger.ZERO);
+            var next = EnergyAmount.fromUnits(port.quote.exactAmount().units().add(delta));
             if (port.transformer != null) additional.add(new NetworkCell.Write(port.transformer.energy(), next));
-            else if (delta != 0) writes.add(new CustomEUEnergyStorage.NetworkWrite(port.storage, port.quote, next));
+            else if (delta.signum() != 0) writes.add(new CustomEUEnergyStorage.NetworkWrite(port.storage, port.quote, next));
         }
-        if (CustomEUEnergyStorage.scexCommitNetwork(writes, additional, loss, () -> valid(level, grid, snapshot, ports))) {
+        if (FeLedger.commitNativeOutput(outputDebits, budgetCurrent -> CustomEUEnergyStorage.scexCommitNetwork(
+                writes, additional, loss, () -> valid(level, grid, snapshot, ports) && budgetCurrent.getAsBoolean()))) {
             detectorDeliveries.forEach(IndependentSpecialCableBlockEntity::delivered);
-            for (var port : ports) if (port.transformer != null && deltas.getOrDefault(port, 0L) != 0)
+            for (var port : ports) if (port.transformer != null && deltas.getOrDefault(port, java.math.BigInteger.ZERO).signum() != 0)
                 ((IndependentTransformerBlockEntity) port.tile).markNetworkChanged();
-            commits++; debited = Math.addExact(debited, debit); credited = Math.addExact(credited, credit); dissipated = Math.addExact(dissipated, loss);
+            commits++; totalDebit = totalDebit.add(debit); totalCredit = totalCredit.add(credit); totalLoss = totalLoss.add(loss);
+            debited = totalDebit.whole(); credited = totalCredit.whole(); dissipated = totalLoss.whole();
             deliveryCount = Math.addExact(deliveryCount, round.deliveries().size());
             deliveryWireVisits = Math.addExact(deliveryWireVisits, wireVisits[0]);
             var removedByEffects = new HashSet<BlockPos>();
@@ -666,7 +812,7 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
             if (port.transformer != null) {
                 var transformer = (IndependentTransformerBlockEntity) port.tile;
                 if (!transformer.validMode() || !transformer.isCurrent(port.transformer, transformer.stepUpNow())) return false;
-            } else if (((mio_icif_Energy_Block) port.tile).getEffectiveCapacity() != port.capacity
+            } else if (ownedCapacity(port.tile) != port.capacity
                     || !port.storage.scexNetworkQuote().equals(port.quote)) return false;
         }
         return true;
@@ -686,7 +832,7 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
             for (Direction side : Direction.values()) {
                 if ((source.outputs & (1 << side.ordinal())) == 0) continue;
                 var at = source.position.relative(side); var position = point(at);
-                if (!graph.contains(position)) continue;
+                if (!graph.contains(position) || !graph.permits(position, side.getOpposite().get3DDataValue())) continue;
                 count++;
                 if (!initial.contains(at)) sameComponent = false;
                 int found = graph.componentOf(position);
@@ -701,7 +847,7 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
                 if ((source.outputs & (1 << output.ordinal())) == 0) continue;
                 BlockPos start = source.position.relative(output);
                 var origin = point(start);
-                boolean wired = graph.contains(origin);
+                boolean wired = graph.contains(origin) && graph.permits(origin, output.getOpposite().get3DDataValue());
                 var paths = wired ? graph.routesFrom(origin) : null;
                 long component = wired ? graph.componentOf(origin) : -1;
                 long emitter = 7L * sourceId + (separateContacts ? output.ordinal() : 6);
@@ -714,7 +860,8 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
                     if (!wired) continue;
                     for (Direction input : Direction.values()) {
                         if ((sink.inputs & (1 << input.ordinal())) == 0) continue;
-                        var contact = point(sink.position.relative(input)); if (!graph.contains(contact)) continue;
+                        var contact = point(sink.position.relative(input));
+                        if (!graph.contains(contact) || !graph.permits(contact, input.getOpposite().get3DDataValue())) continue;
                         int vertex = graph.vertex(contact);
                         if (paths.reaches(vertex)) recordRoute(grouped, component, emitter, receiver, sinks.size(), paths.lossMilliTo(vertex), graph, origin, contact);
                     }
@@ -751,13 +898,13 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
                         .mapToInt(Integer::intValue).toArray();
                 }
                 if (!contactEntry && domainItem.getKey() >= 0
-                        && BuiltInRegistries.BLOCK.getKey(sources.get(source).state.getBlock()).equals(GENERATOR)) {
+                        && GENERATORS.contains(BuiltInRegistries.BLOCK.getKey(sources.get(source).state.getBlock()))) {
                     var sourcePort = sources.get(source);
                     ConductorRegistry.Position contact = null; int contacts = 0;
                     for (Direction side : Direction.values()) {
                         var near = point(sourcePort.position.relative(side));
                         if ((sourcePort.outputs & (1 << side.ordinal())) != 0 && graph.contains(near)
-                                && graph.componentOf(near) == domainItem.getKey()) { contact = near; contacts++; }
+                                && graph.permits(near, side.getOpposite().get3DDataValue()) && graph.componentOf(near) == domainItem.getKey()) { contact = near; contacts++; }
                     }
                     if (contacts > 1) {
                         var order = grid.contactOrder.receivers(point(sourcePort.position), contact);

@@ -7,6 +7,8 @@ import com.singularity_iteration.mio_icif.Blocks.Environment.fluid.mio_icif_flui
 import com.singularity_iteration.mio_icif.Items.Cell.mio_icif_cells;
 import com.singularity_iteration.mio_icif.Items.Resource.mio_icif_resources;
 import com.singularity_iteration.mio_icif.api.capability.IMioIcifCapabilities;
+import dev.scex.si.energy.ContainerToTank;
+import dev.scex.si.processing.OwnedFluidConversion;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
@@ -79,11 +81,11 @@ public class mio_icif_fermenter_elc extends mio_icif_HeatU_Block {
     protected final FluidTank biogasTank;
 
     // 工�?��?�度�?使用??��?�累计算??
-    private int progress;
+    private long workCredit;
     private int maxProgress;
 
     // 累计算?????????��?�质量??��于�?��?�产?���?
-    private int biomassProcessed;
+    private long biomassProcessed;
 
     // ?��?���??��工�??
     private boolean isWorking;
@@ -92,7 +94,7 @@ public class mio_icif_fermenter_elc extends mio_icif_HeatU_Block {
         @Override
         public int get(int index) {
             return switch (index) {
-                case 0 -> progress;
+                case 0 -> getProgress();
                 case 1 -> maxProgress;
                 case 2 -> isWorking ? 1 : 0;
                 case 3 -> (int) heatStorage.getHeatStored();
@@ -123,7 +125,7 @@ public class mio_icif_fermenter_elc extends mio_icif_HeatU_Block {
         super(type, pos, state, HEAT_CAPACITY, MAX_HEAT_RECEIVE, MAX_HEAT_EXTRACT,
               20, MAX_TEMP, HEAT_LOSS_FACTOR);
 
-        this.progress = 0;
+        this.workCredit = 0;
         this.maxProgress = BASE_PROGRESS_REQUIRED;
         this.biomassProcessed = 0;
         this.isWorking = false;
@@ -135,11 +137,15 @@ public class mio_icif_fermenter_elc extends mio_icif_HeatU_Block {
 
         // ??��?��?��?��?�质量?体�??
         this.biomassTank = new FluidTank(BIOMASS_TANK_CAPACITY, fluidStack ->
-            fluidStack.getFluid() == mio_icif_fluids.BIOMASS.get());
+            fluidStack.getFluid() == mio_icif_fluids.BIOMASS.get()) {
+                @Override protected void onContentsChanged() { ContainerToTank.markUnsaved(mio_icif_fermenter_elc.this); }
+            };
 
         // ??��?��?�沼气�??体槽
         this.biogasTank = new FluidTank(BIOGAS_TANK_CAPACITY, fluidStack ->
-            fluidStack.getFluid() == mio_icif_fluids.BIOGAS.get());
+            fluidStack.getFluid() == mio_icif_fluids.BIOGAS.get()) {
+                @Override protected void onContentsChanged() { ContainerToTank.markUnsaved(mio_icif_fermenter_elc.this); }
+            };
     }
 
     /**
@@ -176,7 +182,7 @@ public class mio_icif_fermenter_elc extends mio_icif_HeatU_Block {
     @Override
     public IMioIcifCapabilities.IHeatStorage getHeatStorageCapability(@Nullable Direction side) {
         if (side == null || side == getFrontSide()) {
-            return heatStorage;
+            return this;
         }
         return null;
     }
@@ -185,7 +191,8 @@ public class mio_icif_fermenter_elc extends mio_icif_HeatU_Block {
      * �?tick ?��?��??��??
      */
     public static void tick(Level level, BlockPos pos, BlockState state, mio_icif_fermenter_elc blockEntity) {
-        if (level.isClientSide()) {
+        if (!(level instanceof net.minecraft.server.level.ServerLevel server)
+                || !server.getServer().isSameThread() || blockEntity.isRemoved()) {
             return;
         }
 
@@ -222,178 +229,76 @@ public class mio_icif_fermenter_elc extends mio_icif_HeatU_Block {
      * �??????��?�质??��??槽位?��????��??中�????��?�质转移??��??体�??
      */
     private void handleBiomassCellSlot() {
-        ItemStack cellStack = itemHandler.getStackInSlot(BIOMASS_CELL_SLOT);
-        if (cellStack.isEmpty() || !mio_icif_cells.isCellContainingFluid(cellStack, mio_icif_fluids.BIOMASS.get())) {
-            return;
-        }
-
-        if (biomassTank.getFluidAmount() >= biomassTank.getCapacity()) {
-            return;
-        }
-
-        // �??��空气?��??输出�?
-        @SuppressWarnings("unused")
-        ItemStack emptyCellOutput = itemHandler.getStackInSlot(BIOGAS_CELL_SLOT);
-        ItemStack emptyCell = mio_icif_cells.getEmptyCellForStack(cellStack);
-        if (emptyCell.isEmpty()) emptyCell = new ItemStack(mio_icif_cells.CELL_EMPTY.get());
-
-        ItemStack currentEmptyCellSlot = itemHandler.getStackInSlot(EMPTY_CELL_SLOT);
-        if (!currentEmptyCellSlot.isEmpty()) {
-            if (!ItemStack.isSameItem(currentEmptyCellSlot, emptyCell) ||
-                currentEmptyCellSlot.getCount() >= currentEmptyCellSlot.getMaxStackSize()) {
-                return;
-            }
-        }
-
-        int filled = biomassTank.fill(new FluidStack(mio_icif_fluids.BIOMASS.get(), 1000), IFluidHandler.FluidAction.EXECUTE);
-        if (filled > 0) {
-            cellStack.shrink(1);
-            if (currentEmptyCellSlot.isEmpty()) {
-                itemHandler.setStackInSlot(EMPTY_CELL_SLOT, emptyCell);
-            } else {
-                currentEmptyCellSlot.grow(1);
-            }
-            setChanged();
-        }
+        var cell = itemHandler.getStackInSlot(BIOMASS_CELL_SLOT);
+        if (cell.isEmpty() || !mio_icif_cells.isCellContainingFluid(cell, mio_icif_fluids.BIOMASS.get())) return;
+        var single = cell.copyWithCount(1);
+        if (ContainerToTank.transfer(itemHandler, BIOMASS_CELL_SLOT, EMPTY_CELL_SLOT, biomassTank,
+                mio_icif_cells.getCellFluid(single), mio_icif_cells.getEmptyCellForStack(single))) setChanged();
     }
 
     /**
      * �????沼�?��?�出：用空气?��??从沼气槽位?填沼�?
      */
     private void handleBiogasCellSlot() {
-        // 优�??使用沼�?��?��??专用???空气?��??输�?�槽，没??�时??��????��?�用空气?��??输出�?
-        ItemStack emptyCellStack = itemHandler.getStackInSlot(EMPTY_CELL_INPUT_SLOT);
-        if (emptyCellStack.isEmpty() || !mio_icif_cells.isEmptyCell(emptyCellStack)) {
-            emptyCellStack = itemHandler.getStackInSlot(EMPTY_CELL_SLOT);
-            if (emptyCellStack.isEmpty() || !mio_icif_cells.isEmptyCell(emptyCellStack)) {
-                return;
-            }
-        }
-
-        if (biogasTank.getFluidAmount() < 1000) {
-            return;
-        }
-
-        // �??��沼�?��?�出�?
-        ItemStack biogasCellOutput = itemHandler.getStackInSlot(BIOGAS_CELL_SLOT);
-        ItemStack biogasCell = mio_icif_cells.getFilledCellForFluidStack(mio_icif_fluids.BIOGAS.get());
-
-        if (!biogasCellOutput.isEmpty()) {
-            if (!ItemStack.isSameItem(biogasCellOutput, biogasCell) ||
-                biogasCellOutput.getCount() >= biogasCellOutput.getMaxStackSize()) {
-                return;
-            }
-        }
-
-        FluidStack drained = biogasTank.drain(1000, IFluidHandler.FluidAction.EXECUTE);
-        if (drained.getAmount() >= 1000) {
-            emptyCellStack.shrink(1);
-            if (biogasCellOutput.isEmpty()) {
-                itemHandler.setStackInSlot(BIOGAS_CELL_SLOT, biogasCell);
-            } else {
-                biogasCellOutput.grow(1);
-            }
-            setChanged();
-        }
+        int inputSlot = EMPTY_CELL_INPUT_SLOT;
+        if (!mio_icif_cells.isEmptyCell(itemHandler.getStackInSlot(inputSlot))) inputSlot = EMPTY_CELL_SLOT;
+        if (!mio_icif_cells.isEmptyCell(itemHandler.getStackInSlot(inputSlot))) return;
+        var filled = mio_icif_cells.getFilledCellForFluidStack(mio_icif_fluids.BIOGAS.get());
+        if (filled.isEmpty()) return;
+        var content = mio_icif_cells.getCellFluid(filled.copyWithCount(1));
+        if (content.getFluid() != mio_icif_fluids.BIOGAS.get()) return;
+        if (ContainerToTank.drainToContainer(itemHandler, inputSlot, BIOGAS_CELL_SLOT, biogasTank, content, filled)) setChanged();
     }
 
     /**
      * �??��?��?��?��以工�?
      */
     protected boolean canWork() {
-        // ???�?足�?��?��?�质
-        if (biomassTank.getFluidAmount() < BIOMASS_PER_OPERATION) {
-            return false;
-        }
+        return (workCredit >= maxProgress || heatStorage.getHeatStored() > 0) && prepareOperation().isPresent();
+    }
 
-        // ???�?足�?��?��??
-        if (heatStorage.getHeatStored() <= 0) {
-            return false;
-        }
-
-        // ???�?沼�?��?�出空气??
-        if (biogasTank.getFluidAmount() + BIOGAS_PER_OPERATION > biogasTank.getCapacity()) {
-            return false;
-        }
-
-        return true;
+    private java.util.Optional<OwnedFluidConversion.Prepared> prepareOperation() {
+        if (biomassProcessed > Long.MAX_VALUE - BIOMASS_PER_OPERATION) return java.util.Optional.empty();
+        boolean fertilizerDue = biomassProcessed + BIOMASS_PER_OPERATION >= BIOMASS_PER_FERTILIZER;
+        return OwnedFluidConversion.prepare(biomassTank, new FluidStack(mio_icif_fluids.BIOMASS.get(), BIOMASS_PER_OPERATION),
+            biogasTank, new FluidStack(mio_icif_fluids.BIOGAS.get(), BIOGAS_PER_OPERATION), itemHandler,
+            FERTILIZER_SLOT, fertilizerDue ? new ItemStack(mio_icif_resources.FERTILIZER.get()) : ItemStack.EMPTY);
     }
 
     /**
      * ??��????��?�工�?
      */
     protected void doWork() {
-        // ?��?��当�?��?��?��?��?�本次工作�????��????��??
-        long availableHeat = heatStorage.getHeatStored();
-        long baseHeatPerTick = Math.min(MAX_HEAT_RECEIVE, HEAT_PER_OPERATION / 10);
-        long heatToUse = Math.min(availableHeat,
-            Math.max(1, (long) Math.ceil(baseHeatPerTick * getProcessingCostMultiplier())));
-
-        if (heatToUse <= 0) {
-            isWorking = false;
-            return;
+        isWorking = false;
+        var operation = prepareOperation();
+        if (operation.isEmpty()) return;
+        if (workCredit < maxProgress) {
+            int speed = getProcessingSpeedMultiplier();
+            long remaining = maxProgress - workCredit;
+            long heatUntilReady = (remaining + speed - 1L) / speed;
+            long rate = Math.max(1, (long) Math.ceil(Math.min(MAX_HEAT_RECEIVE, HEAT_PER_OPERATION / 10)
+                * getProcessingCostMultiplier()));
+            long requested = Math.min(heatUntilReady, Math.min(rate, heatStorage.getHeatStored()));
+            long consumed = heatStorage.consumeHeatInternal(requested, false);
+            if (consumed <= 0) return;
+            // Pay only up to this operation, retaining the final HU's surplus work at high upgrade speed.
+            workCredit += consumed * (long) speed;
+            isWorking = true;
         }
-
-        // �???��?��??
-        long consumed = heatStorage.consumeHeatInternal(heatToUse, false);
-        if (consumed <= 0) {
-            isWorking = false;
-            return;
+        if (workCredit >= maxProgress) {
+            long creditBefore = workCredit, processedBefore = biomassProcessed;
+            workCredit -= maxProgress;
+            biomassProcessed += BIOMASS_PER_OPERATION;
+            if (biomassProcessed >= BIOMASS_PER_FERTILIZER) biomassProcessed -= BIOMASS_PER_FERTILIZER;
+            if (!operation.get().commit()) {
+                workCredit = creditBefore; biomassProcessed = processedBefore;
+                isWorking = false;
+                setChanged();
+                return;
+            }
+            isWorking = true;
         }
-
-        isWorking = true;
-        progress += consumed * getProcessingSpeedMultiplier();
-
-        // �??��?��?��完成?��??次�?��??
-        if (progress >= maxProgress) {
-            progress -= maxProgress;
-            finishOperation();
-        }
-    }
-
-    /**
-     * 完成?��??次�?��?��?��??
-     */
-    private void finishOperation() {
-        // �???��?��?�质
-        FluidStack drained = biomassTank.drain(BIOMASS_PER_OPERATION, IFluidHandler.FluidAction.EXECUTE);
-        if (drained.getAmount() < BIOMASS_PER_OPERATION) {
-            return;
-        }
-
-        // 产出沼�??
-        int filled = biogasTank.fill(new FluidStack(mio_icif_fluids.BIOGAS.get(), BIOGAS_PER_OPERATION), IFluidHandler.FluidAction.EXECUTE);
-        if (filled < BIOGAS_PER_OPERATION) {
-            // �???�沼气槽充满??，�?��?��?��?�质量?�???��?????：�?��?��?��??
-            return;
-        }
-
-        // 累计??��?�质量???????
-        biomassProcessed += BIOMASS_PER_OPERATION;
-
-        // 产出??��??
-        if (biomassProcessed >= BIOMASS_PER_FERTILIZER) {
-            biomassProcessed -= BIOMASS_PER_FERTILIZER;
-            produceFertilizer();
-        }
-
         setChanged();
-    }
-
-    /**
-     * 产出??��??
-     */
-    private void produceFertilizer() {
-        ItemStack fertilizer = new ItemStack(mio_icif_resources.FERTILIZER.get());
-        ItemStack currentFertilizer = itemHandler.getStackInSlot(FERTILIZER_SLOT);
-
-        if (currentFertilizer.isEmpty()) {
-            itemHandler.setStackInSlot(FERTILIZER_SLOT, fertilizer);
-        } else if (ItemStack.isSameItem(currentFertilizer, fertilizer) &&
-                   currentFertilizer.getCount() < currentFertilizer.getMaxStackSize()) {
-            currentFertilizer.grow(1);
-        }
-        // �???��?��?�槽充满??，�?��?��?�丢失�??与�?��??行为类似�?
     }
 
     @Override
@@ -437,7 +342,7 @@ public class mio_icif_fermenter_elc extends mio_icif_HeatU_Block {
     }
 
     public int getProgress() {
-        return progress;
+        return (int) Math.min(maxProgress, workCredit);
     }
 
     public int getMaxProgress() {
@@ -480,8 +385,8 @@ public class mio_icif_fermenter_elc extends mio_icif_HeatU_Block {
         @Override
         public FluidStack getFluidInTank(int tank) {
             return switch (tank) {
-                case 0 -> biomassTank.getFluid();
-                case 1 -> biogasTank.getFluid();
+                case 0 -> biomassTank.getFluid().copy();
+                case 1 -> biogasTank.getFluid().copy();
                 default -> FluidStack.EMPTY;
             };
         }
@@ -537,8 +442,9 @@ public class mio_icif_fermenter_elc extends mio_icif_HeatU_Block {
         tag.put("inventory", itemHandler.serializeNBT(registries));
         tag.put("biomassTank", biomassTank.writeToNBT(registries, new CompoundTag()));
         tag.put("biogasTank", biogasTank.writeToNBT(registries, new CompoundTag()));
-        tag.putInt("progress", progress);
-        tag.putInt("biomassProcessed", biomassProcessed);
+        tag.putInt("progress", getProgress());
+        tag.putLong("scex_work_credit", workCredit);
+        tag.putLong("biomassProcessed", biomassProcessed);
         tag.putBoolean("isWorking", isWorking);
     }
 
@@ -554,9 +460,22 @@ public class mio_icif_fermenter_elc extends mio_icif_HeatU_Block {
         if (tag.contains("biogasTank")) {
             biogasTank.readFromNBT(registries, tag.getCompound("biogasTank"));
         }
-        progress = tag.getInt("progress");
-        biomassProcessed = tag.getInt("biomassProcessed");
-        isWorking = tag.getBoolean("isWorking");
+        workCredit = Math.max(0, tag.contains("scex_work_credit", net.minecraft.nbt.Tag.TAG_ANY_NUMERIC)
+            ? tag.getLong("scex_work_credit") : tag.getLong("progress"));
+        biomassProcessed = Math.max(0, tag.getLong("biomassProcessed"));
+        isWorking = level != null && level.isClientSide() && tag.getBoolean("isWorking");
+    }
+
+    @Override
+    public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
+        CompoundTag tag = new CompoundTag();
+        saveAdditional(tag, registries);
+        return tag;
+    }
+
+    @Override
+    public void handleUpdateTag(CompoundTag tag, HolderLookup.Provider registries) {
+        loadAdditional(tag, registries);
     }
 
     // ==================== MenuProvider ====================

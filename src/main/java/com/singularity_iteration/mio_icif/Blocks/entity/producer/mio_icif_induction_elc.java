@@ -6,6 +6,7 @@ import com.singularity_iteration.mio_icif.Blocks.entity.slot.SlotLayout;
 import com.singularity_iteration.mio_icif.energy.EnergyUnit.CableTier;
 import com.singularity_iteration.mio_icif.energy.heat.HeatStorage;
 import com.singularity_iteration.mio_icif.energy.heat.IHeatStorage;
+import dev.scex.si.processing.RecipeSlots;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
@@ -25,14 +26,14 @@ import java.util.Optional;
 /**
  * 感应炉方块实体类
  * 使用感应生产热量来同时处理两个输入（可以同时冶炼两个物品）
- * 
+ *
  * 特点：
  * - 持续耗电产生热量（不输出能量，热量仅用于内部加工）
  * - 温度范围 0-100%，影响加工速度
  * - 两个输入槽 + 两个输出槽 + 一个电池槽 + 两个升级槽
  * - 停电就停止加热，温度自然冷却
  * - 两个输入槽共用一个温度值（同时加工）
- * 
+ *
  * 参数：
  * - 起始1%需要约1000EU，达到100%需要约95EU每刻维持
  * - 最低加热时间16EU/t，每次加工约0.609375s（2.1875ticks）
@@ -63,14 +64,14 @@ public class mio_icif_induction_elc extends mio_icif_producer {
     public static final long DEFAULT_MAX_RECEIVE = 128L;
     public static final long DEFAULT_MAX_EXTRACT = 0L;
     public static final long DEFAULT_ENERGY_PER_TICK = 15L;
-    
+
     public static final int MAX_HEAT = 10000;
     public static final int PROGRESS_TARGET = 4000;
     public static final int HEAT_PROGRESS_DIVISOR = 30;
     public static final int HEAT_UP_COST = 1;
     public static final int HEAT_COOL_RATE = 4;
     public static final int WORK_ENERGY_COST = 15;
-    
+
     public static final int HEAT_CAPACITY = 10000;
     public static final int HEAT_MAX_RECEIVE = 0;
     public static final int HEAT_MAX_EXTRACT = 0;
@@ -78,14 +79,11 @@ public class mio_icif_induction_elc extends mio_icif_producer {
     public static final int HEAT_MAX_TEMP = 1000;
     public static final float HEAT_LOSS_FACTOR = 0.005f;
     public static final int HEAT_UP_RATE = 1;
-    
+
     // ??��?��?��??
     protected final HeatStorage heatStorage;
-    
-    private Optional<RecipeHolder<SmeltingRecipe>> currentRecipe1 = Optional.empty();
-    private Optional<RecipeHolder<SmeltingRecipe>> currentRecipe2 = Optional.empty();
-    
-    private int progress = 0;
+
+
 
     /**
      * ?���? BlockEntityType.Builder ????????�函�?
@@ -103,7 +101,7 @@ public class mio_icif_induction_elc extends mio_icif_producer {
             LAYOUT,
             DEFAULT_ENERGY_PER_TICK,
             CableTier.MV);
-        
+
         this.heatStorage = new HeatStorage(
             HEAT_CAPACITY,
             HEAT_MAX_RECEIVE,
@@ -220,29 +218,31 @@ public class mio_icif_induction_elc extends mio_icif_producer {
      * 判断指定槽位是否可以加工
      */
     private boolean canProcessSlot(int inputSlot, int outputSlot) {
-        ItemStack input = itemHandler.getStackInSlot(inputSlot);
-        if (input.isEmpty()) {
-            return false;
+        return prepareLane(inputSlot, outputSlot).isPresent();
+    }
+
+    private Optional<RecipeSlots.Prepared> prepareLane(int inputSlot, int outputSlot) {
+        var recipe = findRecipe(inputSlot);
+        if (recipe.isEmpty()) return Optional.empty();
+        return RecipeSlots.prepare(itemHandler, inputSlot, 1, new int[]{outputSlot},
+            java.util.List.of(recipe.get().value().getResultItem(level.registryAccess())));
+    }
+
+    private Optional<RecipeSlots.Prepared> prepareWorkingLanes() {
+        var lanes = new java.util.ArrayList<RecipeSlots.Prepared>();
+        prepareLane(INPUT_SLOT_1, OUTPUT_SLOT_1).ifPresent(lanes::add);
+        prepareLane(INPUT_SLOT_2, OUTPUT_SLOT_2).ifPresent(lanes::add);
+        return RecipeSlots.combine(lanes);
+    }
+
+    @Override
+    protected void onTick() {
+        boolean heating = canWork() || level != null && level.hasNeighborSignal(worldPosition);
+        if (heating && apiGetStoredEnergy() >= HEAT_UP_COST && apiUseEnergy(HEAT_UP_COST, false) == HEAT_UP_COST) {
+            heatStorage.generateHeatInternal(HEAT_UP_RATE, false);
+        } else {
+            heatStorage.consumeHeatInternal(HEAT_COOL_RATE, false);
         }
-
-        Optional<RecipeHolder<SmeltingRecipe>> recipe = findRecipe(inputSlot);
-        if (recipe.isEmpty()) {
-            return false;
-        }
-
-        ItemStack result = recipe.get().value().getResultItem(level.registryAccess());
-        ItemStack currentOutput = itemHandler.getStackInSlot(outputSlot);
-
-        if (currentOutput.isEmpty()) {
-            return true;
-        }
-
-        if (!ItemStack.isSameItem(currentOutput, result)) {
-            return false;
-        }
-
-        int newCount = currentOutput.getCount() + result.getCount();
-        return newCount <= currentOutput.getMaxStackSize();
     }
 
     /**
@@ -250,93 +250,40 @@ public class mio_icif_induction_elc extends mio_icif_producer {
      */
     @Override
     protected void doWork() {
-        currentRecipe1 = findRecipe(INPUT_SLOT_1);
-        currentRecipe2 = findRecipe(INPUT_SLOT_2);
-        
-        boolean canWork1 = canProcessSlot(INPUT_SLOT_1, OUTPUT_SLOT_1);
-        boolean canWork2 = canProcessSlot(INPUT_SLOT_2, OUTPUT_SLOT_2);
-        boolean canOperate = canWork1 || canWork2;
-        
-        if (progress >= PROGRESS_TARGET) {
-            finishSmeltingBoth();
-            progress = 0;
-            isWorking = false;
-            return;
-        }
-        
-        boolean hasRedstone = level != null && level.hasNeighborSignal(worldPosition);
-        
-        if ((canOperate || hasRedstone) && energyStorage.getAmount() >= HEAT_UP_COST) {
-            apiUseEnergy(HEAT_UP_COST, false);
-            if (heatStorage.getHeatStored() < MAX_HEAT) {
-                heatStorage.generateHeatInternal(HEAT_UP_RATE, false);
+        if (prepareWorkingLanes().isEmpty()) { stopWork(); return; }
+        if (progress < PROGRESS_TARGET) {
+            if (apiGetStoredEnergy() < WORK_ENERGY_COST || apiUseEnergy(WORK_ENERGY_COST, false) != WORK_ENERGY_COST) {
+                stopWork(); return;
             }
-            isWorking = true;
-        } else {
-            long currentHeat = heatStorage.getHeatStored();
-            if (currentHeat > 0) {
-                heatStorage.setHeat(currentHeat - Math.min(currentHeat, HEAT_COOL_RATE));
-            }
+            progress = (int) Math.min(PROGRESS_TARGET, (long) progress + heatStorage.getHeatStored() / HEAT_PROGRESS_DIVISOR);
         }
-        
-        if (!isWorking || progress == 0) {
-            if (canOperate) {
-                if (energyStorage.getAmount() >= WORK_ENERGY_COST) {
-                    isWorking = true;
-                }
-            } else {
-                progress = 0;
-            }
-        } else if (!canOperate || energyStorage.getAmount() < WORK_ENERGY_COST) {
-            if (!canOperate) {
-                progress = 0;
-            }
-            isWorking = false;
-        }
-        
-        if (isWorking && canOperate) {
-            int heatValue = (int) heatStorage.getHeatStored();
-            progress += heatValue / HEAT_PROGRESS_DIVISOR;
-            apiUseEnergy(WORK_ENERGY_COST, false);
-        }
+        isWorking = true;
+        if (progress >= PROGRESS_TARGET) finishSmeltingBoth();
     }
 
     /**
      * 完成冶炼 - 同一时间处理两个槽位
      */
     private void finishSmeltingBoth() {
-        if (canProcessSlot(INPUT_SLOT_1, OUTPUT_SLOT_1) && currentRecipe1.isPresent()) {
-            finishSmelting(INPUT_SLOT_1, OUTPUT_SLOT_1, currentRecipe1.get());
-        }
-        
-        if (canProcessSlot(INPUT_SLOT_2, OUTPUT_SLOT_2) && currentRecipe2.isPresent()) {
-            finishSmelting(INPUT_SLOT_2, OUTPUT_SLOT_2, currentRecipe2.get());
-        }
+        var operation = prepareWorkingLanes();
+        if (operation.isEmpty()) { stopWork(); return; }
+        int completed = progress;
+        progress = 0; isWorking = false;
+        if (!operation.get().commit()) progress = completed;
+        setChanged();
     }
 
     /**
      * 完成单个槽位的冶炼
      */
-    private void finishSmelting(int inputSlot, int outputSlot, RecipeHolder<SmeltingRecipe> recipe) {
-        ItemStack result = recipe.value().getResultItem(level.registryAccess());
-        ItemStack currentOutput = itemHandler.getStackInSlot(outputSlot);
 
-        if (currentOutput.isEmpty()) {
-            itemHandler.setStackInSlot(outputSlot, result.copy());
-        } else {
-            currentOutput.grow(result.getCount());
-        }
-
-        ItemStack input = itemHandler.getStackInSlot(inputSlot);
-        input.shrink(1);
-    }
 
     public int getHeatPercent() {
-        return (int) ((heatStorage.getHeatStored() * 100) / heatStorage.getMaxHeatStored());
+        return dev.scex.energy.BoundedUnits.gauge(heatStorage.getHeatStored(), heatStorage.getMaxHeatStored(), 0, 100);
     }
 
     public int gaugeProgressScaled(int i) {
-        return i * progress / PROGRESS_TARGET;
+        return (int) dev.scex.energy.BoundedUnits.multiplyDivide(Math.max(0, Math.min(PROGRESS_TARGET, progress)), Math.max(0, i), PROGRESS_TARGET);
     }
 
     /**
@@ -390,19 +337,11 @@ public class mio_icif_induction_elc extends mio_icif_producer {
     @Override
     public void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
-        if (tag.contains("heat")) {
-            heatStorage.setHeat(tag.getInt("heat"));
-        }
-        if (tag.contains("heat_percent")) {
-            int oldHeatPercent = tag.getInt("heat_percent");
-            heatStorage.setHeat(oldHeatPercent * HEAT_CAPACITY / 100);
-        }
-        if (tag.contains("progress")) {
-            progress = tag.getInt("progress");
-        }
-        if (tag.contains("progress1")) {
-            progress = tag.getInt("progress1");
-        }
+        if (tag.contains("heat", net.minecraft.nbt.Tag.TAG_ANY_NUMERIC)) heatStorage.setHeat(tag.getLong("heat"));
+        else if (tag.contains("heat_percent", net.minecraft.nbt.Tag.TAG_ANY_NUMERIC))
+            heatStorage.setHeat(dev.scex.energy.BoundedUnits.multiplyDivide(Math.max(0, Math.min(100, tag.getLong("heat_percent"))), HEAT_CAPACITY, 100));
+        if (!tag.contains("progress") && tag.contains("progress1")) progress = tag.getInt("progress1");
+        progress = Math.max(0, Math.min(PROGRESS_TARGET, progress));
     }
 
     // ==================== Getter ?���? ====================

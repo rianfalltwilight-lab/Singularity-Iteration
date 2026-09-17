@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: Apache-2.0
 package com.singularity_iteration.mio_icif.Blocks.entity.producer;
 
 import com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_Energy_Block;
@@ -6,448 +7,219 @@ import com.singularity_iteration.mio_icif.Blocks.entity.slot.MachineItemHandler;
 import com.singularity_iteration.mio_icif.Blocks.entity.slot.SlotLayout;
 import com.singularity_iteration.mio_icif.Items.Resource.mio_icif_memory;
 import com.singularity_iteration.mio_icif.energy.EnergyUnit.CableTier;
+import dev.scex.si.processing.MachineMenuAccess;
+import dev.scex.si.processing.PatternMenuData;
+import dev.scex.si.processing.StoredPattern;
+import java.util.ArrayList;
+import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.Container;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ContainerData;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
 import net.neoforged.neoforge.items.IItemHandler;
 import org.jetbrains.annotations.Nullable;
-import org.slf4j.Logger;
-import com.mojang.logging.LogUtils;
 
-import java.util.ArrayList;
-import java.util.List;
-
-/**
- * 模式存储机方块实体类
- * 用于存储从模式扫描机扫描到的蓝图数据
- *
- * 每个存储机可以为不同的机器使用
- * 每次存储/删除操作需要1000 EU
- */
-@SuppressWarnings("null")
-public class mio_icif_pattern_storage extends mio_icif_Energy_Block {
-    private static final Logger LOGGER = LogUtils.getLogger();
-
-    // 最大存储模式数据
-    public static final int MAX_PATTERNS = 64;
-    // 每次操作消耗的能量
-    public static final long ENERGY_PER_OPERATION = 100;
-    // 能量存储配置
-    public static final long DEFAULT_CAPACITY = 100000; // 100k EU
-    public static final long DEFAULT_MAX_RECEIVE = 128; // 输入上限128
-    public static final long DEFAULT_MAX_EXTRACT = 0;   // 不输出电力
-
-    // 槽位布局
-    private static final SlotLayout LAYOUT = SlotLayout.builder()
-        .memory()
-        .build();
-    public static final int SLOT_COUNT = 1;
-    public static final int MEMORY_SLOT = 0; // 记忆水晶槽位(MEMORY)
-
-    // 存储的模式数据列表
-    private final List<mio_icif_scanner_elc.ScanResult> storedPatterns = new ArrayList<>();
-    // 当前浏览中的索引
-    private int currentIndex = 0;
-    // 物品栏处理器
+/** Bounded pattern ownership, registry-aware saves and paid copy operations. */
+public class mio_icif_pattern_storage extends mio_icif_Energy_Block implements Container {
+    public static final int MAX_PATTERNS=64,SLOT_COUNT=1,MEMORY_SLOT=0;
+    public static final long ENERGY_PER_OPERATION=100,DEFAULT_CAPACITY=100000,DEFAULT_MAX_RECEIVE=128,DEFAULT_MAX_EXTRACT=0;
+    private static final SlotLayout LAYOUT=SlotLayout.builder().memory().build();
+    private final List<StoredPattern> storedPatterns=new ArrayList<>();
+    private CompoundTag unresolvedPatterns=new CompoundTag();
+    private int currentIndex;
+    private long revision;
+    private boolean changing;
+    private long quotedGeneration=Long.MIN_VALUE;
     protected MachineItemHandler itemHandler;
-
-    private final ContainerData dataAccess = new ContainerData() {
-        @Override
-        public int get(int index) {
-            return switch (index) {
-                case 0 -> (int) energyStorage.getAmount();
-                case 1 -> (int) energyStorage.getCapacity();
-                case 2 -> currentIndex;
-                case 3 -> storedPatterns.size();
-                case 4 -> (int) (Double.doubleToRawLongBits(getCurrentUuCost()) >> 32);
-                case 5 -> (int) Double.doubleToRawLongBits(getCurrentUuCost());
-                case 6 -> (int) getCurrentEuCost() & 0xFFFF;
-                case 7 -> (int) (getCurrentEuCost() >>> 16) & 0xFFFF;
-                default -> 0;
-            };
-        }
-
-        @Override
-        public void set(int index, int value) {}
-
-        @Override
-        public int getCount() {
-            return 8;
+    private final ContainerData dataAccess=new ContainerData(){
+        @Override public int getCount(){return PatternMenuData.COUNT;}
+        @Override public void set(int index,int value){}
+        @Override public int get(int index){
+            if(index<0||index>=getCount())throw new IndexOutOfBoundsException(index);
+            if(index<2)return PatternMenuData.word(energyStorage.getAmount(),index);
+            if(index<4)return PatternMenuData.word(energyStorage.getCapacity(),index-2);
+            if(index==4)return currentIndex;
+            if(index==5)return storedPatterns.size();
+            if(index<10)return PatternMenuData.word(Double.doubleToRawLongBits(getCurrentUuCost()),index-6);
+            return PatternMenuData.word(getCurrentEuCost(),index-10);
         }
     };
-
-    public mio_icif_pattern_storage(BlockPos pos, BlockState state) {
-        this(pos, state, mio_icif_block_entities.PATTERN_STORAGE_ENTITY_TYPE.get());
+    public mio_icif_pattern_storage(BlockPos pos,BlockState state){this(pos,state,mio_icif_block_entities.PATTERN_STORAGE_ENTITY_TYPE.get());}
+    public mio_icif_pattern_storage(BlockPos pos,BlockState state,BlockEntityType<?> type){
+        super(pos,state,type,DEFAULT_CAPACITY,DEFAULT_MAX_RECEIVE,DEFAULT_MAX_EXTRACT,CableTier.LV);
+        itemHandler=new MachineItemHandler(LAYOUT){@Override protected void onContentsChanged(int slot){setChanged();}};
+        itemHandler.setValidator((slot,stack,kind)->isItemValidForSlot(slot,stack));
     }
-
-    public mio_icif_pattern_storage(BlockPos pos, BlockState state, BlockEntityType<?> type) {
-        super(pos, state, type, DEFAULT_CAPACITY, DEFAULT_MAX_RECEIVE, DEFAULT_MAX_EXTRACT, CableTier.LV);
-
-        // 创建物品栏处理器
-        this.itemHandler = new MachineItemHandler(LAYOUT) {
-            @Override
-            protected void onContentsChanged(int slot) {
-                setChanged();
-            }
-        };
-        this.itemHandler.setValidator((slot, stack, slotType) -> mio_icif_pattern_storage.this.isItemValidForSlot(slot, stack));
+    protected boolean operational(){
+        return !hasUnresolvedPatterns()&&liveOwner();
     }
-
-    /**
-     * 检查槽位是否存放适合特定槽位
-     */
-    public boolean isItemValidForSlot(int slot, ItemStack stack) {
-        if (slot == MEMORY_SLOT) {
-            // 记忆水晶槽只接受记忆水晶
-            return stack.getItem() instanceof mio_icif_memory;
-        }
-        return false;
+    private boolean liveOwner(){
+        if(isRemoved()||!(level instanceof ServerLevel world)||!world.getServer().isSameThread())return false;
+        var chunk=world.getChunkSource().getChunkNow(worldPosition.getX()>>4,worldPosition.getZ()>>4);
+        return chunk!=null&&world.shouldTickBlocksAt(ChunkPos.asLong(worldPosition))
+            &&chunk.getBlockEntity(worldPosition,LevelChunk.EntityCreationType.CHECK)==this;
     }
-
-    /**
-     * 检查是否有足够能量执行操作
-     */
-    public boolean hasEnoughEnergy() {
-        return energyStorage.getAmount() >= ENERGY_PER_OPERATION;
+    protected HolderLookup.Provider patternRegistries(){return level.registryAccess();}
+    protected dev.scex.si.processing.UuQuoteBook.Quote trustedQuote(ItemStack item){
+        return level instanceof ServerLevel world?dev.scex.si.processing.UuQuoteBook.quote(world.getServer(),item):null;
     }
-
-    /**
-     * 消耗操作能量
-     * @return 是否有足够能量消耗
-     */
-    public boolean consumeOperationEnergy() {
-        if (hasEnoughEnergy()) {
-            apiUseEnergy(ENERGY_PER_OPERATION, false);
-            return true;
+    private void refreshStoredQuotes(){
+        if(changing||!liveOwner()||!(level instanceof ServerLevel world))return;
+        long generation=dev.scex.si.processing.UuQuoteBook.generation(world.getServer());
+        if(generation<0||generation==quotedGeneration)return;
+        quotedGeneration=generation;
+        if(hasUnresolvedPatterns()){
+            if(!unresolvedPatterns.getAllKeys().equals(java.util.Set.of("patterns"))||!(unresolvedPatterns.get("patterns") instanceof ListTag records))return;
+            var recovered=dev.scex.si.processing.UuPatternMigration.recover(records,patternRegistries(),this::trustedQuote);
+            if(recovered==null)return;
+            storedPatterns.clear();storedPatterns.addAll(recovered);unresolvedPatterns=new CompoundTag();clampIndex();revision++;setChanged();
         }
-        return false;
+        for(int i=0;i<storedPatterns.size();i++){
+            var old=storedPatterns.get(i);var updated=dev.scex.si.processing.UuPatternMigration.reprice(old,trustedQuote(old.item()));
+            if(updated!=old){storedPatterns.set(i,updated);revision++;setChanged();}
+        }
     }
-
-    /**
-     * 存储扫描结果到模式列表
-     * @param result 扫描结果
-     * @return 是否成功存储
-     */
-    public boolean storePattern(mio_icif_scanner_elc.ScanResult result) {
-        LOGGER.info("[模式存储机] 尝试存储模式，当前数据量: " + storedPatterns.size() + "/" + MAX_PATTERNS);
-
-        if (storedPatterns.size() >= MAX_PATTERNS) {
-            return false;
-        }
-
-        // 检查能量
-        LOGGER.info("[模式存储机] 当前能量: " + energyStorage.getAmount() + "/" + ENERGY_PER_OPERATION);
-        if (!consumeOperationEnergy()) {
-            return false;
-        }
-        LOGGER.info("[模式存储机] 能量消耗完成，剩余能量: " + energyStorage.getAmount());
-
-        // 检查是否已存在相同物品
-        for (mio_icif_scanner_elc.ScanResult existing : storedPatterns) {
-            if (ItemStack.isSameItem(existing.item, result.item)) {
-                // 已存在，更新为新扫描结果
-                LOGGER.info("[模式存储机] 物品已存在，更新为新扫描模式");
-                storedPatterns.remove(existing);
-                break;
-            }
-        }
-
-        storedPatterns.add(result);
-        LOGGER.info("[模式存储机] 模式已添加，当前数据量: " + storedPatterns.size());
-        setChanged();
-
+    public boolean hasUnresolvedPatterns(){return !unresolvedPatterns.isEmpty();}
+    public boolean isItemValidForSlot(int slot,ItemStack stack){return slot==MEMORY_SLOT&&stack.getItem() instanceof mio_icif_memory;}
+    public boolean hasEnoughEnergy(){return energyStorage.getAmount()>=ENERGY_PER_OPERATION;}
+    public boolean consumeOperationEnergy(){return !changing&&operational()&&hasEnoughEnergy()&&energyStorage.consumeEnergyInternal(ENERGY_PER_OPERATION,false)==ENERGY_PER_OPERATION;}
+    private int findIndex(ItemStack item){for(int i=0;i<storedPatterns.size();i++)if(storedPatterns.get(i).sameItem(item))return i;return -1;}
+    public boolean storePattern(mio_icif_scanner_elc.ScanResult result){return storePrepared(StoredPattern.from(result));}
+    private boolean storePrepared(StoredPattern prepared){
+        if(prepared==null||changing||!operational())return false;
+        prepared=dev.scex.si.processing.UuPatternMigration.reprice(prepared,trustedQuote(prepared.item()));
+        int index=findIndex(prepared.item());
+        if(index>=0&&storedPatterns.get(index).same(prepared))return true;
+        if(index<0&&isFull()||!hasEnoughEnergy())return false;
+        long expectedRevision=revision;var balance=energyStorage.scexNetworkQuote();changing=true;
+        try{
+            try{prepared.save(patternRegistries());}catch(RuntimeException invalid){return false;}
+            if(revision!=expectedRevision||!operational()||!balance.equals(energyStorage.scexNetworkQuote())||!hasEnoughEnergy())return false;
+            if(energyStorage.consumeEnergyInternal(ENERGY_PER_OPERATION,false)!=ENERGY_PER_OPERATION)throw new IllegalStateException("Owned pattern payment changed");
+            if(index>=0)storedPatterns.set(index,prepared);else storedPatterns.add(prepared);
+            revision++;setChanged();return true;
+        }finally{changing=false;}
+    }
+    public boolean removePattern(int index){
+        if(changing||!operational()||index<0||index>=storedPatterns.size()||!hasEnoughEnergy())return false;
+        if(energyStorage.consumeEnergyInternal(ENERGY_PER_OPERATION,false)!=ENERGY_PER_OPERATION)return false;
+        storedPatterns.remove(index);clampIndex();revision++;setChanged();return true;
+    }
+    public List<mio_icif_scanner_elc.ScanResult> getStoredPatterns(){
+        var copy=new ArrayList<mio_icif_scanner_elc.ScanResult>();for(var pattern:storedPatterns)copy.add(pattern.legacyView());return copy;
+    }
+    @Nullable public mio_icif_scanner_elc.ScanResult getPattern(int index){return index<0||index>=storedPatterns.size()?null:storedPatterns.get(index).legacyView();}
+    @Nullable public mio_icif_scanner_elc.ScanResult findPattern(ItemStack item){int index=findIndex(item);return index<0?null:getPattern(index);}
+    public boolean hasPattern(ItemStack item){return findIndex(item)>=0;}
+    public int getStoredCount(){return storedPatterns.size();}
+    public boolean isFull(){return storedPatterns.size()>=MAX_PATTERNS;}
+    public void clear(){if(changing||!operational())return;storedPatterns.clear();currentIndex=0;revision++;setChanged();}
+    public void receiveSyncData(List<mio_icif_scanner_elc.ScanResult> patterns,int index){
+        if(level==null||!level.isClientSide()||patterns.size()>MAX_PATTERNS)return;
+        var decoded=new ArrayList<StoredPattern>();
+        for(var value:patterns){var pattern=StoredPattern.from(value);if(pattern==null)return;decoded.add(pattern);}
+        storedPatterns.clear();storedPatterns.addAll(decoded);currentIndex=index;clampIndex();revision++;
+    }
+    public int getCurrentIndex(){return currentIndex;}
+    public void setCurrentIndex(int index){
+        if(changing||!operational())return;int old=currentIndex;currentIndex=index;clampIndex();
+        if(old!=currentIndex){revision++;setChanged();}
+    }
+    private void clampIndex(){currentIndex=storedPatterns.isEmpty()?0:Math.max(0,Math.min(currentIndex,storedPatterns.size()-1));}
+    public void previousPattern(){if(!storedPatterns.isEmpty())setCurrentIndex((currentIndex+storedPatterns.size()-1)%storedPatterns.size());}
+    public void nextPattern(){if(!storedPatterns.isEmpty())setCurrentIndex((currentIndex+1)%storedPatterns.size());}
+    private StoredPattern current(){return currentIndex<0||currentIndex>=storedPatterns.size()?null:storedPatterns.get(currentIndex);}
+    public ItemStack getCurrentPattern(){var value=current();return value==null?ItemStack.EMPTY:value.item();}
+    public double getCurrentUuCost(){var value=current();return value==null?0:value.buckets();}
+    public long getCurrentEuCost(){var value=current();return value==null?0:value.energy();}
+    public boolean exportCurrentPattern(){
+        refreshStoredQuotes();
+        var pattern=current();var original=itemHandler.getStackInSlot(MEMORY_SLOT);
+        if(changing||!operational()||pattern==null||!hasEnoughEnergy()||original.getCount()!=1
+                ||!(original.getItem() instanceof mio_icif_memory memory)||memory.hasData(original))return false;
+        var before=original.copy();var after=before.copy();long expectedRevision=revision;var balance=energyStorage.scexNetworkQuote();changing=true;
+        try{
+            if(!memory.tryStoreData(after,pattern.item(),pattern.buckets(),pattern.energy()))return false;
+            var savedItem=memory.getStoredItemStack(after);
+            if(!StoredPattern.valid(savedItem,memory.getUuMatterCost(after),memory.getEnergyCost(after))
+                    ||!pattern.same(new StoredPattern(savedItem,memory.getUuMatterCost(after),memory.getEnergyCost(after))))return false;
+            if(revision!=expectedRevision||!operational()||!ItemStack.matches(before,itemHandler.getStackInSlot(MEMORY_SLOT))
+                    ||!balance.equals(energyStorage.scexNetworkQuote())||!hasEnoughEnergy())return false;
+            if(energyStorage.consumeEnergyInternal(ENERGY_PER_OPERATION,false)!=ENERGY_PER_OPERATION)throw new IllegalStateException("Owned export payment changed");
+            if(!itemHandler.scexCommitSlots(new int[]{MEMORY_SLOT},new ItemStack[]{before},new ItemStack[]{after}))throw new IllegalStateException("Owned memory slot changed");
+            setChanged();return true;
+        }finally{changing=false;}
+    }
+    public boolean importMemoryPattern(){
+        if(changing||!operational())return false;
+        var before=itemHandler.getStackInSlot(MEMORY_SLOT).copy();
+        if(before.getCount()!=1||!(before.getItem() instanceof mio_icif_memory memory))return false;
+        var migration=dev.scex.si.processing.UuPatternMigration.prepare(before,this::trustedQuote);
+        var priced=migration.replacement();
+        var item=memory.getStoredItemStack(priced);double buckets=memory.getUuMatterCost(priced);long energy=memory.getEnergyCost(priced);
+        if(!StoredPattern.valid(item,buckets,energy)||!ItemStack.matches(before,itemHandler.getStackInSlot(MEMORY_SLOT)))return false;
+        if(!storePrepared(new StoredPattern(item,buckets,energy)))return false;
+        if(migration.status()==dev.scex.si.processing.UuPatternMigration.Status.UPDATED)
+            itemHandler.scexCommitSlots(new int[]{MEMORY_SLOT},new ItemStack[]{before},new ItemStack[]{priced});
         return true;
     }
-
-    /**
-     * 移除指定索引处的模式
-     */
-    public boolean removePattern(int index) {
-        if (index < 0 || index >= storedPatterns.size()) {
-            return false;
-        }
-
-        // 检查能量
-        if (!consumeOperationEnergy()) {
-            return false;
-        }
-
-        storedPatterns.remove(index);
-        // 修正当前索引
-        if (currentIndex >= storedPatterns.size() && currentIndex > 0) {
-            currentIndex--;
-        }
-        setChanged();
-
-        return true;
+    public IItemHandler getItemHandler(){return itemHandler;}
+    public IItemHandler getItemHandlerCapability(@Nullable Direction side){return itemHandler;}
+    public ContainerData getContainerData(){return dataAccess;}
+    public void savePatternData(CompoundTag tag,HolderLookup.Provider registries){
+        var patterns=new ListTag();for(var pattern:storedPatterns)patterns.add(pattern.save(registries));
+        tag.put("patterns",patterns);tag.putInt("current_index",currentIndex);
+        if(hasUnresolvedPatterns())tag.put("scex_unresolved_patterns",unresolvedPatterns.copy());
     }
-
-    /**
-     * 获取所有存储的模式列表
-     */
-    public List<mio_icif_scanner_elc.ScanResult> getStoredPatterns() {
-        return new ArrayList<>(storedPatterns);
+    @Override protected void saveAdditional(CompoundTag tag,HolderLookup.Provider registries){
+        super.saveAdditional(tag,registries);savePatternData(tag,registries);tag.put("inventory",itemHandler.serializeNBT(registries));
     }
-
-    /**
-     * 获取指定索引处的模式
-     */
-    @Nullable
-    public mio_icif_scanner_elc.ScanResult getPattern(int index) {
-        if (index < 0 || index >= storedPatterns.size()) {
-            return null;
-        }
-        return storedPatterns.get(index);
-    }
-
-    /**
-     * 查找匹配物品的模式
-     */
-    @Nullable
-    public mio_icif_scanner_elc.ScanResult findPattern(ItemStack item) {
-        for (mio_icif_scanner_elc.ScanResult result : storedPatterns) {
-            if (ItemStack.isSameItem(result.item, item)) {
-                return result;
+    private void loadPatterns(CompoundTag tag,HolderLookup.Provider registries){
+        storedPatterns.clear();unresolvedPatterns=new CompoundTag();quotedGeneration=Long.MIN_VALUE;
+        if(tag.contains("scex_unresolved_patterns",Tag.TAG_COMPOUND))unresolvedPatterns=tag.getCompound("scex_unresolved_patterns").copy();
+        else if(tag.contains("scex_unresolved_patterns"))unresolvedPatterns.put("unrecognized",tag.get("scex_unresolved_patterns").copy());
+        var raw=tag.get("patterns");boolean invalid=raw!=null&&!(raw instanceof ListTag);
+        if(raw instanceof ListTag entries){
+            invalid=entries.size()>MAX_PATTERNS;
+            if(!invalid)for(var entry:entries){
+                var value=entry instanceof CompoundTag compound?StoredPattern.load(compound,registries):null;
+                if(value==null||findIndex(value.item())>=0){invalid=true;break;}storedPatterns.add(value);
             }
         }
-        return null;
+        if(invalid){storedPatterns.clear();unresolvedPatterns.put("patterns",raw.copy());}
+        currentIndex=tag.getInt("current_index");clampIndex();revision++;
     }
-
-    /**
-     * 是否已存储物品数据
-     */
-    public boolean hasPattern(ItemStack item) {
-        return findPattern(item) != null;
+    @Override public void loadAdditional(CompoundTag tag,HolderLookup.Provider registries){
+        super.loadAdditional(tag,registries);loadPatterns(tag,registries);
+        if(tag.contains("inventory",Tag.TAG_COMPOUND))itemHandler.deserializeNBT(registries,tag.getCompound("inventory"));
     }
-
-    /**
-     * 获取已存储数量
-     */
-    public int getStoredCount() {
-        return storedPatterns.size();
-    }
-
-    /**
-     * 是否已存满
-     */
-    public boolean isFull() {
-        return storedPatterns.size() >= MAX_PATTERNS;
-    }
-
-    /**
-     * 清空所有数据
-     */
-    public void clear() {
-        storedPatterns.clear();
-        currentIndex = 0;
-        setChanged();
-    }
-
-    /**
-     * 从服务端接收同步数据到客户端缓存
-     */
-    public void receiveSyncData(List<mio_icif_scanner_elc.ScanResult> patterns, int index) {
-        LOGGER.info("[模式存储机] 收到同步数据，模式数量: " + patterns.size() + ", 当前索引: " + index);
-        this.storedPatterns.clear();
-        this.storedPatterns.addAll(patterns);
-        this.currentIndex = index;
-        LOGGER.info("[模式存储机] 同步完成，当前数据量: " + storedPatterns.size());
-    }
-
-    /**
-     * 获取当前浏览的索引
-     */
-    public int getCurrentIndex() {
-        return currentIndex;
-    }
-
-    /**
-     * 设置当前浏览的索引
-     */
-    public void setCurrentIndex(int index) {
-        if (storedPatterns.isEmpty()) {
-            currentIndex = 0;
-        } else {
-            currentIndex = Math.max(0, Math.min(index, storedPatterns.size() - 1));
-        }
-    }
-
-    /**
-     * 切换到上一个模式
-     */
-    public void previousPattern() {
-        if (storedPatterns.isEmpty()) return;
-        currentIndex = (currentIndex - 1 + storedPatterns.size()) % storedPatterns.size();
-        setChanged();
-    }
-
-    /**
-     * 切换到下一个模式
-     */
-    public void nextPattern() {
-        if (storedPatterns.isEmpty()) return;
-        currentIndex = (currentIndex + 1) % storedPatterns.size();
-        setChanged();
-    }
-
-    /**
-     * 获取当前模式物品
-     */
-    public ItemStack getCurrentPattern() {
-        if (storedPatterns.isEmpty() || currentIndex < 0 || currentIndex >= storedPatterns.size()) {
-            return ItemStack.EMPTY;
-        }
-        return storedPatterns.get(currentIndex).item;
-    }
-
-    /**
-     * 获取当前模式的UU成本
-     */
-    public double getCurrentUuCost() {
-        if (storedPatterns.isEmpty() || currentIndex < 0 || currentIndex >= storedPatterns.size()) {
-            return 0;
-        }
-        return storedPatterns.get(currentIndex).uuMatterCostBuckets;
-    }
-
-    /**
-     * 获取当前模式的EU成本
-     */
-    public long getCurrentEuCost() {
-        if (storedPatterns.isEmpty() || currentIndex < 0 || currentIndex >= storedPatterns.size()) {
-            return 0;
-        }
-        return storedPatterns.get(currentIndex).energyCost;
-    }
-
-    /**
-     * 获取物品栏处理器
-     */
-    public IItemHandler getItemHandler() {
-        return itemHandler;
-    }
-
-    public ContainerData getContainerData() {
-        return dataAccess;
-    }
-
-    /**
-     * 获取特定方向的物品栏能力
-     */
-    public IItemHandler getItemHandlerCapability(@Nullable Direction side) {
-        return itemHandler;
-    }
-
-    // ==================== NBT ====================
-
-    @Override
-    protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
-        super.saveAdditional(tag, registries);
-
-        ListTag listTag = new ListTag();
-        for (mio_icif_scanner_elc.ScanResult result : storedPatterns) {
-            listTag.add(result.serializeNBT());
-        }
-        tag.put("patterns", listTag);
-        tag.putInt("current_index", currentIndex);
-        tag.put("inventory", itemHandler.serializeNBT(registries));
-    }
-
-    @Override
-    public void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
-        super.loadAdditional(tag, registries);
-
-        storedPatterns.clear();
-        if (tag.contains("patterns")) {
-            ListTag listTag = tag.getList("patterns", 10); // 10 = CompoundTag
-            for (int i = 0; i < listTag.size(); i++) {
-                CompoundTag patternTag = listTag.getCompound(i);
-                storedPatterns.add(mio_icif_scanner_elc.ScanResult.deserializeNBT(patternTag));
-            }
-        }
-        currentIndex = tag.getInt("current_index");
-
-        if (tag.contains("inventory")) {
-            itemHandler.deserializeNBT(registries, tag.getCompound("inventory"));
-        }
-    }
-
-    // ==================== MenuProvider ====================
-
-    @Override
-    public Component getDisplayName() {
-        return Component.translatable("container.mio_icif.pattern_storage");
-    }
-
-    // ==================== 客户端同步 ====================
-
-    @Override
-    public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
-        CompoundTag tag = super.getUpdateTag(registries);
-
-        LOGGER.info("[模式存储机服务端] getUpdateTag 被调用，当前数据量: " + storedPatterns.size());
-
-        // 同步模式列表到客户端
-        ListTag listTag = new ListTag();
-        for (mio_icif_scanner_elc.ScanResult result : storedPatterns) {
-            listTag.add(result.serializeNBT());
-        }
-        tag.put("patterns", listTag);
-        tag.putInt("current_index", currentIndex);
-
-        LOGGER.info("[模式存储机服务端] 发送 " + listTag.size() + " 个模式到客户端");
-
-        return tag;
-    }
-
-    @Override
-    public void handleUpdateTag(CompoundTag tag, HolderLookup.Provider registries) {
-        super.handleUpdateTag(tag, registries);
-
-        LOGGER.info("[模式存储机客户端] handleUpdateTag 被调用");
-
-        // 从服务端同步模式列表
-        storedPatterns.clear();
-        if (tag.contains("patterns")) {
-            ListTag listTag = tag.getList("patterns", 10); // 10 = CompoundTag
-            LOGGER.info("[模式存储机客户端] 接收到 " + listTag.size() + " 个模式");
-            for (int i = 0; i < listTag.size(); i++) {
-                CompoundTag patternTag = listTag.getCompound(i);
-                storedPatterns.add(mio_icif_scanner_elc.ScanResult.deserializeNBT(patternTag));
-            }
-        } else {
-            LOGGER.info("[模式存储机客户端] 没有接收到patterns 数据");
-        }
-        currentIndex = tag.getInt("current_index");
-        LOGGER.info("[模式存储机客户端] 当前索引: " + currentIndex + ", 存储数量: " + storedPatterns.size());
-    }
-
-    @Nullable
-    @Override
-    public AbstractContainerMenu createMenu(int containerId, Inventory playerInventory, Player player) {
-        return new com.singularity_iteration.mio_icif.Menu.Producer.PatternStorageMenu(
-            containerId, playerInventory, this);
-    }
-
-    // ==================== Tick ====================
-
-    public static void tick(Level level, BlockPos pos, BlockState state, mio_icif_pattern_storage blockEntity) {
-        if (level.isClientSide()) {
-            return;
-        }
-
-        // 调用父类tick方法处理充放电等逻辑
-        mio_icif_Energy_Block.tick(level, pos, state, blockEntity);
-    }
+    @Override public CompoundTag getUpdateTag(HolderLookup.Provider registries){var tag=super.getUpdateTag(registries);savePatternData(tag,registries);return tag;}
+    @Override public void handleUpdateTag(CompoundTag tag,HolderLookup.Provider registries){super.handleUpdateTag(tag,registries);loadPatterns(tag,registries);}
+    @Override public Component getDisplayName(){return Component.translatable("container.mio_icif.pattern_storage");}
+    @Override public AbstractContainerMenu createMenu(int id,Inventory inventory,Player player){return new com.singularity_iteration.mio_icif.Menu.Producer.PatternStorageMenu(id,inventory,this);}
+    public static void tick(Level level,BlockPos pos,BlockState state,mio_icif_pattern_storage storage){if(!level.isClientSide()){mio_icif_Energy_Block.tick(level,pos,state,storage);storage.refreshStoredQuotes();}}
+    @Override public int getContainerSize(){return SLOT_COUNT;}
+    @Override public boolean isEmpty(){return itemHandler.getStackInSlot(0).isEmpty();}
+    @Override public ItemStack getItem(int slot){return itemHandler.getStackInSlot(slot);}
+    @Override public ItemStack removeItem(int slot,int amount){return itemHandler.extractItem(slot,amount,false);}
+    @Override public ItemStack removeItemNoUpdate(int slot){var item=itemHandler.getStackInSlot(slot).copy();itemHandler.setStackInSlot(slot,ItemStack.EMPTY);return item;}
+    @Override public void setItem(int slot,ItemStack item){itemHandler.setStackInSlot(slot,item.copy());}
+    @Override public boolean stillValid(Player player){return MachineMenuAccess.valid(player,this);}
+    @Override public void clearContent(){itemHandler.setStackInSlot(0,ItemStack.EMPTY);}
+    @Override public boolean canPlaceItem(int slot,ItemStack item){return isItemValidForSlot(slot,item);}
 }

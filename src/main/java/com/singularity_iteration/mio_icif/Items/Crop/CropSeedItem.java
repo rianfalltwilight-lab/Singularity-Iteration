@@ -4,8 +4,8 @@ import com.singularity_iteration.mio_icif.api.crop.IPlanter;
 import com.singularity_iteration.mio_icif.api.internal.crop.PlantRegistry;
 import com.singularity_iteration.mio_icif.api.crop.PlantType;
 import com.singularity_iteration.mio_icif.api.item.ICropSeedItem;
+import dev.scex.si.processing.CropSeedData;
 import net.minecraft.core.BlockPos;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
@@ -37,6 +37,7 @@ public class CropSeedItem extends Item implements ICropSeedItem {
         BlockState state = level.getBlockState(pos);
         Player player = context.getPlayer();
         ItemStack stack = context.getItemInHand();
+        if(player==null || stack.isEmpty())return InteractionResult.PASS;
 
         // 检查是否是种植架方法
    if (!isCropStick(state)) {
@@ -51,6 +52,7 @@ public class CropSeedItem extends Item implements ICropSeedItem {
         // 如果种子没有NBT数据（空种子袋），尝试收集种�
    PlantType currentPlant = getPlantType(stack);
         if (currentPlant == null) {
+            if(!CropSeedData.isEmptyBag(stack))return InteractionResult.FAIL;
             return tryCollectSeed(level, planter, stack, player);
         }
 
@@ -74,25 +76,17 @@ public class CropSeedItem extends Item implements ICropSeedItem {
         }
 
         if (!level.isClientSide) {
-            // 从NBT读取属性
-       int growthSpeed = 0;
-            int yield = 0;
-            int resilience = 0;
-
-            var customData = stack.get(net.minecraft.core.component.DataComponents.CUSTOM_DATA);
-            if (customData != null) {
-                var tag = customData.copyTag();
-                growthSpeed = tag.getInt("GrowthSpeed");
-                yield = tag.getInt("Yield");
-                resilience = tag.getInt("Resilience");
-            }
+            var traits=CropSeedData.traits(stack);
 
             // 种植作物
             planter.setPlant(plantType);
             planter.setGrowthStage(1);
-            planter.setGrowthSpeed(growthSpeed);
-            planter.setYield(yield);
-            planter.setResilience(resilience);
+            planter.setGrowthSpeed(traits.growth());
+            planter.setYield(traits.yield());
+            planter.setResilience(traits.resilience());
+            planter.setScanLevel(traits.scan());
+            planter.setProgress(0);
+            planter.setHybridBase(false);
             planter.updateState();
 
             // 消耗种子并返还空种子袋
@@ -114,47 +108,36 @@ public class CropSeedItem extends Item implements ICropSeedItem {
      * 尝试收集种子（空种子袋功能）
      */
     private InteractionResult tryCollectSeed(Level level, IPlanter planter, ItemStack stack, Player player) {
-        if (level.isClientSide || player == null) {
+        if (player == null || !CropSeedData.isEmptyBag(stack)) {
             return InteractionResult.PASS;
         }
 
         PlantType plant = planter.getPlant();
         if (plant == null) {
-            player.sendSystemMessage(Component.translatable("message.mio_icif.crop_stick_empty"));
+            if(!level.isClientSide)player.sendSystemMessage(Component.translatable("message.mio_icif.crop_stick_empty"));
             return InteractionResult.FAIL;
         }
 
         // 检查作物是否成�
    if (planter.getGrowthStage() < plant.getMaxGrowthStage()) {
-            player.sendSystemMessage(Component.translatable("message.mio_icif.crop_not_mature"));
+            if(!level.isClientSide)player.sendSystemMessage(Component.translatable("message.mio_icif.crop_not_mature"));
             return InteractionResult.FAIL;
         }
 
-        // 收集种子数据到空种格子
-   collectSeedData(stack, plant, planter);
+        if(level.isClientSide)return InteractionResult.SUCCESS;
+        ItemStack filled=CropSeedData.fillOne(stack,plant.getModId(),plant.getTypeId(),
+            planter.getGrowthSpeed(),planter.getYield(),planter.getResilience());
+        if(filled.isEmpty())return InteractionResult.FAIL;
+        if(stack.getCount()==1) {
+            stack.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA,filled.get(net.minecraft.core.component.DataComponents.CUSTOM_DATA));
+        } else {
+            stack.shrink(1);
+            if(!player.getInventory().add(filled))player.drop(filled,false);
+        }
 
         player.sendSystemMessage(Component.translatable("message.mio_icif.seed_collected", Component.translatable(plant.getTranslationKey())));
 
         return InteractionResult.SUCCESS;
-    }
-
-    /**
-     * 收集种子数据到空种格子
-*/
-    private void collectSeedData(ItemStack seedStack, PlantType plant, IPlanter planter) {
-        CompoundTag tag = new CompoundTag();
-
-        // 存储植物类型信息
-        tag.putString("PlantModId", plant.getModId());
-        tag.putString("PlantId", plant.getTypeId());
-
-        // 存储属性
-   tag.putInt("GrowthSpeed", planter.getGrowthSpeed());
-        tag.putInt("Yield", planter.getYield());
-        tag.putInt("Resilience", planter.getResilience());
-
-        // 存储到种子的 NBT �
-   seedStack.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.of(tag));
     }
 
     private boolean isCropStick(BlockState state) {
@@ -188,7 +171,7 @@ public class CropSeedItem extends Item implements ICropSeedItem {
             }
             return Component.translatable("item.mio_icif.crop_seed", Component.translatable(plant.getTranslationKey()));
         }
-        return Component.translatable("item.mio_icif.empty_seed_bag");
+        return Component.translatable(CropSeedData.isEmptyBag(stack)?"item.mio_icif.empty_seed_bag":"ic2.crop.unknown");
     }
 
     @Override
@@ -209,10 +192,10 @@ public class CropSeedItem extends Item implements ICropSeedItem {
                 if (scanLevel >= 4) {
                     var customData = stack.get(net.minecraft.core.component.DataComponents.CUSTOM_DATA);
                     if (customData != null) {
-                        var tag = customData.copyTag();
-                        int growthSpeed = tag.getInt("GrowthSpeed");
-                        int yield = tag.getInt("Yield");
-                        int resilience = tag.getInt("Resilience");
+                        var traits=CropSeedData.traits(stack);
+                        int growthSpeed = traits.growth();
+                        int yield = traits.yield();
+                        int resilience = traits.resilience();
 
                         if (growthSpeed > 0 || yield > 0 || resilience > 0) {
                             tooltipComponents.add(Component.translatable("tooltip.mio_icif.crop.growth_speed", growthSpeed));
@@ -223,9 +206,11 @@ public class CropSeedItem extends Item implements ICropSeedItem {
                 }
                 tooltipComponents.add(Component.translatable("tooltip.mio_icif.crop.scan_level", scanLevel));
             }
-        } else {
+        } else if(CropSeedData.isEmptyBag(stack)) {
             tooltipComponents.add(Component.translatable("tooltip.mio_icif.empty_seed_bag"));
             tooltipComponents.add(Component.translatable("tooltip.mio_icif.empty_seed_bag.usage"));
+        } else {
+            tooltipComponents.add(Component.translatable("ic2.crop.unknown").withStyle(net.minecraft.ChatFormatting.GRAY));
         }
         super.appendHoverText(stack, context, tooltipComponents, tooltipFlag);
     }
@@ -234,36 +219,15 @@ public class CropSeedItem extends Item implements ICropSeedItem {
      * 创建一个带有属性的种子
      */
     public static ItemStack createSeedStack(Item item, String plantModId, String plantId, int growthSpeed, int yield, int resilience) {
-        ItemStack stack = new ItemStack(item);
-        CompoundTag tag = new CompoundTag();
-        tag.putString("PlantModId", plantModId);
-        tag.putString("PlantId", plantId);
-        tag.putInt("GrowthSpeed", growthSpeed);
-        tag.putInt("Yield", yield);
-        tag.putInt("Resilience", resilience);
-        tag.putInt("ScanLevel", 0);
-        stack.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.of(tag));
-        return stack;
+        return CropSeedData.fillOne(new ItemStack(item),plantModId,plantId,growthSpeed,yield,resilience);
     }
 
     public static int getScanLevel(ItemStack stack) {
-        var customData = stack.get(net.minecraft.core.component.DataComponents.CUSTOM_DATA);
-        if (customData != null) {
-            return customData.copyTag().getInt("ScanLevel");
-        }
-        return 0;
+        return CropSeedData.traits(stack).scan();
     }
 
     public static void setScanLevel(ItemStack stack, int level) {
-        var customData = stack.get(net.minecraft.core.component.DataComponents.CUSTOM_DATA);
-        CompoundTag tag;
-        if (customData != null) {
-            tag = customData.copyTag();
-        } else {
-            tag = new CompoundTag();
-        }
-        tag.putInt("ScanLevel", level);
-        stack.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA, net.minecraft.world.item.component.CustomData.of(tag));
+        CropSeedData.setScan(stack,level);
     }
 
     public static void incrementScanLevel(ItemStack stack) {
@@ -271,26 +235,14 @@ public class CropSeedItem extends Item implements ICropSeedItem {
     }
 
     public static int getGrowthFromStack(ItemStack stack) {
-        var customData = stack.get(net.minecraft.core.component.DataComponents.CUSTOM_DATA);
-        if (customData != null) {
-            return customData.copyTag().getInt("GrowthSpeed");
-        }
-        return 0;
+        return CropSeedData.traits(stack).growth();
     }
 
     public static int getGainFromStack(ItemStack stack) {
-        var customData = stack.get(net.minecraft.core.component.DataComponents.CUSTOM_DATA);
-        if (customData != null) {
-            return customData.copyTag().getInt("Yield");
-        }
-        return 0;
+        return CropSeedData.traits(stack).yield();
     }
 
     public static int getResistanceFromStack(ItemStack stack) {
-        var customData = stack.get(net.minecraft.core.component.DataComponents.CUSTOM_DATA);
-        if (customData != null) {
-            return customData.copyTag().getInt("Resilience");
-        }
-        return 0;
+        return CropSeedData.traits(stack).resilience();
     }
 }

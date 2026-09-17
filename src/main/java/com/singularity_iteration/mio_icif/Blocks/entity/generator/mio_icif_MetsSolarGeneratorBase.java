@@ -4,6 +4,10 @@ import com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_Energy_Generato
 import com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_block_entities;
 import com.singularity_iteration.mio_icif.Blocks.entity.slot.SlotLayout;
 import com.singularity_iteration.mio_icif.energy.EnergyUnit.CableTier;
+import dev.scex.energy.EnergyAmount;
+import dev.scex.energy.SolarGeneratorProfile;
+import dev.scex.si.energy.SolarItemCharging;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
@@ -32,6 +36,8 @@ public class mio_icif_MetsSolarGeneratorBase extends mio_icif_Energy_Generator {
     private int ticker;
     private float skyLight = 0.0F;
     private boolean isGenerating = false;
+    private final SolarGeneratorProfile scexProfile;
+    private boolean scexRefreshPending = true;
 
     public mio_icif_MetsSolarGeneratorBase(BlockPos pos, BlockState state,
                                             int dayPower, long capacity, int tier,
@@ -49,12 +55,19 @@ public class mio_icif_MetsSolarGeneratorBase extends mio_icif_Energy_Generator {
         super(pos, state, type != null ? type : mio_icif_block_entities.SOLAR_GENERATOR_ENTITY_TYPE.get(),
               SlotLayout.builder().extra(4).build(), production, capacity, 0,
               getCableTierFromIndex(tier - 1).powerRating, getCableTierFromIndex(tier - 1));
-        this.dayPower = dayPower;
+        this.scexProfile = energyStorage.scexNetworkControlled()
+            ? SolarGeneratorProfile.find(BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString())
+                .filter(profile -> !profile.discrete()).orElseThrow() : null;
+        this.dayPower = scexProfile != null ? scexProfile.dayPower() : dayPower;
         this.tier = tier;
-        this.skyUpdateInterval = skyUpdateInterval;
-        this.minSkyBrightness = minSkyBrightness;
+        this.skyUpdateInterval = scexProfile != null ? scexProfile.refreshTicks() : skyUpdateInterval;
+        this.minSkyBrightness = scexProfile != null ? scexProfile.minimumBrightness() : minSkyBrightness;
         this.litProperty = litProperty;
         this.ticker = (int) (Math.random() * skyUpdateInterval);
+        if (scexProfile != null) {
+            this.energyStorage.setCapacity(scexProfile.capacity());
+            this.energyStorage.setMaxExtract(scexProfile.outputPacket());
+        }
     }
 
     private static CableTier getCableTierFromIndex(int index) {
@@ -92,6 +105,7 @@ public class mio_icif_MetsSolarGeneratorBase extends mio_icif_Energy_Generator {
 
     public void updateSunVisibility(Level level, BlockPos pos) {
         this.skyLight = calculateSkyLight(level, pos.above());
+        if (scexProfile != null) this.skyLight = SolarGeneratorProfile.safeBrightness(this.skyLight);
     }
 
     public float calculateSkyLight(Level level, BlockPos pos) {
@@ -131,6 +145,10 @@ public class mio_icif_MetsSolarGeneratorBase extends mio_icif_Energy_Generator {
 
     @Override
     protected void generateEnergy() {
+        if (scexProfile != null) {
+            energyStorage.scexGenerateEnergy(EnergyAmount.of(scexProfile.scaledOutput(skyLight)), false);
+            return;
+        }
         if (skyLight > 0.0F) {
             long energyToGenerate = (long) (dayPower * skyLight);
             if (energyToGenerate > 0) {
@@ -145,6 +163,10 @@ public class mio_icif_MetsSolarGeneratorBase extends mio_icif_Energy_Generator {
 
     @Override
     protected void chargeItems() {
+        if (scexProfile != null) {
+            if (SolarItemCharging.charge(itemHandler, scexProfile.chargeSlots(), energyStorage, getItemAPI())) setChanged();
+            return;
+        }
         for (int i = 0; i < 4; i++) {
             ItemStack chargeStack = itemHandler.getStackInSlot(i);
             if (chargeStack.isEmpty()) continue;
@@ -172,15 +194,26 @@ public class mio_icif_MetsSolarGeneratorBase extends mio_icif_Energy_Generator {
 
         blockEntity.chargeItems();
 
-        if (blockEntity.shouldDirectlyDistributeEnergy()) {
+        if (!blockEntity.energyStorage.scexNetworkControlled() && blockEntity.shouldDirectlyDistributeEnergy()) {
             blockEntity.distributeEnergy();
         }
 
-        if (++blockEntity.ticker % blockEntity.skyUpdateInterval == 0) {
+        if (blockEntity.scexProfile != null) {
+            // Recompute from the world on first tick/reload; never trust saved light as generation input.
+            if (blockEntity.scexRefreshPending || ++blockEntity.ticker >= blockEntity.skyUpdateInterval) {
+                blockEntity.updateSunVisibility(level, pos);
+                blockEntity.ticker = 0;
+                blockEntity.scexRefreshPending = false;
+            }
+        } else if (++blockEntity.ticker % blockEntity.skyUpdateInterval == 0) {
             blockEntity.updateSunVisibility(level, pos);
         }
 
-        if (blockEntity.skyLight > 0.0F) {
+        boolean canGenerate = blockEntity.scexProfile != null
+            ? blockEntity.scexProfile.scaledOutput(blockEntity.skyLight) > 0
+                && !blockEntity.energyStorage.scexExactAmount().roomBelow(blockEntity.energyStorage.getCapacity()).isZero()
+            : blockEntity.skyLight > 0.0F;
+        if (canGenerate) {
             blockEntity.generateEnergy();
             blockEntity.isGenerating = true;
         } else {
@@ -211,12 +244,12 @@ public class mio_icif_MetsSolarGeneratorBase extends mio_icif_Energy_Generator {
 
     @Override
     public boolean canPlaceItemThroughFace(int slot, ItemStack stack, @Nullable net.minecraft.core.Direction side) {
-        return isBattery(stack);
+        return slot >= 0 && slot < Math.min(SLOT_COUNT, itemHandler.getSlots()) && isBattery(stack);
     }
 
     @Override
     public boolean canTakeItemThroughFace(int slot, ItemStack stack, net.minecraft.core.Direction side) {
-        return true;
+        return slot >= 0 && slot < Math.min(SLOT_COUNT, itemHandler.getSlots());
     }
 
     @Override
@@ -233,6 +266,11 @@ public class mio_icif_MetsSolarGeneratorBase extends mio_icif_Energy_Generator {
         isGenerating = tag.getBoolean("IsGenerating");
         skyLight = tag.getFloat("SkyLight");
         ticker = tag.getInt("Ticker");
+        if (scexProfile != null) {
+            skyLight = 0;
+            ticker = 0;
+            scexRefreshPending = true;
+        }
     }
 
     @Override
@@ -248,6 +286,7 @@ public class mio_icif_MetsSolarGeneratorBase extends mio_icif_Energy_Generator {
         super.handleUpdateTag(tag, registries);
         isGenerating = tag.getBoolean("IsGenerating");
         skyLight = tag.getFloat("SkyLight");
+        if (scexProfile != null) skyLight = SolarGeneratorProfile.safeBrightness(skyLight);
     }
 
     @Override

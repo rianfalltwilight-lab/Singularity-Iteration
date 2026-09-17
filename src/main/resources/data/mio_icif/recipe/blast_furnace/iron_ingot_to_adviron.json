@@ -11,5 +11,7 @@
     "count": 1,
     "id": "mio_icif:normal/item_slag"
   },
-  "duration": 2400
+  "duration": 6000,
+  "air_cost": 1,
+  "heat_cost": 0
 }

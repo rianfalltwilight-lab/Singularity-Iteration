@@ -8,6 +8,7 @@ import com.singularity_iteration.mio_icif.recipe.block_cutter.mio_icif_BlockCutt
 import com.singularity_iteration.mio_icif.recipe.block_cutter.mio_icif_BlockCutterRecipeInput;
 import com.singularity_iteration.mio_icif.recipe.block_cutter.mio_icif_BlockCutterRecipes;
 import com.singularity_iteration.mio_icif.energy.EnergyUnit.CableTier;
+import dev.scex.si.processing.RecipeSlots;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
@@ -155,17 +156,17 @@ public class mio_icif_block_cutter extends mio_icif_producer {
 
     @Override
     protected void doWork() {
-        if (!consumeEnergy()) {
-            stopWork();
-            return;
+        if (prepareOperation().isEmpty()) { stopWork(); return; }
+        if (progress < maxProgress) {
+            if (getEffectiveEnergyPerTick() <= 0 || !hasEnoughEnergy() || !consumeEnergy()) { stopWork(); return; }
+            progress = (int) Math.min(maxProgress, (long) progress + getProgressPerTick());
         }
-
         isWorking = true;
-
-        if (progress >= maxProgress) {
-            finishCutting();
-        }
+        if (progress >= maxProgress) finishCutting();
     }
+
+    @Override
+    protected void updateProgress() { /* doWork owns the paid increment. */ }
 
     /**
      * 判断当前输入是否有有效的配方
@@ -178,51 +179,28 @@ public class mio_icif_block_cutter extends mio_icif_producer {
 
     @Override
     protected boolean canWork() {
-        ItemStack input = itemHandler.getStackInSlot(INPUT_SLOT);
-        ItemStack blade = itemHandler.getStackInSlot(BLADE_SLOT);
-        if (input.isEmpty() || blade.isEmpty()) return false;
+        return getEffectiveEnergyPerTick() > 0 && (progress >= maxProgress || hasEnoughEnergy())
+            && prepareOperation().isPresent();
+    }
 
-        mio_icif_BlockCutterRecipe recipe = getCurrentRecipe();
-        if (recipe == null) return false;
-        if (!isValidBlade(blade)) return false;
-        if (getBladeHardness(blade) < recipe.getHardness()) return false;
-        if (input.getCount() < recipe.getIngredientCount()) return false;
-
-        ItemStack output = itemHandler.getStackInSlot(OUTPUT_SLOT);
-        ItemStack result = recipe.getResult();
-        if (!output.isEmpty() && (!ItemStack.isSameItemSameComponents(output, result) || output.getCount() + result.getCount() > output.getMaxStackSize())) {
-            return false;
-        }
-
-        return energyStorage.getAmount() >= ENERGY_PER_TICK;
+    private Optional<RecipeSlots.Prepared> prepareOperation() {
+        var recipe = getCurrentRecipe();
+        var blade = itemHandler.getStackInSlot(BLADE_SLOT);
+        if (recipe == null || !isValidBlade(blade) || getBladeHardness(blade) < recipe.getHardness()) return Optional.empty();
+        return RecipeSlots.prepare(itemHandler, INPUT_SLOT, recipe.getIngredientCount(),
+            new int[]{OUTPUT_SLOT}, java.util.List.of(recipe.getResult()));
     }
 
     /**
      * 完成一次切割
      */
     private void finishCutting() {
-        ItemStack input = itemHandler.getStackInSlot(INPUT_SLOT);
-        if (input.isEmpty()) return;
-
-        mio_icif_BlockCutterRecipe recipe = getCurrentRecipe();
-        if (recipe == null) return;
-
-        input.shrink(recipe.getIngredientCount());
-
-        ItemStack output = itemHandler.getStackInSlot(OUTPUT_SLOT);
-        ItemStack result = recipe.getResult();
-        if (output.isEmpty()) {
-            itemHandler.setStackInSlot(OUTPUT_SLOT, result.copy());
-        } else {
-            output.grow(result.getCount());
-        }
-
+        var operation = prepareOperation();
+        if (operation.isEmpty()) { stopWork(); return; }
+        int completed = progress;
+        progress = 0;
+        if (!operation.get().commit()) { progress = completed; stopWork(); return; }
         finishWork();
-
-        if (canWork()) {
-            isWorking = true;
-        }
-
         setChanged();
     }
 

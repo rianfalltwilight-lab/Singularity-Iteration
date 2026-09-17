@@ -30,9 +30,77 @@ public final class WorldScenarioProbe {
     private final TransformerLifecycleProbe transformerLifecycle;
     private final TransformerModeProbe transformerMode;
     private final SpecialCableInteractionProbe specialCableInteraction;
+    private final InteropWorldProbe interopWorld;
+    private final InteropRestartProbe interopRestart;
+    private final ItemEquipmentWorldProbe itemEquipment;
+    private final MixedOutputWorldProbe mixedOutput;
+    private final PatternStorageWorldProbe patternStorage;
+    private final F04WorldProbe f04;
+    private final PipeFailureWorldProbe pipeFailures;
+    private final PipeRecoveryWorldProbe pipeRecovery;
+    private final ReplicatorWorldProbe replicator;
+    private final UuPricingWorldProbe uuPricing;
+    private final ScannerWorldProbe scanner;
+    private final ScannerDeniedWorldProbe scannerDenied;
+    private final PatternMigrationWorldProbe patternMigration;
+    private final UuCatalogWorldProbe uuCatalog;
+    private final UuChargeWorldProbe uuCharge;
+    private final HeldItemStateProbe heldItemStates;
+    private final HeldScanWorldProbe heldScan;
+    private final KineticStateProbe kineticStates;
+    private final BlastStateProbe blastStates;
+    private final MatterStateProbe matterStates;
+    private final ReactorStateProbe reactorStates;
+    private final ReactorWorldProbe reactorWorld;
+    private final FluidReactorWorldProbe fluidReactorWorld;
+    private final MatterWorldProbe matterWorld;
+    private final BlastWorldProbe blastWorld;
+    private final KineticWorldProbe kineticWorld;
+    private final UuProcessingWorldProbe uuProcessing;
+    private final HeaterCalibrationProbe heaterCalibration;
+    private final HeaterWorldProbe heaterWorld;
+    private final StirlingWorldProbe stirlingWorld;
+    private final DefaultPlacementProbe defaultPlacement;
+    private final EnergyDirectionWorldProbe energyDirection;
+    private final UuDefaultIdentityWorldProbe uuDefaultIdentities;
+    private final EnergyOwnershipWorldProbe energyOwnership;
     private int phaseFrame=-1,phaseFrom=-1,phaseTo=-1;
     public WorldScenarioProbe(MinecraftServer server) throws Exception {
         this.server=server;
+        kineticWorld=Files.exists(Path.of("kinetic-world.json")) ? new KineticWorldProbe() : null;
+        kineticStates=Files.exists(Path.of("kinetic-states.json")) ? new KineticStateProbe() : null;
+        blastStates=Files.exists(Path.of("blast-states.json")) ? new BlastStateProbe() : null;
+        matterStates=Files.exists(Path.of("matter-states.json")) ? new MatterStateProbe() : null;
+        reactorStates=Files.exists(Path.of("reactor-states.json")) ? new ReactorStateProbe() : null;
+        reactorWorld=Files.exists(Path.of("reactor-world.json")) ? new ReactorWorldProbe() : null;
+        fluidReactorWorld=Files.exists(Path.of("fluid-reactor-world.json")) ? new FluidReactorWorldProbe(server) : null;
+        matterWorld=Files.exists(Path.of("matter-world.json")) ? new MatterWorldProbe() : null;
+        blastWorld=Files.exists(Path.of("blast-world.json")) ? new BlastWorldProbe() : null;
+        heldScan=Files.exists(Path.of("held-scan-world.json")) ? new HeldScanWorldProbe() : null;
+        heldItemStates=Files.exists(Path.of("held-item-states.json")) ? new HeldItemStateProbe() : null;
+        uuCharge=Files.exists(Path.of("uu-charge-world.json")) ? new UuChargeWorldProbe() : null;
+        stirlingWorld=Files.exists(Path.of("stirling-world.json")) ? new StirlingWorldProbe() : null;
+        heaterWorld=Files.exists(Path.of("heater-world.json")) ? new HeaterWorldProbe() : null;
+        heaterCalibration=Files.exists(Path.of("heater-calibration.json")) ? new HeaterCalibrationProbe() : null;
+        defaultPlacement=Files.exists(Path.of("default-placement.json")) ? new DefaultPlacementProbe() : null;
+        uuProcessing=Files.exists(Path.of("uu-processing-world.json")) ? new UuProcessingWorldProbe() : null;
+        scannerDenied=Files.exists(Path.of("scanner-denied-world.json")) ? new ScannerDeniedWorldProbe() : null;
+        uuDefaultIdentities=Files.exists(Path.of("uu-default-identities-r101.json")) ? new UuDefaultIdentityWorldProbe() : null;
+        energyDirection=Files.exists(Path.of("energy-direction-world.json")) ? new EnergyDirectionWorldProbe() : null;
+        energyOwnership=Files.exists(Path.of("energy-ownership-world.json")) ? new EnergyOwnershipWorldProbe() : null;
+        uuCatalog=Files.exists(Path.of("uu-catalog-world.json")) ? new UuCatalogWorldProbe() : null;
+        patternMigration=Files.exists(Path.of("pattern-migration-world.json")) ? new PatternMigrationWorldProbe() : null;
+        scanner=Files.exists(Path.of("scanner-world.json")) ? new ScannerWorldProbe() : null;
+        uuPricing=Files.exists(Path.of("uu-pricing-world.json")) ? new UuPricingWorldProbe() : null;
+        replicator=Files.exists(Path.of("replicator-world.json")) ? new ReplicatorWorldProbe() : null;
+        pipeRecovery=Files.exists(Path.of("pipe-recovery-world.json")) ? new PipeRecoveryWorldProbe() : null;
+        pipeFailures=Files.exists(Path.of("pipe-failure-world.json")) ? new PipeFailureWorldProbe() : null;
+        patternStorage=Files.exists(Path.of("pattern-storage-world.json")) ? new PatternStorageWorldProbe() : null;
+        f04=Files.exists(Path.of("f04-world.json")) ? new F04WorldProbe() : null;
+        mixedOutput=Files.exists(Path.of("mixed-output-world.json")) ? new MixedOutputWorldProbe(server) : null;
+        itemEquipment=Files.exists(Path.of("item-equipment-world.json")) ? new ItemEquipmentWorldProbe() : null;
+        interopRestart=Files.exists(Path.of("interop-restart.json")) ? new InteropRestartProbe() : null;
+        interopWorld=interopRestart==null && Files.exists(Path.of("interop-world.json")) ? new InteropWorldProbe() : null;
         transformerLifecycle=Files.exists(Path.of("transformer-lifecycle.json")) ? new TransformerLifecycleProbe() : null;
         transformerMode=Files.exists(Path.of("transformer-mode-probe.json")) ? new TransformerModeProbe() : null;
         specialCableInteraction=Files.exists(Path.of("special-cable-interaction.json")) ? new SpecialCableInteractionProbe() : null;
@@ -192,6 +260,95 @@ public final class WorldScenarioProbe {
         if(finished || event.getServer()!=server) return;
         try {
             var world=server.overworld();
+            if(kineticWorld!=null){var result=kineticWorld.inspect(world,tick);if(result!=null)record("kinetic-world",result);}
+            if(kineticStates!=null){var result=kineticStates.inspect(world,tick);if(result!=null)record("kinetic-states",result);}
+            if(blastStates!=null){var result=blastStates.inspect(world,tick);if(result!=null)record("blast-states",result);}
+            if(matterStates!=null){var result=matterStates.inspect(world,tick);if(result!=null)record("matter-states",result);}
+            if(reactorStates!=null){var result=reactorStates.inspect(world,tick);if(result!=null)record("reactor-states",result);}
+            if(reactorWorld!=null){var result=reactorWorld.inspect(world,tick);if(result!=null)record("reactor-world",result);}
+            if(fluidReactorWorld!=null){var result=fluidReactorWorld.inspect(world,tick);if(result!=null)record("fluid-reactor-world",result);}
+            if(matterWorld!=null){var result=matterWorld.inspect(world,tick);if(result!=null)record("matter-world",result);}
+            if(blastWorld!=null){var result=blastWorld.inspect(world,tick);if(result!=null)record("blast-world",result);}
+            if(heldScan!=null){var result=heldScan.inspect(world,tick);if(result!=null)record("held-scan-world",result);}
+            if(heldItemStates!=null){var result=heldItemStates.inspect(world,tick);if(result!=null)record("held-item-states",result);}
+            if(uuCharge!=null){var result=uuCharge.inspect(world,tick);if(result!=null)record("uu-charge-world",result);}
+            if(energyDirection!=null) {
+                var result=energyDirection.inspect(world,tick);
+                if(result!=null)record("energyDirection",result);
+            }
+            if(uuDefaultIdentities!=null) {
+                var result=uuDefaultIdentities.inspect(world,tick);
+                if(result!=null)record("uuDefaultIdentities",result);
+            }
+            if(energyOwnership!=null) {
+                var result=energyOwnership.inspect(world,tick);
+                if(result!=null)record("energy-ownership-world",result);
+            }
+            if(tick==5 && Files.exists(Path.of("legacy-uu-absence.json"))) record("legacy-uu-absence",LegacyUuAbsenceProbe.verify());
+            if(heaterWorld!=null){var result=heaterWorld.inspect(world,tick);if(result!=null)record("heater-world",result);}
+            if(stirlingWorld!=null){var result=stirlingWorld.inspect(world,tick);if(result!=null)record("stirling-world",result);}
+            if(heaterCalibration!=null){var result=heaterCalibration.inspect(world,tick);if(result!=null)record("heater-calibration",result);}
+            if(defaultPlacement!=null){var result=defaultPlacement.inspect(world,tick);if(result!=null)record("default-placement",result);}
+            if(uuProcessing!=null) {
+                var result=uuProcessing.inspect(world,tick);
+                if(result!=null)record("uu-processing-world",result);
+            }
+            if(uuCatalog!=null) {
+                var result=uuCatalog.inspect(world,tick);
+                if(result!=null)record("uu-catalog-world",result);
+            }
+            if(patternMigration!=null) {
+                var result=patternMigration.inspect(world,tick);
+                if(result!=null)record("pattern-migration-world",result);
+            }
+            if(scannerDenied!=null) {
+                var result=scannerDenied.inspect(world,tick);
+                if(result!=null)record("scanner-denied-world",result);
+            }
+            if(scanner!=null) {
+                var result=scanner.inspect(world,tick);
+                if(result!=null)record("scanner-world",result);
+            }
+            if(uuPricing!=null) {
+                var result=uuPricing.inspect(world,tick);
+                if(result!=null)record("uu-pricing-world",result);
+            }
+            if(replicator!=null) {
+                var result=replicator.inspect(world,tick);
+                if(result!=null)record("replicator-world",result);
+            }
+            if(pipeRecovery!=null) {
+                var result=pipeRecovery.inspect(world,tick);
+                if(result!=null)record("pipe-recovery-world",result);
+            }
+            if(pipeFailures!=null) {
+                var result=pipeFailures.inspect(world,tick);
+                if(result!=null)record("pipe-failure-world",result);
+            }
+            if(patternStorage!=null) {
+                var result=patternStorage.inspect(world,tick);
+                if(result!=null)record("pattern-storage-world",result);
+            }
+            if(f04!=null) {
+                var result=f04.inspect(world,tick);
+                if(result!=null)record("f04-world",result);
+            }
+            if(mixedOutput!=null) {
+                var result=mixedOutput.inspect(world,tick);
+                if(result!=null)record("mixed-output-world",result);
+            }
+            if(interopRestart!=null) {
+                var result=interopRestart.inspect(world,tick);
+                if(result!=null)record("interop-restart",result);
+            }
+            if(interopWorld!=null) {
+                var result=interopWorld.inspect(world,tick);
+                if(result!=null)record("interop-world",result);
+            }
+            if(itemEquipment!=null) {
+                var result=itemEquipment.inspect(world,tick);
+                if(result!=null)record("item-equipment-world",result);
+            }
             if(specialCableInteraction!=null) {
                 var result=specialCableInteraction.inspect(world,tick);
                 if(result!=null)record("special-cable-interaction",result);

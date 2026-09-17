@@ -2,6 +2,7 @@
 package com.singularity_iteration.mio_icif.Items.Upgrade;
 
 import com.singularity_iteration.mio_icif.api.MioIcifAPI;
+import com.singularity_iteration.mio_icif.api.item.IItemAPI;
 import com.singularity_iteration.mio_icif.api.energy.ICableTier;
 import com.singularity_iteration.mio_icif.api.machine.IMachineUpgradeStats;
 import com.singularity_iteration.mio_icif.energy.EnergyUnit.CableTier;
@@ -59,24 +60,39 @@ public class MachineUpgradeStats implements IMachineUpgradeStats {
                                List<DirectionalUpgrade> pullingDirections,
                                List<DirectionalUpgrade> fluidEjectorDirections,
                                List<DirectionalUpgrade> fluidPullingDirections) {
-        this.overclockerCount = overclockerCount;
-        this.energyStorageCount = energyStorageCount;
-        this.transformerCount = transformerCount;
-        this.ejectorCount = ejectorCount;
-        this.pullingCount = pullingCount;
-        this.fluidEjectorCount = fluidEjectorCount;
-        this.fluidPullingCount = fluidPullingCount;
+        this.overclockerCount = Math.max(0, overclockerCount);
+        this.energyStorageCount = Math.max(0, energyStorageCount);
+        this.transformerCount = Math.max(0, transformerCount);
+        this.ejectorCount = Math.max(0, ejectorCount);
+        this.pullingCount = Math.max(0, pullingCount);
+        this.fluidEjectorCount = Math.max(0, fluidEjectorCount);
+        this.fluidPullingCount = Math.max(0, fluidPullingCount);
         this.redstoneInverted = redstoneInverted;
-        this.ejectorDirections = ejectorDirections;
-        this.pullingDirections = pullingDirections;
-        this.fluidEjectorDirections = fluidEjectorDirections;
-        this.fluidPullingDirections = fluidPullingDirections;
+        this.ejectorDirections = directionSnapshot(ejectorDirections);
+        this.pullingDirections = directionSnapshot(pullingDirections);
+        this.fluidEjectorDirections = directionSnapshot(fluidEjectorDirections);
+        this.fluidPullingDirections = directionSnapshot(fluidPullingDirections);
+    }
+
+    private static List<DirectionalUpgrade> directionSnapshot(List<DirectionalUpgrade> directions) {
+        if (directions == null || directions.isEmpty()) return List.of();
+        return directions.stream().filter(java.util.Objects::nonNull).filter(upgrade -> upgrade.count > 0).toList();
+    }
+
+    private static int addCount(int before, int amount) {
+        // The public statistics API uses ints. Saturate its summary without changing any inventory stack.
+        return (int) Math.min(Integer.MAX_VALUE, (long) before + Math.max(0, amount));
     }
 
     public static MachineUpgradeStats fromInventory(IItemHandler itemHandler, int startSlot, int count) {
         if (itemHandler == null || startSlot < 0 || count <= 0) {
             return empty();
         }
+        return fromInventory(itemHandler, startSlot, count, MioIcifAPI.instance().getItemAPI());
+    }
+
+    public static MachineUpgradeStats fromInventory(IItemHandler itemHandler, int startSlot, int count, IItemAPI itemApi) {
+        if (itemHandler == null || itemApi == null || startSlot < 0 || count <= 0) return empty();
 
         int overclocker = 0;
         int energyStorage = 0;
@@ -99,38 +115,38 @@ public class MachineUpgradeStats implements IMachineUpgradeStats {
 
             int amount = stack.getCount();
 
-            String upgradeType = MioIcifAPI.instance().getItemAPI().getUpgradeType(stack);
+            String upgradeType = itemApi.getUpgradeType(stack);
             if (upgradeType != null) {
-                Direction dir = MioIcifAPI.instance().getItemAPI().getUpgradeDirection(stack);
+                Direction dir = itemApi.getUpgradeDirection(stack);
 
                 switch (upgradeType) {
-                    case "overclocker" -> overclocker += amount;
-                    case "energy_storage" -> energyStorage += amount;
-                    case "transformer" -> transformer += amount;
+                    case "overclocker" -> overclocker = addCount(overclocker, amount);
+                    case "energy_storage" -> energyStorage = addCount(energyStorage, amount);
+                    case "transformer" -> transformer = addCount(transformer, amount);
                     case "ejector" -> {
-                        ejector += amount;
+                        ejector = addCount(ejector, amount);
                         if (ejectorDirs.isEmpty()) ejectorDirs = new ArrayList<>();
                         ejectorDirs.add(new DirectionalUpgrade(dir, amount));
                     }
                     case "pulling" -> {
-                        pulling += amount;
+                        pulling = addCount(pulling, amount);
                         if (pullingDirs.isEmpty()) pullingDirs = new ArrayList<>();
                         pullingDirs.add(new DirectionalUpgrade(dir, amount));
                     }
                     case "fluid_ejector" -> {
-                        fluidEjector += amount;
+                        fluidEjector = addCount(fluidEjector, amount);
                         if (fluidEjectorDirs.isEmpty()) fluidEjectorDirs = new ArrayList<>();
                         fluidEjectorDirs.add(new DirectionalUpgrade(dir, amount));
                     }
                     case "fluid_pulling" -> {
-                        fluidPulling += amount;
+                        fluidPulling = addCount(fluidPulling, amount);
                         if (fluidPullingDirs.isEmpty()) fluidPullingDirs = new ArrayList<>();
                         fluidPullingDirs.add(new DirectionalUpgrade(dir, amount));
                     }
                     case "redstone_inverter" -> redstoneInverted = true;
                 }
             } else if (stack.getItem() instanceof com.singularity_iteration.mio_icif.api.upgrade.tile.IAugmentationUpgrade) {
-                overclocker += amount;
+                overclocker = addCount(overclocker, amount);
             }
         }
 
@@ -177,6 +193,11 @@ public class MachineUpgradeStats implements IMachineUpgradeStats {
         return energyStorageCount * ENERGY_STORAGE_BONUS + overclockerCount * OVERCLOCKER_ENERGY_BONUS;
     }
 
+    public long getHeatCapacity(long baseCapacity) {
+        long base = Math.max(0, baseCapacity), bonus = energyStorageCount * ENERGY_STORAGE_BONUS;
+        return base + Math.min(Long.MAX_VALUE - base, bonus);
+    }
+
     @Override
     public ICableTier getEffectiveCableTier(ICableTier baseTier) {
         if (transformerCount <= 0) return baseTier;
@@ -193,6 +214,7 @@ public class MachineUpgradeStats implements IMachineUpgradeStats {
                 high = middle;
             }
         }
+        if (low == allTiers.size()) return baseTier;
         int targetIndex = (int) Math.min((long) low + transformerCount - 1, allTiers.size() - 1L);
         return allTiers.get(targetIndex);
     }

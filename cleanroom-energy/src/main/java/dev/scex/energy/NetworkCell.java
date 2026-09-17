@@ -16,6 +16,7 @@ import java.util.function.BooleanSupplier;
 public final class NetworkCell {
     private final Thread owner = Thread.currentThread();
     private long amount;
+    private long fraction;
     private Object revision = new Object();
     private boolean retired;
     private Quote currentQuote;
@@ -25,22 +26,31 @@ public final class NetworkCell {
         private final NetworkCell cell;
         private final Object revision;
         private final long amount;
+        private final long fraction;
         private Quote(NetworkCell cell) {
-            this.cell = cell; this.revision = cell.revision; this.amount = cell.amount;
+            this.cell = cell; this.revision = cell.revision; this.amount = cell.amount; this.fraction = cell.fraction;
         }
         public long amount() { return amount; }
+        public long fraction() { return fraction; }
+        public EnergyAmount exactAmount() { return new EnergyAmount(amount, fraction); }
     }
     /** Include zero-delta participants to protect their demand snapshots too. */
-    public record Write(Quote expected, long nextAmount) {
+    public record Write(Quote expected, long nextAmount, long nextFraction) {
+        /** An integer transfer preserves the quoted fractional remainder. */
+        public Write(Quote expected, long nextAmount) { this(expected, nextAmount, expected.fraction()); }
+        public Write(Quote expected, EnergyAmount next) { this(expected, next.whole(), next.fraction()); }
+        public EnergyAmount exactNextAmount() { return new EnergyAmount(nextAmount, nextFraction); }
         public Write {
             Objects.requireNonNull(expected, "expected");
-            if (nextAmount < 0) throw new IllegalArgumentException("Negative balance");
+            new EnergyAmount(nextAmount, nextFraction);
         }
     }
 
     public NetworkCell(long initialAmount) {
-        if (initialAmount < 0) throw new IllegalArgumentException("Negative balance");
-        amount = initialAmount;
+        this(EnergyAmount.of(initialAmount));
+    }
+    public NetworkCell(EnergyAmount initialAmount) {
+        amount = initialAmount.whole(); fraction = initialAmount.fraction();
     }
     private void onOwner() {
         if (Thread.currentThread() != owner) throw new IllegalStateException("Wrong storage thread");
@@ -53,11 +63,14 @@ public final class NetworkCell {
     }
     /** Loading, local consumption and policy changes invalidate prior quotes. */
     public void replace(long nextAmount) {
+        replace(EnergyAmount.of(nextAmount));
+    }
+    public void replace(EnergyAmount nextAmount) {
         onOwner();
         if (retired) throw new IllegalStateException("Retired storage");
-        if (nextAmount < 0) throw new IllegalArgumentException("Negative balance");
+        Objects.requireNonNull(nextAmount, "nextAmount");
         Object nextRevision = new Object();
-        amount = nextAmount; revision = nextRevision; currentQuote = null;
+        amount = nextAmount.whole(); fraction = nextAmount.fraction(); revision = nextRevision; currentQuote = null;
     }
     /** Unload/removal permanently revokes this identity; reload creates a new cell. */
     public void retire() { onOwner(); retired = true; }
@@ -69,17 +82,19 @@ public final class NetworkCell {
      * which changes a participant cannot authorize a stale transaction.
      */
     public static boolean commit(List<Write> requested, long dissipated, BooleanSupplier worldGuard) {
+        return commit(requested, EnergyAmount.of(dissipated), worldGuard);
+    }
+    public static boolean commit(List<Write> requested, EnergyAmount dissipated, BooleanSupplier worldGuard) {
         Objects.requireNonNull(worldGuard, "worldGuard");
-        if (dissipated < 0) throw new IllegalArgumentException("Negative dissipation");
         var writes = List.copyOf(requested);
         var identities = new IdentityHashMap<NetworkCell, Boolean>();
-        BigInteger balance = BigInteger.valueOf(dissipated);
+        BigInteger balance = dissipated.units();
         for (var write : writes) {
             var cell = write.expected.cell;
             cell.onOwner();
             if (identities.put(cell, Boolean.TRUE) != null) throw new IllegalArgumentException("Duplicate cell");
-            balance = balance.add(BigInteger.valueOf(write.nextAmount))
-                .subtract(BigInteger.valueOf(write.expected.amount));
+            balance = balance.add(write.exactNextAmount().units())
+                .subtract(write.expected.exactAmount().units());
         }
         if (balance.signum() != 0) throw new IllegalArgumentException("Unbalanced transaction");
         // Allocate all revisions before the guard or writes; no allocation is
@@ -94,6 +109,7 @@ public final class NetworkCell {
         for (int i = 0; i < writes.size(); i++) {
             var write = writes.get(i);
             write.expected.cell.amount = write.nextAmount;
+            write.expected.cell.fraction = write.nextFraction;
             write.expected.cell.revision = revisions[i];
             write.expected.cell.currentQuote = null;
         }

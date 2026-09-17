@@ -1,7 +1,7 @@
 plugins { id 'java-library' }
 
 group = 'dev.scex'
-version = '0.15.3-r24-experimental'
+version = '0.35.0-r101-experimental'
 base { archivesName = 'scex-independent-energy' }
 java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
@@ -227,3 +227,80 @@ tasks.register('networkCellContractTest', JavaExec) {
     jvmArgs '-Xms32m', '-Xmx128m'
 }
 tasks.named('check') { dependsOn tasks.named('networkCellContractTest') }
+
+tasks.register('fractionalCellContractTest', JavaExec) {
+    dependsOn tasks.named('contractClasses')
+    classpath = sourceSets.contract.runtimeClasspath
+    mainClass = 'dev.scex.energy.FractionalCellContract'
+    jvmArgs '-Xms32m', '-Xmx128m'
+}
+tasks.named('check') { dependsOn tasks.named('fractionalCellContractTest') }
+
+tasks.register('fractionalDistributorContractTest', JavaExec) {
+    dependsOn tasks.named('contractClasses')
+    classpath = sourceSets.contract.runtimeClasspath
+    mainClass = 'dev.scex.energy.FractionalDistributorContract'
+    args layout.projectDirectory.file('fixtures/observed-fractional-transfers.tsv').asFile.absolutePath
+    jvmArgs '-Xms32m', '-Xmx128m'
+}
+tasks.named('check') { dependsOn tasks.named('fractionalDistributorContractTest') }
+
+tasks.register('solarOutputContractTest', JavaExec) {
+    dependsOn tasks.named('contractClasses')
+    classpath = sourceSets.contract.runtimeClasspath
+    mainClass = 'dev.scex.energy.SolarOutputContract'
+    args layout.projectDirectory.file('fixtures/observed-solar-steady.tsv').asFile.absolutePath
+    jvmArgs '-Xms32m', '-Xmx128m'
+}
+tasks.named('check') { dependsOn tasks.named('solarOutputContractTest') }
+
+tasks.register('solarColumnContractTest', JavaExec) {
+    dependsOn tasks.named('contractClasses')
+    classpath = sourceSets.contract.runtimeClasspath
+    mainClass = 'dev.scex.energy.SolarColumnContract'
+    args layout.projectDirectory.file('fixtures/observed-solar-columns.tsv').asFile.absolutePath
+    jvmArgs '-Xms32m', '-Xmx128m'
+}
+tasks.named('check') { dependsOn tasks.named('solarColumnContractTest') }
+
+tasks.register('extendedSolarContractTest', JavaExec) {
+    dependsOn tasks.named('contractClasses')
+    classpath = sourceSets.contract.runtimeClasspath
+    mainClass = 'dev.scex.energy.ExtendedSolarContract'
+    args layout.projectDirectory.file('fixtures/observed-asp-steady.tsv').asFile.absolutePath
+    jvmArgs '-Xms32m', '-Xmx128m'
+}
+tasks.named('check') { dependsOn tasks.named('extendedSolarContractTest') }
+
+tasks.register('unitAccountingContractTest', JavaExec) {
+    dependsOn tasks.named('contractClasses')
+    classpath = sourceSets.contract.runtimeClasspath
+    mainClass = 'dev.scex.energy.UnitAccountingContract'
+    jvmArgs '-Xms32m', '-Xmx128m'
+}
+tasks.named('check') { dependsOn tasks.named('unitAccountingContractTest') }
+
+tasks.register('fuelCreditContractTest', JavaExec) {
+    dependsOn tasks.named('contractClasses')
+    classpath = sourceSets.contract.runtimeClasspath
+    mainClass = 'dev.scex.energy.FuelCreditContract'
+    jvmArgs '-Xms32m', '-Xmx128m'
+}
+tasks.named('check') { dependsOn tasks.named('fuelCreditContractTest') }
+
+tasks.register('entityFuelContractTest', JavaExec) {
+    dependsOn tasks.named('contractClasses')
+    classpath = sourceSets.contract.runtimeClasspath
+    mainClass = 'dev.scex.energy.EntityFuelContract'
+    jvmArgs '-Xms32m', '-Xmx128m'
+}
+tasks.named('check') { dependsOn tasks.named('entityFuelContractTest') }
+
+// Both wire faces, stale leases, saved masks and weighted detours are behavior contracts.
+tasks.register('directionContractTest', JavaExec) {
+    dependsOn tasks.named('contractClasses')
+    classpath = sourceSets.contract.runtimeClasspath
+    mainClass = 'dev.scex.energy.ConductorDirectionContract'
+    jvmArgs '-Xms32m', '-Xmx256m'
+}
+tasks.named('check') { dependsOn tasks.named('directionContractTest') }

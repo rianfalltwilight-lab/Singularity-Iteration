@@ -209,6 +209,11 @@ public class mio_icif_Energy_Container extends mio_icif_Energy_Block implements 
     protected MachineItemHandler createItemHandler() {
         return new MachineItemHandler(LAYOUT) {
             @Override
+            public boolean isItemValid(int slot, ItemStack stack) {
+                if (slot == CHARGE_SLOT && dev.scex.si.energy.FeMachineBridge.chargeable(stack)) return true;
+                return super.isItemValid(slot, stack);
+            }
+            @Override
             protected void onContentsChanged(int slot) {
                 setChanged();
             }
@@ -252,13 +257,9 @@ public class mio_icif_Energy_Container extends mio_icif_Energy_Block implements 
 
         blockEntity.chargeItems();
 
-        if (!blockEntity.energyStorage.scexNetworkControlled() && blockEntity.shouldEmitEnergy()) {
-            blockEntity.pushEnergyToCompatSinks();
-        }
-
-        if (!blockEntity.energyStorage.scexNetworkControlled() && (blockEntity.tickCounter % FE_COMPAT_SCAN_INTERVAL) == 0) {
-            blockEntity.updateFECompatTiles(level, pos);
-        }
+        // Standard FE output is owned by the same ledger as sided extraction and item charging.
+        // Do not create legacy FE grid proxies alongside this active sender.
+        blockEntity.scexFeBridge().push();
     }
     
     /**
@@ -584,49 +585,9 @@ private void pushEnergyToCompatSinks() {
      * <p>通过 IItemAPI 进行电池放电，Addon 可以注册自定义电池类型。
      */
     protected void processBattery() {
-        ItemStack batteryStack = itemHandler.getStackInSlot(BATTERY_SLOT);
-        if (batteryStack.isEmpty()) {
-            return;
-        }
-
-        // 检查储能方块是否已满
-        long energyStored = apiGetStoredEnergy();
-        long maxEnergy = apiGetMaxEnergy();
-        if (energyStored >= maxEnergy) {
-            return;
-        }
-
-        long spaceAvailable = maxEnergy - energyStored;
-        long maxTransfer = Math.min(apiGetMaxReceive(), spaceAvailable);
-
-        if (batteryStack.getItem() == Items.REDSTONE) {
-            // 对齐IC2：有任何空间即消耗红石，不要求满800EU空缺
-            long energyToAdd = Math.min(mio_icif_producer.REDSTONE_ENERGY_VALUE, spaceAvailable);
-            if (energyToAdd > 0) {
-                batteryStack.shrink(1);
-                apiReceiveEnergy(energyToAdd, false);
-                setChanged();
-            }
-            return;
-        }
-
-        // 处理电池放电（排除电力工具和电力护甲）
-        if (apiIsBattery(batteryStack) && !apiIsElectricTool(batteryStack) && !apiIsElectricArmor(batteryStack)) {
-            long batteryEnergy = apiGetBatteryStored(batteryStack);
-            if (batteryEnergy <= 0) {
-                return;
-            }
-
-            long energyToTransfer = Math.min(batteryEnergy, maxTransfer);
-            long extractedEnergy = apiDischargeBattery(batteryStack, energyToTransfer, false);
-
-            if (extractedEnergy > 0) {
-                apiReceiveEnergy(extractedEnergy, false);
-                setChanged();
-            }
-        }
+        if (!itemHandler.getStackInSlot(BATTERY_SLOT).isEmpty()) scexFeBridge().discharge(itemHandler, BATTERY_SLOT);
     }
-    
+
     /**
      * 给充电槽中的物品充电
      * 支持电池和电力护甲
@@ -634,58 +595,9 @@ private void pushEnergyToCompatSinks() {
      * <p>通过 IItemAPI 进行充电操作，Addon 可以注册自定义电池和护甲类型。
      */
     protected void chargeItems() {
-        ItemStack chargeStack = itemHandler.getStackInSlot(CHARGE_SLOT);
-        if (chargeStack.isEmpty()) {
-            return;
-        }
-        
-        // 检查储能方块是否有足够能量
-        long availableEnergy = apiGetStoredEnergy();
-        if (availableEnergy <= 0) {
-            return;
-        }
-        
-        // 处理电力护甲充电（优先检查，因为 IElectricArmorItem extends IBatteryItem）
-        if (apiIsElectricArmor(chargeStack)) {
-            if (apiIsArmorFull(chargeStack)) {
-                return;
-            }
-            
-            long armorMaxEnergy = apiGetArmorMaxEnergy(chargeStack);
-            long armorCurrentEnergy = apiGetArmorStored(chargeStack);
-            long spaceInArmor = armorMaxEnergy - armorCurrentEnergy;
-            long maxTransfer = Math.min(apiGetMaxExtract(), spaceInArmor);
-            long energyToTransfer = Math.min(availableEnergy, maxTransfer);
-            
-            long extractedEnergy = apiExtractEnergy(energyToTransfer, false);
-            
-            if (extractedEnergy > 0) {
-                apiChargeElectricArmor(chargeStack, extractedEnergy, false);
-                setChanged();
-            }
-        }
-        // 处理电池充电（排除电力护甲，避免类型冲突）
-        else if (apiIsBattery(chargeStack)) {
-            if (apiIsBatteryFull(chargeStack)) {
-                return;
-            }
-            
-            long batteryMaxEnergy = apiGetBatteryCapacity(chargeStack);
-            long batteryCurrentEnergy = apiGetBatteryStored(chargeStack);
-            long spaceInBattery = batteryMaxEnergy - batteryCurrentEnergy;
-            long batteryChargeRate = apiGetChargeRate(chargeStack);
-            long maxTransfer = Math.min(apiGetMaxExtract(), Math.min(spaceInBattery, batteryChargeRate));
-            long energyToTransfer = Math.min(availableEnergy, maxTransfer);
-            
-            long extractedEnergy = apiExtractEnergy(energyToTransfer, false);
-            
-            if (extractedEnergy > 0) {
-                apiChargeBattery(chargeStack, extractedEnergy, false);
-                setChanged();
-            }
-        }
+        scexFeBridge().charge(itemHandler, CHARGE_SLOT);
     }
-    
+
     // Container 接口实现
     @Override
     public int getContainerSize() {

@@ -9,6 +9,8 @@ import com.singularity_iteration.mio_icif.api.machine.ISlotLayout;
 import com.singularity_iteration.mio_icif.api.machine.builder.IElectricMachineBuilder;
 import com.singularity_iteration.mio_icif.api.machine.builder.IMachineBuilderAPI;
 import com.singularity_iteration.mio_icif.api.recipe.IRecipeAPI;
+import dev.scex.si.energy.ContainerToTank;
+import dev.scex.si.processing.OwnedFluidConversion;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
@@ -61,6 +63,23 @@ public class mio_icif_oil_refinery_elc extends GenericMachineBlockEntity {
 
     private int overclockerCount = 0;
     private int fluidPerCycle = 1;
+    private String paidRecipe = "";
+    private FluidStack paidInput = FluidStack.EMPTY, paidOutput = FluidStack.EMPTY;
+    private long paidRate;
+    private int paidCycle, paidDuration;
+
+    private void refreshPaidRecipe() {
+        var recipe = findRecipe();
+        if (recipe.isEmpty()) return;
+        String currentId = recipe.get().id().toString();
+        var input = inputTank.getFluid().copyWithAmount(1);
+        var output = MioIcifAPI.instance().getRecipeAPI().getFluidRefiningOutputFluid(recipe.get()).copy();
+        if (!paidRecipe.isEmpty() && (!paidRecipe.equals(currentId) || !FluidStack.matches(paidInput, input)
+                || !FluidStack.matches(paidOutput, output) || paidRate != getEffectiveEnergyPerTick()
+                || paidCycle != fluidPerCycle || paidDuration != maxProgress)) progress = 0;
+        paidRecipe = currentId; paidInput = input; paidOutput = output;
+        paidRate = getEffectiveEnergyPerTick(); paidCycle = fluidPerCycle; paidDuration = maxProgress;
+    }
 
     private final ContainerData containerData = new ContainerData() {
         @Override
@@ -108,8 +127,12 @@ public class mio_icif_oil_refinery_elc extends GenericMachineBlockEntity {
         this.outputSlot = layout.getOutputSlots()[1];
         this.batterySlot = layout.getBatterySlots()[0];
         setConfiguration(getOrCreateConfiguration());
-        this.inputTank = new FluidTank(INPUT_TANK_CAPACITY);
-        this.outputTank = new FluidTank(OUTPUT_TANK_CAPACITY);
+        this.inputTank = new FluidTank(INPUT_TANK_CAPACITY) {
+            @Override protected void onContentsChanged() { ContainerToTank.markUnsaved(mio_icif_oil_refinery_elc.this); }
+        };
+        this.outputTank = new FluidTank(OUTPUT_TANK_CAPACITY) {
+            @Override protected void onContentsChanged() { ContainerToTank.markUnsaved(mio_icif_oil_refinery_elc.this); }
+        };
     }
 
     public static ISlotLayout getOrCreateLayout() {
@@ -145,7 +168,7 @@ public class mio_icif_oil_refinery_elc extends GenericMachineBlockEntity {
             .setEnergyPerTick(DEFAULT_ENERGY_PER_TICK)
             .setProcessTime(DEFAULT_WORK_TIME)
             .setCableTier(getOrCreateTier())
-            .useStandardLayout(1, 1, true, 4)
+            .useStandardLayout(2, 2, true, 4)
             .setSupportsUpgrades(true)
             .setSupportsFluids(true)
             .addFluidTank(INPUT_TANK_CAPACITY)
@@ -172,11 +195,11 @@ public class mio_icif_oil_refinery_elc extends GenericMachineBlockEntity {
     }
 
     public FluidStack getInputFluid() {
-        return inputTank.getFluid();
+        return inputTank.getFluid().copy();
     }
 
     public FluidStack getOutputFluid() {
-        return outputTank.getFluid();
+        return outputTank.getFluid().copy();
     }
 
     public int getInputFluidTypeId() {
@@ -208,7 +231,7 @@ public class mio_icif_oil_refinery_elc extends GenericMachineBlockEntity {
         com.singularity_iteration.mio_icif.Items.Upgrade.MachineUpgradeStats stats =
             com.singularity_iteration.mio_icif.Items.Upgrade.MachineUpgradeStats.fromInventory(itemHandler, upgradeStart, upgradeCount);
         overclockerCount = stats.overclockerCount;
-        fluidPerCycle = Math.max(1, overclockerCount + 1);
+        fluidPerCycle = (int) Math.min(Integer.MAX_VALUE, Math.max(1L, (long) overclockerCount + 1));
     }
 
     @Override
@@ -282,70 +305,42 @@ public class mio_icif_oil_refinery_elc extends GenericMachineBlockEntity {
 
     @Override
     protected boolean canWork() {
-        if (!hasEnoughEnergy()) return false;
+        return (progress >= maxProgress || hasEnoughEnergy()) && prepareOperation().isPresent();
+    }
 
-        Optional<? extends RecipeHolder<?>> recipeOpt = findRecipe();
-        if (recipeOpt.isEmpty()) return false;
-
-        IRecipeAPI recipeAPI = MioIcifAPI.instance().getRecipeAPI();
-        FluidStack outputFluid = recipeAPI.getFluidRefiningOutputFluid(recipeOpt.get());
-
-        int neededAmount = outputFluid.getAmount() * fluidPerCycle;
-
-        if (inputTank.getFluidAmount() < neededAmount) return false;
-
-        int spaceLeft = outputTank.getCapacity() - outputTank.getFluidAmount();
-        if (spaceLeft < neededAmount) return false;
-
-        return true;
+    private Optional<OwnedFluidConversion.Prepared> prepareOperation() {
+        var recipe = findRecipe();
+        if (recipe.isEmpty()) return Optional.empty();
+        var product = MioIcifAPI.instance().getRecipeAPI().getFluidRefiningOutputFluid(recipe.get());
+        long amount = (long) product.getAmount() * fluidPerCycle;
+        if (product.isEmpty() || amount <= 0 || amount > Integer.MAX_VALUE) return Optional.empty();
+        // Existing SI refining data has no separate input amount: retain its 1:1 fluid-volume setting.
+        return OwnedFluidConversion.prepare(inputTank, inputTank.getFluid().copyWithAmount((int) amount),
+            outputTank, product.copyWithAmount((int) amount), itemHandler, -1, ItemStack.EMPTY);
     }
 
     @Override
     protected void doWork() {
-        if (!consumeEnergy()) {
-            stopWork();
-            return;
+        if (prepareOperation().isEmpty()) { stopWork(); return; }
+        if (progress < maxProgress) {
+            if (getEffectiveEnergyPerTick() <= 0 || !hasEnoughEnergy() || !consumeEnergy()) { stopWork(); return; }
+            progress = (int) Math.min(maxProgress, (long) progress + getProgressPerTick());
         }
-
         isWorking = true;
-        progress++;
-
-        if (progress >= maxProgress) {
-            finishRefining();
-        }
+        if (progress >= maxProgress) finishRefining();
     }
 
+    @Override
+    protected void updateProgress() { /* doWork accounts for each paid tick exactly once. */ }
+
     private void finishRefining() {
-        Optional<? extends RecipeHolder<?>> recipeOpt = findRecipe();
-        if (recipeOpt.isEmpty()) {
-            stopWork();
-            return;
-        }
-
-        IRecipeAPI recipeAPI = MioIcifAPI.instance().getRecipeAPI();
-        FluidStack outputFluid = recipeAPI.getFluidRefiningOutputFluid(recipeOpt.get());
-
-        int neededAmount = outputFluid.getAmount() * fluidPerCycle;
-
-        if (inputTank.getFluidAmount() < neededAmount) {
-            stopWork();
-            return;
-        }
-
-        int spaceLeft = outputTank.getCapacity() - outputTank.getFluidAmount();
-        if (spaceLeft < neededAmount) {
-            stopWork();
-            return;
-        }
-
-        inputTank.drain(neededAmount, IFluidHandler.FluidAction.EXECUTE);
-        outputTank.fill(outputFluid.copyWithAmount(neededAmount), IFluidHandler.FluidAction.EXECUTE);
-
+        var operation = prepareOperation();
+        if (operation.isEmpty()) { stopWork(); return; }
+        int completed = progress;
+        progress = 0;
+        if (!operation.get().commit()) { progress = completed; stopWork(); return; }
         finishWork();
-
-        if (canWork()) {
-            isWorking = true;
-        }
+        setChanged();
     }
 
     private void handleInputCellSlot() {
@@ -361,124 +356,45 @@ public class mio_icif_oil_refinery_elc extends GenericMachineBlockEntity {
     }
 
     private void handleInputCellFromCell(ItemStack cellStack) {
-        FluidStack cellFluid = mio_icif_cells.getCellFluid(cellStack);
-        if (cellFluid.isEmpty()) return;
-
-        if (!inputTank.isEmpty() && inputTank.getFluid().getFluid() != cellFluid.getFluid()) return;
-
-        if (inputTank.getFluidAmount() >= inputTank.getCapacity()) return;
-
-        ItemStack emptyCell = mio_icif_cells.getEmptyCellForStack(cellStack);
-        if (emptyCell.isEmpty()) emptyCell = new ItemStack(mio_icif_cells.CELL_EMPTY.get());
-
-        ItemStack currentEmptySlot = itemHandler.getStackInSlot(inputEmptySlot);
-        if (!currentEmptySlot.isEmpty()) {
-            if (!ItemStack.isSameItem(currentEmptySlot, emptyCell) ||
-                currentEmptySlot.getCount() >= currentEmptySlot.getMaxStackSize()) {
-                return;
-            }
-        }
-
-        int space = inputTank.getCapacity() - inputTank.getFluidAmount();
-        int toFill = Math.min(cellFluid.getAmount(), space);
-        if (toFill <= 0) return;
-
-        inputTank.fill(cellFluid.copyWithAmount(toFill), IFluidHandler.FluidAction.EXECUTE);
-        cellStack.shrink(1);
-        if (currentEmptySlot.isEmpty()) {
-            itemHandler.setStackInSlot(inputEmptySlot, emptyCell.copy());
-        } else {
-            currentEmptySlot.grow(1);
-        }
-        setChanged();
+        var single = cellStack.copyWithCount(1);
+        if (ContainerToTank.transfer(itemHandler, inputSlot, inputEmptySlot, inputTank,
+                mio_icif_cells.getCellFluid(single), mio_icif_cells.getEmptyCellForStack(single))) setChanged();
     }
 
     private void handleInputCellFromGenericContainer(ItemStack containerStack) {
-        var containedOpt = FluidUtil.getFluidContained(containerStack);
-        if (containedOpt.isEmpty()) return;
-        FluidStack contained = containedOpt.get();
-        if (contained.isEmpty()) return;
-
-        if (!inputTank.isEmpty() && !FluidStack.isSameFluid(inputTank.getFluid(), contained)) return;
-
-        if (inputTank.getFluidAmount() >= inputTank.getCapacity()) return;
-
-        int space = inputTank.getCapacity() - inputTank.getFluidAmount();
-        int toFill = Math.min(contained.getAmount(), space);
-        if (toFill <= 0) return;
-
-        ItemStack emptyContainer = getEmptyContainerFor(containerStack);
-        if (emptyContainer.isEmpty()) return;
-
-        ItemStack currentEmptySlot = itemHandler.getStackInSlot(inputEmptySlot);
-        if (!currentEmptySlot.isEmpty()) {
-            if (!ItemStack.isSameItem(currentEmptySlot, emptyContainer) ||
-                currentEmptySlot.getCount() >= currentEmptySlot.getMaxStackSize()) {
-                return;
-            }
-        }
-
-        inputTank.fill(contained.copyWithAmount(toFill), IFluidHandler.FluidAction.EXECUTE);
-        containerStack.shrink(1);
-        if (currentEmptySlot.isEmpty()) {
-            itemHandler.setStackInSlot(inputEmptySlot, emptyContainer.copy());
-        } else {
-            currentEmptySlot.grow(1);
-        }
-        setChanged();
+        // Operate on a detached single container. Preserve the original until its complete contents fit.
+        var handler = FluidUtil.getFluidHandler(containerStack.copyWithCount(1)).orElse(null);
+        if (handler == null) return;
+        var quoted = handler.drain(Integer.MAX_VALUE, IFluidHandler.FluidAction.SIMULATE);
+        if (quoted.isEmpty() || inputTank.fill(quoted, IFluidHandler.FluidAction.SIMULATE) != quoted.getAmount()) return;
+        var extracted = handler.drain(quoted, IFluidHandler.FluidAction.EXECUTE);
+        if (!FluidStack.matches(quoted, extracted)) return;
+        for (int tank = 0; tank < handler.getTanks(); tank++) if (!handler.getFluidInTank(tank).isEmpty()) return;
+        var empty = handler.getContainer();
+        if (empty.isEmpty() || empty.getCount() != 1) return;
+        if (ContainerToTank.transfer(itemHandler, inputSlot, inputEmptySlot, inputTank, extracted, empty)) setChanged();
     }
 
-    private ItemStack getEmptyContainerFor(ItemStack filledContainer) {
-        if (filledContainer.getItem() instanceof net.minecraft.world.item.BucketItem) {
-            return new ItemStack(net.minecraft.world.item.Items.BUCKET);
-        }
-        IFluidHandlerItem handler = FluidUtil.getFluidHandler(filledContainer.copy()).orElse(null);
-        if (handler != null) {
-            handler.drain(Integer.MAX_VALUE, IFluidHandler.FluidAction.EXECUTE);
-            ItemStack result = handler.getContainer();
-            if (!result.isEmpty() && result.getItem() != filledContainer.getItem()) {
-                return result;
-            }
-        }
-        return ItemStack.EMPTY;
-    }
+
 
     private void handleOutputCellSlot() {
-        if (level == null || level.isClientSide) return;
-        if (outputTank.isEmpty()) return;
-
-        ItemStack emptyCellStack = itemHandler.getStackInSlot(outputEmptySlot);
-        if (emptyCellStack.isEmpty() || !mio_icif_cells.isEmptyCell(emptyCellStack)) return;
-
-        if (outputTank.getFluidAmount() < 1000) return;
-
-        FluidStack outputFluid = outputTank.getFluid();
-        ItemStack filledCell = mio_icif_cells.getFilledCellForFluidStack(outputFluid.getFluid());
-        if (filledCell.isEmpty()) return;
-
-        ItemStack currentOutputSlot = itemHandler.getStackInSlot(outputSlot);
-        if (!currentOutputSlot.isEmpty()) {
-            if (!ItemStack.isSameItem(currentOutputSlot, filledCell) ||
-                currentOutputSlot.getCount() >= currentOutputSlot.getMaxStackSize()) {
-                return;
-            }
-        }
-
-        FluidStack drained = outputTank.drain(1000, IFluidHandler.FluidAction.EXECUTE);
-        if (drained.getAmount() >= 1000) {
-            emptyCellStack.shrink(1);
-            if (currentOutputSlot.isEmpty()) {
-                itemHandler.setStackInSlot(outputSlot, filledCell.copy());
-            } else {
-                currentOutputSlot.grow(1);
-            }
-            setChanged();
-        }
+        if (level == null || level.isClientSide || outputTank.isEmpty()
+                || !mio_icif_cells.isEmptyCell(itemHandler.getStackInSlot(outputEmptySlot))) return;
+        var filled = mio_icif_cells.getFilledCellForFluidStack(outputTank.getFluid().getFluid());
+        if (filled.isEmpty()) return;
+        var content = mio_icif_cells.getCellFluid(filled.copyWithCount(1));
+        if (ContainerToTank.drainToContainer(itemHandler, outputEmptySlot, outputSlot, outputTank, content, filled)) setChanged();
     }
 
     @Override
     protected void saveAdditional(@NotNull CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
+        tag.putString("scex_paid_recipe", paidRecipe);
+        tag.put("scex_paid_input", paidInput.saveOptional(registries));
+        tag.put("scex_paid_output", paidOutput.saveOptional(registries));
+        tag.putLong("scex_paid_rate", paidRate);
+        tag.putInt("scex_paid_cycle", paidCycle);
+        tag.putInt("scex_paid_duration", paidDuration);
         tag.put("InputTank", inputTank.writeToNBT(registries, new CompoundTag()));
         tag.put("OutputTank", outputTank.writeToNBT(registries, new CompoundTag()));
     }
@@ -486,6 +402,13 @@ public class mio_icif_oil_refinery_elc extends GenericMachineBlockEntity {
     @Override
     public void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
+        paidRecipe = tag.getString("scex_paid_recipe");
+        paidInput = FluidStack.parseOptional(registries, tag.getCompound("scex_paid_input"));
+        paidOutput = FluidStack.parseOptional(registries, tag.getCompound("scex_paid_output"));
+        paidRate = Math.max(0, tag.getLong("scex_paid_rate"));
+        paidCycle = Math.max(0, tag.getInt("scex_paid_cycle"));
+        paidDuration = Math.max(0, tag.getInt("scex_paid_duration"));
+        progress = Math.max(0, Math.min(maxProgress, progress));
         if (tag.contains("InputTank")) {
             inputTank.readFromNBT(registries, tag.getCompound("InputTank"));
         }
@@ -494,12 +417,22 @@ public class mio_icif_oil_refinery_elc extends GenericMachineBlockEntity {
         }
     }
 
+    @Override
+    public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
+        CompoundTag tag = new CompoundTag(); saveAdditional(tag, registries); return tag;
+    }
+
+    @Override
+    public void handleUpdateTag(CompoundTag tag, HolderLookup.Provider registries) { loadAdditional(tag, registries); }
+
     public static void tick(Level level, BlockPos pos, BlockState state, mio_icif_oil_refinery_elc blockEntity) {
-        if (level.isClientSide()) return;
+        if (!(level instanceof net.minecraft.server.level.ServerLevel server)
+                || !server.getServer().isSameThread() || blockEntity.isRemoved()) return;
 
         blockEntity.recalculateUpgradeStats();
         blockEntity.handleInputCellSlot();
         blockEntity.handleOutputCellSlot();
+        blockEntity.refreshPaidRecipe();
 
         if (!blockEntity.canWorkRedstone()) {
             blockEntity.stopWork();
@@ -551,8 +484,8 @@ public class mio_icif_oil_refinery_elc extends GenericMachineBlockEntity {
 
         @Override
         public FluidStack getFluidInTank(int tank) {
-            if (tank == 0) return inputTank.getFluid();
-            if (tank == 1) return outputTank.getFluid();
+            if (tank == 0) return inputTank.getFluid().copy();
+            if (tank == 1) return outputTank.getFluid().copy();
             return FluidStack.EMPTY;
         }
 
