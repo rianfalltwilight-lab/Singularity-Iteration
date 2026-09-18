@@ -85,10 +85,23 @@ public final class ReplicatorMachineContract {
         var missingQuote=new Machine(item,.00015);missingQuote.loadAdditional(paid,registries);missingQuote.quotes=false;
         long eu=missingQuote.getEnergyStorageInternal().getAmount();int tank=missingQuote.getUuMatterAmount();
         missingQuote.step();require(missingQuote.getEnergyStorageInternal().getAmount()==eu&&missingQuote.getUuMatterAmount()==tank&&missingQuote.getItemHandler().getStackInSlot(OUTPUT_SLOT).isEmpty(),"Saved prices cannot authorize work without current server quotes");
+        missingQuote.quotes=true;missingQuote.generation++;missingQuote.step();
+        require(!missingQuote.hasHeldReplicationData()&&missingQuote.getItemHandler().getStackInSlot(OUTPUT_SLOT).getCount()==1,
+            "Same authoritative price in a later generation resumes exact paid work");
+        var samePrice=new Machine(item,.00015);samePrice.generateOnce();samePrice.step();samePrice.generation++;samePrice.step();
+        require(!samePrice.hasHeldReplicationData()&&samePrice.getItemHandler().getStackInSlot(OUTPUT_SLOT).getCount()==1
+            &&samePrice.getEnergyStorageInternal().getAmount()==1998976,"Generation-only reload neither resets nor repeats a paid copy");
         machine.cost=.0002;machine.generation++;machine.step();require(machine.hasHeldReplicationData(),"Changed price preserves paid state for reconciliation");
         machine.put(0,new ItemStack(Items.DIAMOND));require(machine.getItemHandler().extractItem(0,1,false).isEmpty(),"Already-open menu cannot remove held contents");
         require(machine.removeItemNoUpdate(0).isEmpty(),"Container route also respects held ownership");
         var held=machine.saved();require(held.getCompound("scex_replication_v1").getDouble("processed")==.0001,"Held work retains actual consumed UU");
+        var changedAfterRestart=new Machine(item,.0002);changedAfterRestart.generation=2;changedAfterRestart.loadAdditional(paid,registries);
+        long changedEu=changedAfterRestart.getEnergyStorageInternal().getAmount();int changedTank=changedAfterRestart.getUuMatterAmount();
+        changedAfterRestart.step();require(changedAfterRestart.hasHeldReplicationData()
+            &&changedAfterRestart.getEnergyStorageInternal().getAmount()==changedEu&&changedAfterRestart.getUuMatterAmount()==changedTank
+            &&changedAfterRestart.getItemHandler().getStackInSlot(OUTPUT_SLOT).isEmpty(),"Cold restart under a changed quote holds before any new debit or output");
+        var heldAfterRestart=changedAfterRestart.saved();var heldAgain=new Machine(item,.0002);heldAgain.generation=2;heldAgain.loadAdditional(heldAfterRestart,registries);heldAgain.step();
+        require(heldAgain.hasHeldReplicationData()&&heldAgain.saved().equals(heldAfterRestart),"Changed-price held state is stable across another save and load");
 
         var blockedOutput=new Machine(item,.00015);blockedOutput.put(OUTPUT_SLOT,new ItemStack(Items.DIRT));blockedOutput.loopGeneration();blockedOutput.step();
         require(blockedOutput.getEnergyStorageInternal().getAmount()==2000000&&blockedOutput.getUuMatterAmount()==1000,"Different output prevents prepayment");

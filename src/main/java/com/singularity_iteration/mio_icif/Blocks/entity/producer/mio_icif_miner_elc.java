@@ -1,5 +1,6 @@
 package com.singularity_iteration.mio_icif.Blocks.entity.producer;
 
+import com.mojang.authlib.GameProfile;
 import com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_block_entities;
 import com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_producer;
 import com.singularity_iteration.mio_icif.Blocks.entity.slot.SlotLayout;
@@ -12,6 +13,7 @@ import dev.scex.si.processing.MiningRoute;
 import dev.scex.si.processing.MiningPayment;
 import dev.scex.si.processing.PipeAdvance;
 import dev.scex.si.processing.MiningPlacement;
+import dev.scex.si.processing.MachineActionOwner;
 import dev.scex.si.processing.RecipeSlots;
 import dev.scex.si.energy.ContainerToTank;
 import net.minecraft.core.BlockPos;
@@ -21,6 +23,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -36,18 +39,24 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.Tags;
 import org.jetbrains.annotations.Nullable;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 
 @SuppressWarnings("null")
 public class mio_icif_miner_elc extends mio_icif_producer {
+    private static final String ACTION_OWNER_KEY = "scex_machine_action_owner";
+    private static final GameProfile LEGACY_ACTOR = new GameProfile(
+        UUID.nameUUIDFromBytes("mio_icif:automated_miner".getBytes(StandardCharsets.UTF_8)), "[SI Miner]");
     private final MiningRoute scexRoute = new MiningRoute(() -> ContainerToTank.markUnsaved(this));
     private final MiningPayment scexMiningPayment = new MiningPayment(() -> ContainerToTank.markUnsaved(this));
     private final PipeAdvance scexPipeAdvance = new PipeAdvance(() -> ContainerToTank.markUnsaved(this));
     private boolean scexLayerReady;
     private final PendingDrops scexPendingDrops = new PendingDrops(() -> ContainerToTank.markUnsaved(this));
+    private MachineActionOwner actionOwner = MachineActionOwner.legacy(LEGACY_ACTOR);
 
 
     private static final SlotLayout LAYOUT = SlotLayout.builder()
@@ -202,6 +211,7 @@ public class mio_icif_miner_elc extends mio_icif_producer {
     @Override
     protected boolean canWork() {
         if (!(level instanceof ServerLevel server) || !server.getServer().isSameThread()
+                || !actionOwner.canAct()
                 || scexPendingDrops.isBusy() || !scexPendingDrops.isEmpty() || scexMiningPayment.isBusy()
                 || scexPipeAdvance.isBusy() || scexRoute.invalid() || scexPipeAdvance.uncertain()) return false;
         if (!scexRoute.belongsTo(worldPosition, level.getMinBuildHeight(), level.getMaxBuildHeight())
@@ -319,7 +329,7 @@ public class mio_icif_miner_elc extends mio_icif_producer {
     }
 
     @Override
-    protected void onTick() { flushPendingLoot(); }
+    protected void onTick() { if (actionOwner.canAct()) flushPendingLoot(); }
 
     @Override
     protected void doWork() {
@@ -389,11 +399,11 @@ public class mio_icif_miner_elc extends mio_icif_producer {
             Runnable account = () -> { scexRoute.markPaid(); scexRoute.advance(next); };
             boolean removed;
             if (scexRoute.paid()) {
-                removed = MiningLoot.capture(server, next, lootTool, scexPendingDrops, this::canStoreDrops, null, account);
+                removed = MiningLoot.capture(server, next, lootTool, actionOwner, scexPendingDrops, this::canStoreDrops, null, account);
             } else {
                 long toolCost = getItemAPI().isElectricTool(itemHandler.getStackInSlot(SLOT_DRILL)) ? 1 : 0;
                 removed = scexMiningPayment.attempt(energyStorage, itemHandler, SLOT_DRILL, getItemAPI(), scexRoute.cost(), toolCost,
-                    payment -> MiningLoot.capture(server, next, lootTool, scexPendingDrops, this::canStoreDrops, payment, account));
+                    payment -> MiningLoot.capture(server, next, lootTool, actionOwner, scexPendingDrops, this::canStoreDrops, payment, account));
             }
             if (!removed) return false;
             flushPendingLoot();
@@ -419,13 +429,14 @@ public class mio_icif_miner_elc extends mio_icif_producer {
                 var before = server.getBlockState(target);
                 if (!before.isAir()) return PipeAdvance.Outcome.RETRY;
                 return MiningPlacement.replace(server, target, before, mio_icif_blocks.BLOCK_MINING_TIP.get().defaultBlockState(),
-                    scexPipeAdvance.reserved());
+                    scexPipeAdvance.reserved(), actionOwner);
             }
             public PipeAdvance.Outcome replaceOldTip(BlockPos previous) {
                 if (!available(server, previous)) return PipeAdvance.Outcome.RETRY;
                 var before = server.getBlockState(previous);
                 if (!before.is(mio_icif_blocks.BLOCK_MINING_TIP.get())) return PipeAdvance.Outcome.RETRY;
-                return MiningPlacement.replace(server, previous, before, mio_icif_blocks.BLOCK_MINING_PIPE.get().defaultBlockState(), ItemStack.EMPTY);
+                return MiningPlacement.replace(server, previous, before, mio_icif_blocks.BLOCK_MINING_PIPE.get().defaultBlockState(),
+                    ItemStack.EMPTY, actionOwner);
             }
         })) return false;
         tipPos = scexPipeAdvance.target();
@@ -628,6 +639,7 @@ public class mio_icif_miner_elc extends mio_icif_producer {
      * 每tick?��?��??��??
      */
         public static void tick(Level level, BlockPos pos, BlockState state, mio_icif_miner_elc blockEntity) {
+        if (!blockEntity.actionOwner.canAct()) { blockEntity.stopWork(); return; }
         mio_icif_producer.tick(level, pos, state, blockEntity);
 
         if (!level.isClientSide()) {
@@ -649,6 +661,7 @@ public class mio_icif_miner_elc extends mio_icif_producer {
     @Override
     public void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
+        actionOwner = MachineActionOwner.load(tag, ACTION_OWNER_KEY, LEGACY_ACTOR);
         scexPendingDrops.load(registries, tag.getList("scex_pending_mining_drops", net.minecraft.nbt.Tag.TAG_COMPOUND));
         scexRoute.load(tag.getCompound("scex_mining_route"));
         scexMiningPayment.load(tag.getCompound("scex_mining_payment"));
@@ -692,6 +705,7 @@ public class mio_icif_miner_elc extends mio_icif_producer {
     @Override
     public void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
+        tag.put(ACTION_OWNER_KEY, actionOwner.save());
         tag.put("scex_pending_mining_drops", scexPendingDrops.save(registries));
         tag.put("scex_mining_route", scexRoute.save());
         tag.put("scex_mining_payment", scexMiningPayment.save());
@@ -727,6 +741,12 @@ public class mio_icif_miner_elc extends mio_icif_producer {
     @Override
     public AbstractContainerMenu createMenu(int containerId, Inventory playerInventory, Player player) {
         return new com.singularity_iteration.mio_icif.Menu.Producer.MinerElcMenu(containerId, playerInventory, this);
+    }
+
+    public MachineActionOwner getActionOwner() { return actionOwner; }
+    public void setActionOwnerFromPlacer(@Nullable LivingEntity placer) {
+        actionOwner = MachineActionOwner.fromPlacer(placer);
+        ContainerToTank.markUnsaved(this);
     }
 
     // ?��头类??��?�举

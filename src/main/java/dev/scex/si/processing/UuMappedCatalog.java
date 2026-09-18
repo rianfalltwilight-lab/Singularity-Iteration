@@ -185,14 +185,14 @@ public final class UuMappedCatalog {
         var ops = registries.createSerializationContext(NbtOps.INSTANCE);
         try {
             var stack = ItemStack.STRICT_SINGLE_ITEM_CODEC.parse(ops, tag).getOrThrow();
-            var roundtrip = ItemStack.STRICT_SINGLE_ITEM_CODEC.encodeStart(ops, stack).getOrThrow();
-            var explicit = tag.copy();
-            // SINGLE_ITEM_CODEC fixes count at one and intentionally omits it on encode.
-            explicit.remove("count");
-            // An explicitly observed registered default still restricts its whole
-            // item family; the codec omits an empty component patch on encode.
-            if (explicit.getCompound("components").isEmpty()) explicit.remove("components");
-            if (stack.isEmpty() || stack.getCount() != 1 || !explicit.equals(roundtrip))
+            var canonicalTag = ItemStack.STRICT_SINGLE_ITEM_CODEC.encodeStart(ops, stack).getOrThrow();
+            var canonical = ItemStack.STRICT_SINGLE_ITEM_CODEC.parse(ops, canonicalTag).getOrThrow();
+            // The codec deliberately omits component patches that equal the registered
+            // item defaults. Compare the decoded full identity, not the saved patch's
+            // wire spelling, while the strict parser and savedStack still reject unknown
+            // fields, component ids, component types, item ids, and non-single counts.
+            if (stack.isEmpty() || stack.getCount() != 1 || canonical.getCount() != 1
+                    || !ItemStack.isSameItemSameComponents(stack, canonical))
                 throw new IllegalArgumentException("Explicit mapped stack loses or normalizes saved fields");
             return stack;
         } catch (IllegalStateException malformed) {

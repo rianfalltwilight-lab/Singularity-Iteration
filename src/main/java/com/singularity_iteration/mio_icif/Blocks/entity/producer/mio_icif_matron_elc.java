@@ -314,6 +314,9 @@ public class mio_icif_matron_elc extends mio_icif_producer {
         if (waterCellStack.isEmpty()) {
             itemHandler.setStackInSlot(SLOT_WATER_CELL_INPUT, ItemStack.EMPTY);
         }
+        // Mark the block entity dirty after the tank and inventory transaction so
+        // the converted water and empty-cell output are persisted on the next save.
+        setChanged();
     }
 
     /**
@@ -392,6 +395,10 @@ public class mio_icif_matron_elc extends mio_icif_producer {
         boolean hydratedAny = false;
         int waterConsumed = 0;
         final int WATER_PER_FARMLAND = 10; // 每块耕地消耗10mB水
+        final int waterAvailable = waterTank.getFluidAmount();
+        if (waterAvailable < WATER_PER_FARMLAND) {
+            return false;
+        }
 
         for (int x = -HORIZONTAL_RANGE; x <= HORIZONTAL_RANGE; x++) {
             for (int y = -VERTICAL_RANGE - 1; y <= VERTICAL_RANGE; y++) { // 包含工作架下方的耕地
@@ -403,10 +410,14 @@ public class mio_icif_matron_elc extends mio_icif_producer {
                     if (state.getBlock() instanceof net.minecraft.world.level.block.FarmBlock) {
                         int moisture = state.getValue(net.minecraft.world.level.block.FarmBlock.MOISTURE);
                         if (moisture < 7) {
-                            // 检查是否有足够水源
-                            if (waterTank.getFluidAmount() >= WATER_PER_FARMLAND) {
-                                // 设置耕地为湿润状态7
-                                level.setBlock(checkPos, state.setValue(net.minecraft.world.level.block.FarmBlock.MOISTURE, 7), 3);
+                            // 以本次扫描已经预留的水量为准；不能为每块耕地重复
+                            // 使用同一份槽内余额，或在水量不足时继续改世界状态。
+                            if (waterAvailable - waterConsumed < WATER_PER_FARMLAND) {
+                                continue;
+                            }
+                            // 设置耕地为湿润状态7，并只为实际改动成功的方块记账。
+                            if (level.setBlock(checkPos,
+                                state.setValue(net.minecraft.world.level.block.FarmBlock.MOISTURE, 7), 3)) {
                                 waterConsumed += WATER_PER_FARMLAND;
                                 hydratedAny = true;
                             }

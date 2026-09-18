@@ -59,7 +59,12 @@ public class mio_icif_crop_entity extends BlockEntity implements IPlanter {
 
     public void tick(Level level, BlockPos pos, BlockState state, mio_icif_crop_entity entity) {
         if (level.isClientSide || entity != this) return;
-        if (fertilizerCooldown > 0) fertilizerCooldown--;
+        if (fertilizerCooldown > 0) {
+            fertilizerCooldown--;
+            // The changing value is persisted state, so every decrement must
+            // keep the owning chunk dirty until the next successful save.
+            setChanged();
+        }
         if (plant != null) plant.tick(this);
         cropTicker = (cropTicker + 1) % CROP_TICK_RATE;
         if (cropTicker == 0) {
@@ -218,7 +223,7 @@ public class mio_icif_crop_entity extends BlockEntity implements IPlanter {
         nutrients = tag.contains("Nutrients") ? tag.getInt("Nutrients") : 100;
         water = tag.contains("Water") ? tag.getInt("Water") : 100;
         weedControl = tag.getInt("WeedControl");
-        fertilizerCooldown = tag.getInt("FertilizerCooldown");
+        fertilizerCooldown = Math.max(0, tag.getInt("FertilizerCooldown"));
         progress = tag.getInt("Progress");
         scanLevel = tag.getInt("ScanLevel");
         hybridBase = tag.getBoolean("HybridBase");
@@ -240,6 +245,7 @@ public class mio_icif_crop_entity extends BlockEntity implements IPlanter {
         tag.putInt("Nutrients", nutrients);
         tag.putInt("Water", water);
         tag.putInt("WeedControl", weedControl);
+        tag.putInt("FertilizerCooldown", fertilizerCooldown);
         tag.putInt("Progress", progress);
         tag.putInt("ScanLevel", scanLevel);
         tag.putBoolean("HybridBase", hybridBase);

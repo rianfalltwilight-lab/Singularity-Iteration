@@ -102,8 +102,11 @@ public final class SolarProductWorldProbe {
             var profile = PROFILES.get(index);
             var machine = machines.get(index);
             long generated = expected(profile, machine);
-            check(generated > 0 && machine.getEnergyStorageInternal().getAmount() == generated,
-                "first natural daylight generation " + profile.registryId());
+            long actual = machine.getEnergyStorageInternal().getAmount();
+            check(generated > 0 && actual == generated,
+                "first natural daylight generation " + profile.registryId()
+                    + " expected=" + generated + " actual=" + actual
+                    + " exact=" + machine.getEnergyStorageInternal().scexExactAmount());
             if (profile.discrete()) {
                 var asp = (mio_icif_AdvancedSolarGenerator) machine;
                 check(asp.isGenerating() && asp.getGenerationState() == mio_icif_AdvancedSolarGenerator.GenerationState.DAY,

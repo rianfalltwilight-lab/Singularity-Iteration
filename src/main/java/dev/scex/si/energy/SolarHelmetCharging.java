@@ -2,6 +2,7 @@
 package dev.scex.si.energy;
 
 import com.singularity_iteration.mio_icif.api.item.IBatteryItem;
+import com.singularity_iteration.mio_icif.api.item.IElectricArmorItem;
 import java.util.WeakHashMap;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.Container;
@@ -18,8 +19,12 @@ public final class SolarHelmetCharging {
     public static final int HEAD_SLOT = Inventory.INVENTORY_SIZE + EquipmentSlot.HEAD.getIndex();
     private static final int[] ARMOR_SLOTS = {Inventory.INVENTORY_SIZE + EquipmentSlot.CHEST.getIndex(),
         Inventory.INVENTORY_SIZE + EquipmentSlot.LEGS.getIndex(), Inventory.INVENTORY_SIZE + EquipmentSlot.FEET.getIndex()};
+    private static final EquipmentSlot[] WORN_ARMOR_SLOTS = {
+        EquipmentSlot.CHEST, EquipmentSlot.LEGS, EquipmentSlot.FEET
+    };
     private static final WeakHashMap<Player, Cursor> PLAYERS = new WeakHashMap<>();
     private static final WeakHashMap<Player, Long> CHEST_TICKS = new WeakHashMap<>();
+    private static final WeakHashMap<Player, Long> ARMOR_TICKS = new WeakHashMap<>();
     private SolarHelmetCharging() { }
 
     public static void tick(ItemStack source, IBatteryItem battery, Level level, Player player, int generation, int limit) {
@@ -42,6 +47,27 @@ public final class SolarHelmetCharging {
         ItemStack target = player.getItemBySlot(EquipmentSlot.CHEST);
         if (!(target.getItem() instanceof IBatteryItem receiver)) return 0;
         return BatteryTransfer.move(source, battery, target, receiver, offered);
+    }
+
+    /** Advanced-solar default: generate once, then charge worn armor only; carried inventory is out of scope. */
+    public static long tickArmorOnly(ItemStack source, IBatteryItem battery, Level level, Player player, int generation, int limit) {
+        if (!(level instanceof ServerLevel server) || !server.getServer().isSameThread()
+                || player.level() != level || player.getItemBySlot(EquipmentSlot.HEAD) != source
+                || source.isEmpty() || source.getCount() != 1) return 0;
+        long tick = level.getGameTime();
+        Long previous = ARMOR_TICKS.put(player, tick);
+        if (previous != null && previous == tick) return 0;
+        if (generation > 0) battery.addEnergy(source, generation);
+        long remaining = Math.min(Math.max(0, limit), battery.getEnergy(source));
+        long offered = remaining;
+        for (EquipmentSlot slot : WORN_ARMOR_SLOTS) {
+            if (remaining <= 0) break;
+            ItemStack target = player.getItemBySlot(slot);
+            if (target.getItem() instanceof IElectricArmorItem receiver) {
+                remaining -= BatteryTransfer.move(source, battery, target, receiver, remaining);
+            }
+        }
+        return offered - remaining;
     }
 
     public static final class Cursor {

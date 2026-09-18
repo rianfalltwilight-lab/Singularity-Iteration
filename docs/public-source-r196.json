@@ -1,0 +1,2071 @@
+{
+  "snapshot": "R196 frozen reviewed development inputs",
+  "previousCommit": "8828ed7c999cadc9a94c53ffc68eeb11d00711c7",
+  "compileInputManifestSHA256": "810a06f3f6a1c2a7de99715b5221fdba56d1e6ad36a50acb6bba8727f8f8215a",
+  "compileReceiptSHA256": "40711d85a801646083cffcda5b62aff0d1c0a877ab8de3b7c3c4ea97efb2445f",
+  "sourceFilesMatched": 403,
+  "reviewedOwners": 218,
+  "compiledClasses": 439,
+  "compileStatus": "PASS_SCOPED_COMPILE_AND_SELECTED_CONTRACTS",
+  "recoveredFrozenProbes": [
+    "src/smoke/java/dev/scex/si/CropLifecycleWorldProbe.java",
+    "src/smoke/java/dev/scex/si/F04LifecyclePerformanceWorldProbe.java",
+    "src/smoke/java/dev/scex/si/WorldScenarioProbe.java"
+  ],
+  "changedInputFiles": [
+    "src/main/java/com/singularity_iteration/mio_icif/Blocks/Producer/mio_icif_block_advanced_miner_elc.java",
+    "src/main/java/com/singularity_iteration/mio_icif/Blocks/Producer/mio_icif_block_miner_elc.java",
+    "src/main/java/com/singularity_iteration/mio_icif/Blocks/Producer/mio_icif_block_pump_elc.java",
+    "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/crop/mio_icif_crop_entity.java",
+    "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_advanced_miner_elc.java",
+    "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_matron_elc.java",
+    "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_miner_elc.java",
+    "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_pump_elc.java",
+    "src/main/java/com/singularity_iteration/mio_icif/Items/Armor/mio_icif_advanced_solar_helmet.java",
+    "src/main/java/com/singularity_iteration/mio_icif/Items/Armor/mio_icif_hybrid_solar_helmet.java",
+    "src/main/java/com/singularity_iteration/mio_icif/Items/Armor/mio_icif_ultimate_solar_helmet.java",
+    "src/main/java/dev/scex/si/energy/SolarHelmetCharging.java",
+    "src/main/java/dev/scex/si/processing/MachineActionOwner.java",
+    "src/main/java/dev/scex/si/processing/MiningLoot.java",
+    "src/main/java/dev/scex/si/processing/MiningPlacement.java",
+    "src/main/java/dev/scex/si/processing/UuMappedCatalog.java",
+    "src/reviewedContract/java/dev/scex/si/ReplicatorMachineContract.java",
+    "src/reviewedContract/java/dev/scex/si/ScannerMachineContract.java",
+    "src/reviewedContract/java/dev/scex/si/UuMappedCatalogContract.java",
+    "src/smoke/java/dev/scex/si/CropLifecycleWorldProbe.java",
+    "src/smoke/java/dev/scex/si/CropRegionInspector.java",
+    "src/smoke/java/dev/scex/si/F04ColdJvmWorldProbe.java",
+    "src/smoke/java/dev/scex/si/F04LifecyclePerformanceWorldProbe.java",
+    "src/smoke/java/dev/scex/si/MachineOwnerWorldProbe.java",
+    "src/smoke/java/dev/scex/si/MatronHydrationWorldProbe.java",
+    "src/smoke/java/dev/scex/si/MiningProductWorldProbe.java",
+    "src/smoke/java/dev/scex/si/SolarHeadgearWorldProbe.java",
+    "src/smoke/java/dev/scex/si/SolarProductWorldProbe.java",
+    "src/smoke/java/dev/scex/si/WorldScenarioProbe.java"
+  ],
+  "unresolvedProvenanceGroups": 4,
+  "fullSourceReviewComplete": false,
+  "fullCleanBuild": false,
+  "fullModRelease": false,
+  "runtimeStatus": "R196 initial scoped pass; cold restart failed; follow-up remains open",
+  "newGameTestsRunByPublisher": false,
+  "productionDeployed": false,
+  "sourceFiles": [
+    {
+      "path": "build.gradle",
+      "sha256": "53797154de2eec6c9547b77b3185e40c7410768c14507161416fea48a11e8c68",
+      "gitBlobSHA256": "56588e31c6323dc77e78ee5316357ab7d0c29ae9b85852fc923c109fe7634a4b"
+    },
+    {
+      "path": "cleanroom-energy/build.gradle",
+      "sha256": "fe677e4651d418187e1c86b530d7fe78ae29e36374a686f9be8452ea00e81bcc",
+      "gitBlobSHA256": "fe677e4651d418187e1c86b530d7fe78ae29e36374a686f9be8452ea00e81bcc"
+    },
+    {
+      "path": "cleanroom-energy/src/contract/java/dev/scex/energy/ComponentRoutesContract.java",
+      "sha256": "090123275684ef20b7ae6dc3b56e6d1112faf24857f6361b7e07c6c17eddcfb6",
+      "gitBlobSHA256": "090123275684ef20b7ae6dc3b56e6d1112faf24857f6361b7e07c6c17eddcfb6"
+    },
+    {
+      "path": "cleanroom-energy/src/contract/java/dev/scex/energy/ConductorDirectionContract.java",
+      "sha256": "ffbe67add591c4560e69cd2d74b890f97e3d11b0d23947ed1cd1c7c22587661a",
+      "gitBlobSHA256": "ffbe67add591c4560e69cd2d74b890f97e3d11b0d23947ed1cd1c7c22587661a"
+    },
+    {
+      "path": "cleanroom-energy/src/contract/java/dev/scex/energy/ConductorGraphContract.java",
+      "sha256": "ae034d901a9888f2e7c62ff485eccd136089f0dc0ca68ad8acaf165826a6afa4",
+      "gitBlobSHA256": "ae034d901a9888f2e7c62ff485eccd136089f0dc0ca68ad8acaf165826a6afa4"
+    },
+    {
+      "path": "cleanroom-energy/src/contract/java/dev/scex/energy/ConductorRegistryContract.java",
+      "sha256": "77a14f704d5f244d00d15401d9e17aa777752ae2957b3ba9d4ae73732991f96a",
+      "gitBlobSHA256": "77a14f704d5f244d00d15401d9e17aa777752ae2957b3ba9d4ae73732991f96a"
+    },
+    {
+      "path": "cleanroom-energy/src/contract/java/dev/scex/energy/ContactBudgetContract.java",
+      "sha256": "da26c2f115fb7500e922bbde7462332d10e47549bfe4485bf8fcdaa2213ca371",
+      "gitBlobSHA256": "da26c2f115fb7500e922bbde7462332d10e47549bfe4485bf8fcdaa2213ca371"
+    },
+    {
+      "path": "cleanroom-energy/src/contract/java/dev/scex/energy/DeferredEntriesContract.java",
+      "sha256": "0ecba1b788cf23fd4fe31b127d2d54bddb3749a7e695850c5949b41c12ce75b3",
+      "gitBlobSHA256": "0ecba1b788cf23fd4fe31b127d2d54bddb3749a7e695850c5949b41c12ce75b3"
+    },
+    {
+      "path": "cleanroom-energy/src/contract/java/dev/scex/energy/DeliveryTraceContract.java",
+      "sha256": "cb4c24281456bd83b021f4ca70fc1fd26716d1030b5a834820e7b6138fdb5cb1",
+      "gitBlobSHA256": "cb4c24281456bd83b021f4ca70fc1fd26716d1030b5a834820e7b6138fdb5cb1"
+    },
+    {
+      "path": "cleanroom-energy/src/contract/java/dev/scex/energy/DomainBatchContract.java",
+      "sha256": "d2e6e8af0cbe739b5f1a6e17fd06e2bc3d963d0206640105ad336a9a3f6149f2",
+      "gitBlobSHA256": "d2e6e8af0cbe739b5f1a6e17fd06e2bc3d963d0206640105ad336a9a3f6149f2"
+    },
+    {
+      "path": "cleanroom-energy/src/contract/java/dev/scex/energy/EntityFuelContract.java",
+      "sha256": "a05837f8f9b6556e21d8441162ee69cee39c869393ea4310997823751e5ad8a0",
+      "gitBlobSHA256": "a05837f8f9b6556e21d8441162ee69cee39c869393ea4310997823751e5ad8a0"
+    },
+    {
+      "path": "cleanroom-energy/src/contract/java/dev/scex/energy/ExtendedSolarContract.java",
+      "sha256": "6c7237353638cee4f180e7108505c6f28b5fa69f4205a177e54b42bb44e0fdc0",
+      "gitBlobSHA256": "6c7237353638cee4f180e7108505c6f28b5fa69f4205a177e54b42bb44e0fdc0"
+    },
+    {
+      "path": "cleanroom-energy/src/contract/java/dev/scex/energy/FractionalCellContract.java",
+      "sha256": "3915093462ed715ef68ac11912bf6bdc66f7473f2ef70e858a77fbd0fcd6cb6b",
+      "gitBlobSHA256": "3915093462ed715ef68ac11912bf6bdc66f7473f2ef70e858a77fbd0fcd6cb6b"
+    },
+    {
+      "path": "cleanroom-energy/src/contract/java/dev/scex/energy/FractionalDistributorContract.java",
+      "sha256": "a81f99ac9aee7830c0cdbc9f0458882829cb74f7f12a75aec759d850bd4038f1",
+      "gitBlobSHA256": "a81f99ac9aee7830c0cdbc9f0458882829cb74f7f12a75aec759d850bd4038f1"
+    },
+    {
+      "path": "cleanroom-energy/src/contract/java/dev/scex/energy/FuelCreditContract.java",
+      "sha256": "38e279030a5700262491705744f1ac2303599a05398f1def84dd0476e6ced71f",
+      "gitBlobSHA256": "38e279030a5700262491705744f1ac2303599a05398f1def84dd0476e6ced71f"
+    },
+    {
+      "path": "cleanroom-energy/src/contract/java/dev/scex/energy/MultiSourceContract.java",
+      "sha256": "32868632b7e7d44a9bf1c5304701e73f25460dba9f7ffae3f11bae18af7c4d4d",
+      "gitBlobSHA256": "32868632b7e7d44a9bf1c5304701e73f25460dba9f7ffae3f11bae18af7c4d4d"
+    },
+    {
+      "path": "cleanroom-energy/src/contract/java/dev/scex/energy/NetworkCellContract.java",
+      "sha256": "df64438b3b87246041024dceb1150ca8c42ef873db9df11184820ff3badb539f",
+      "gitBlobSHA256": "df64438b3b87246041024dceb1150ca8c42ef873db9df11184820ff3badb539f"
+    },
+    {
+      "path": "cleanroom-energy/src/contract/java/dev/scex/energy/PacketDistributorContract.java",
+      "sha256": "df9f87d70c5461ecdb88f2484316b571609ba3ab77e4a4cec058fdca4d91c487",
+      "gitBlobSHA256": "df9f87d70c5461ecdb88f2484316b571609ba3ab77e4a4cec058fdca4d91c487"
+    },
+    {
+      "path": "cleanroom-energy/src/contract/java/dev/scex/energy/PacketLedgerContract.java",
+      "sha256": "ffc3c648c2b40ae4e4de19f05d75771e4014f5918f5b7c7220e84e5deb13632c",
+      "gitBlobSHA256": "ffc3c648c2b40ae4e4de19f05d75771e4014f5918f5b7c7220e84e5deb13632c"
+    },
+    {
+      "path": "cleanroom-energy/src/contract/java/dev/scex/energy/PartialReceiverContract.java",
+      "sha256": "1617f72a917d6df5ed56a6edfcba16ded6be3ff5f0d26ad8e0635d82f9fcc5a2",
+      "gitBlobSHA256": "1617f72a917d6df5ed56a6edfcba16ded6be3ff5f0d26ad8e0635d82f9fcc5a2"
+    },
+    {
+      "path": "cleanroom-energy/src/contract/java/dev/scex/energy/PriorityDomainContract.java",
+      "sha256": "b1de5f5614e51b30db899d2e9bc2fb45a6e7aec328568529a18623305901aa4f",
+      "gitBlobSHA256": "b1de5f5614e51b30db899d2e9bc2fb45a6e7aec328568529a18623305901aa4f"
+    },
+    {
+      "path": "cleanroom-energy/src/contract/java/dev/scex/energy/ReceiverOrderContract.java",
+      "sha256": "444cac0d15bdf37e30f8641edd782eb5d53dc0c1c969cecb0a34be3979d60423",
+      "gitBlobSHA256": "444cac0d15bdf37e30f8641edd782eb5d53dc0c1c969cecb0a34be3979d60423"
+    },
+    {
+      "path": "cleanroom-energy/src/contract/java/dev/scex/energy/SharedSourceContract.java",
+      "sha256": "a473e5a540c2899e11d0377bc903712d8771704347f64fa568f2dc36edc08fc2",
+      "gitBlobSHA256": "a473e5a540c2899e11d0377bc903712d8771704347f64fa568f2dc36edc08fc2"
+    },
+    {
+      "path": "cleanroom-energy/src/contract/java/dev/scex/energy/SharedStorageContract.java",
+      "sha256": "ebf04473f6605b0ff94b293549e54d9f257ba57fe1156be4b6ffaea202921494",
+      "gitBlobSHA256": "ebf04473f6605b0ff94b293549e54d9f257ba57fe1156be4b6ffaea202921494"
+    },
+    {
+      "path": "cleanroom-energy/src/contract/java/dev/scex/energy/SolarColumnContract.java",
+      "sha256": "e78723a6d88f00afde49feb239e8df00a37774f9af74f1f8b05ec913bca80e8c",
+      "gitBlobSHA256": "e78723a6d88f00afde49feb239e8df00a37774f9af74f1f8b05ec913bca80e8c"
+    },
+    {
+      "path": "cleanroom-energy/src/contract/java/dev/scex/energy/SolarOutputContract.java",
+      "sha256": "19fb69f52ef56f47fa89982172d5392a2b468325cb629ae4adc6e5114cc58459",
+      "gitBlobSHA256": "19fb69f52ef56f47fa89982172d5392a2b468325cb629ae4adc6e5114cc58459"
+    },
+    {
+      "path": "cleanroom-energy/src/contract/java/dev/scex/energy/TransformerAccountingContract.java",
+      "sha256": "e7c33f54570879546f3304dc9055c82f097ee6b930cdcb20b7b985182cbf075b",
+      "gitBlobSHA256": "e7c33f54570879546f3304dc9055c82f097ee6b930cdcb20b7b985182cbf075b"
+    },
+    {
+      "path": "cleanroom-energy/src/contract/java/dev/scex/energy/TransformerBatchContract.java",
+      "sha256": "95f8dd6aa6807e5498df4636ceda6a32ff48be304108535fc6888b635ac3285d",
+      "gitBlobSHA256": "95f8dd6aa6807e5498df4636ceda6a32ff48be304108535fc6888b635ac3285d"
+    },
+    {
+      "path": "cleanroom-energy/src/contract/java/dev/scex/energy/TransformerLossContract.java",
+      "sha256": "c6f971c879758d42f2b303c446300ab5cb6b9ea0524d53ce293e4c1fa1de0aba",
+      "gitBlobSHA256": "c6f971c879758d42f2b303c446300ab5cb6b9ea0524d53ce293e4c1fa1de0aba"
+    },
+    {
+      "path": "cleanroom-energy/src/contract/java/dev/scex/energy/TransformerSplitLossContract.java",
+      "sha256": "29a606ffac258d3f18a28fc2e6d2046402533bf3647e39d981a7686a8250ef62",
+      "gitBlobSHA256": "29a606ffac258d3f18a28fc2e6d2046402533bf3647e39d981a7686a8250ef62"
+    },
+    {
+      "path": "cleanroom-energy/src/contract/java/dev/scex/energy/TreeTopologyContract.java",
+      "sha256": "6cfb78d793e737f1e7ae69b3232c211789b6c5c2f88ca73cae706c3473c3a1cd",
+      "gitBlobSHA256": "6cfb78d793e737f1e7ae69b3232c211789b6c5c2f88ca73cae706c3473c3a1cd"
+    },
+    {
+      "path": "cleanroom-energy/src/contract/java/dev/scex/energy/UniformPacketEffectsContract.java",
+      "sha256": "b3c82d95db7724ed9ab1f0d5e433264b6ba060a880a287d8da15902e7fcde96f",
+      "gitBlobSHA256": "b3c82d95db7724ed9ab1f0d5e433264b6ba060a880a287d8da15902e7fcde96f"
+    },
+    {
+      "path": "cleanroom-energy/src/contract/java/dev/scex/energy/UnitAccountingContract.java",
+      "sha256": "ce87f6c794f78454e0c7f22aa46884cd7512f2d2588333046271a5ce852740df",
+      "gitBlobSHA256": "ce87f6c794f78454e0c7f22aa46884cd7512f2d2588333046271a5ce852740df"
+    },
+    {
+      "path": "cleanroom-energy/src/main/java/dev/scex/energy/BoundedUnits.java",
+      "sha256": "291ca5d11569a737fb25a8546d2f33535b0102a024c8b51a9ad11a4f8a4dc985",
+      "gitBlobSHA256": "291ca5d11569a737fb25a8546d2f33535b0102a024c8b51a9ad11a4f8a4dc985"
+    },
+    {
+      "path": "cleanroom-energy/src/main/java/dev/scex/energy/ConductorGraph.java",
+      "sha256": "973b6364a155bbf950aee9991fe6225ac71d8dbd61bf7851ec21ae60c08b9958",
+      "gitBlobSHA256": "973b6364a155bbf950aee9991fe6225ac71d8dbd61bf7851ec21ae60c08b9958"
+    },
+    {
+      "path": "cleanroom-energy/src/main/java/dev/scex/energy/ConductorRegistry.java",
+      "sha256": "37b7e9601d513331c75462c8e6f78d3b4081ed1505917af946c7e77b6c2590e2",
+      "gitBlobSHA256": "37b7e9601d513331c75462c8e6f78d3b4081ed1505917af946c7e77b6c2590e2"
+    },
+    {
+      "path": "cleanroom-energy/src/main/java/dev/scex/energy/ConsumableGeneration.java",
+      "sha256": "039dbdd4e61893ab925e229d2ffd91ae0ec8abdb59f72b9888adba83e709f55c",
+      "gitBlobSHA256": "039dbdd4e61893ab925e229d2ffd91ae0ec8abdb59f72b9888adba83e709f55c"
+    },
+    {
+      "path": "cleanroom-energy/src/main/java/dev/scex/energy/DeferredEntries.java",
+      "sha256": "d8b994b64aaedc7cea466afea617fa02c83added08600d13212e704328fbe606",
+      "gitBlobSHA256": "d8b994b64aaedc7cea466afea617fa02c83added08600d13212e704328fbe606"
+    },
+    {
+      "path": "cleanroom-energy/src/main/java/dev/scex/energy/DomainDistributor.java",
+      "sha256": "f900d534d3870fe3a82cc6db1a4dcfdcb08299c5369b65eb72ef3c9a6f6c0b68",
+      "gitBlobSHA256": "f900d534d3870fe3a82cc6db1a4dcfdcb08299c5369b65eb72ef3c9a6f6c0b68"
+    },
+    {
+      "path": "cleanroom-energy/src/main/java/dev/scex/energy/EnergyAmount.java",
+      "sha256": "dd52319a8ea0d36ca2ea9db17e68a300cbb35ca19d7fcb54a1195ef56bf7b9ea",
+      "gitBlobSHA256": "dd52319a8ea0d36ca2ea9db17e68a300cbb35ca19d7fcb54a1195ef56bf7b9ea"
+    },
+    {
+      "path": "cleanroom-energy/src/main/java/dev/scex/energy/FractionalDistributor.java",
+      "sha256": "69ffd6d7168e7ded5716a08f412b4090ae4f93a6f6ae8d3d7168ebbec472caa5",
+      "gitBlobSHA256": "69ffd6d7168e7ded5716a08f412b4090ae4f93a6f6ae8d3d7168ebbec472caa5"
+    },
+    {
+      "path": "cleanroom-energy/src/main/java/dev/scex/energy/FuelAdmission.java",
+      "sha256": "aab81aeb1838fce4129d62f0ef10e6d970aaabbc422d9b3bd2d5e4eb98106b90",
+      "gitBlobSHA256": "aab81aeb1838fce4129d62f0ef10e6d970aaabbc422d9b3bd2d5e4eb98106b90"
+    },
+    {
+      "path": "cleanroom-energy/src/main/java/dev/scex/energy/IndependentEnergyMode.java",
+      "sha256": "261a7a3929a46fb649e9403ff750b1cea5172d0a771e4832a0027663046e1672",
+      "gitBlobSHA256": "261a7a3929a46fb649e9403ff750b1cea5172d0a771e4832a0027663046e1672"
+    },
+    {
+      "path": "cleanroom-energy/src/main/java/dev/scex/energy/MultiSourceDistributor.java",
+      "sha256": "7880dc761b261d8b8b5d2e5d80a6c8a524f10ac90aaf8cb4e96b5920b1afb6c4",
+      "gitBlobSHA256": "7880dc761b261d8b8b5d2e5d80a6c8a524f10ac90aaf8cb4e96b5920b1afb6c4"
+    },
+    {
+      "path": "cleanroom-energy/src/main/java/dev/scex/energy/NetworkCell.java",
+      "sha256": "8ff7b143b50d5cf2cc7068087131445569813dbdc8ed3bf7e4288fa7fa3b2a82",
+      "gitBlobSHA256": "8ff7b143b50d5cf2cc7068087131445569813dbdc8ed3bf7e4288fa7fa3b2a82"
+    },
+    {
+      "path": "cleanroom-energy/src/main/java/dev/scex/energy/PacketDistributor.java",
+      "sha256": "1b0ae0465770d789739b52d0065239e96c3c48197d17ac9d2389acb8a908f8a2",
+      "gitBlobSHA256": "1b0ae0465770d789739b52d0065239e96c3c48197d17ac9d2389acb8a908f8a2"
+    },
+    {
+      "path": "cleanroom-energy/src/main/java/dev/scex/energy/PacketLedger.java",
+      "sha256": "424fbaba0532d53664452819974b3a671e1f829f8671d02177243dbb8ff0cce4",
+      "gitBlobSHA256": "424fbaba0532d53664452819974b3a671e1f829f8671d02177243dbb8ff0cce4"
+    },
+    {
+      "path": "cleanroom-energy/src/main/java/dev/scex/energy/ReceiverOrder.java",
+      "sha256": "5eb16dc37152a9082a2de6a19b5febe1267bdcf441ce97db686c672c0c92dc22",
+      "gitBlobSHA256": "5eb16dc37152a9082a2de6a19b5febe1267bdcf441ce97db686c672c0c92dc22"
+    },
+    {
+      "path": "cleanroom-energy/src/main/java/dev/scex/energy/RouteCosts.java",
+      "sha256": "909282040261e29b21749b5ca301d1e98d1dd7ad15eea1d05f574c4d34158f81",
+      "gitBlobSHA256": "909282040261e29b21749b5ca301d1e98d1dd7ad15eea1d05f574c4d34158f81"
+    },
+    {
+      "path": "cleanroom-energy/src/main/java/dev/scex/energy/SolarColumnLight.java",
+      "sha256": "14a52695f0fd6b2b0d9a5c4f91bff67e933b5b0f926fc22f6029481ff8ca0bde",
+      "gitBlobSHA256": "14a52695f0fd6b2b0d9a5c4f91bff67e933b5b0f926fc22f6029481ff8ca0bde"
+    },
+    {
+      "path": "cleanroom-energy/src/main/java/dev/scex/energy/SolarGeneratorProfile.java",
+      "sha256": "67ccf623168ea042403c035473c7ba42f9241ec01f7c92fb97bd797dbf034dad",
+      "gitBlobSHA256": "67ccf623168ea042403c035473c7ba42f9241ec01f7c92fb97bd797dbf034dad"
+    },
+    {
+      "path": "cleanroom-energy/src/main/java/dev/scex/energy/SolarOutputModel.java",
+      "sha256": "1f328252810e77d7b0bec1f848d756039966eccca0b6acd37dc07a99b65ad297",
+      "gitBlobSHA256": "1f328252810e77d7b0bec1f848d756039966eccca0b6acd37dc07a99b65ad297"
+    },
+    {
+      "path": "cleanroom-energy/src/main/java/dev/scex/energy/SourceOrder.java",
+      "sha256": "c1945d146500fd4d7884c4d15975a5d6eb3992a0b8db6e27559cc312d242860e",
+      "gitBlobSHA256": "c1945d146500fd4d7884c4d15975a5d6eb3992a0b8db6e27559cc312d242860e"
+    },
+    {
+      "path": "cleanroom-energy/src/main/java/dev/scex/energy/StagedCharge.java",
+      "sha256": "4197288a391cbd8c69297f8d3886650126a7cc9044287dde2d3f7f8e789a3ab3",
+      "gitBlobSHA256": "4197288a391cbd8c69297f8d3886650126a7cc9044287dde2d3f7f8e789a3ab3"
+    },
+    {
+      "path": "cleanroom-energy/src/main/java/dev/scex/energy/TransformerAccounting.java",
+      "sha256": "d4075b28a3e3ba026be0dee348180f848fdeaecd5e1bd24f0a7e5d34f21e1085",
+      "gitBlobSHA256": "d4075b28a3e3ba026be0dee348180f848fdeaecd5e1bd24f0a7e5d34f21e1085"
+    },
+    {
+      "path": "cleanroom-energy/src/main/java/dev/scex/energy/TransformerBatch.java",
+      "sha256": "b8278e951881e4c6de3b301d3feaa40931e933e12ad1cb16a4e3f14732dd9544",
+      "gitBlobSHA256": "b8278e951881e4c6de3b301d3feaa40931e933e12ad1cb16a4e3f14732dd9544"
+    },
+    {
+      "path": "cleanroom-energy/src/main/java/dev/scex/energy/TreeTopology.java",
+      "sha256": "93a10704befbe15cfc688d9aa263a0aebcf6e0dd9ef6706bd53ad9a15a0ea2ee",
+      "gitBlobSHA256": "93a10704befbe15cfc688d9aa263a0aebcf6e0dd9ef6706bd53ad9a15a0ea2ee"
+    },
+    {
+      "path": "cleanroom-energy/src/main/java/dev/scex/energy/UniformPacketEffects.java",
+      "sha256": "4364d4b316340bb9acd4540c9177aaa16c56e01651db2a0ffbfb8f15ae476a09",
+      "gitBlobSHA256": "4364d4b316340bb9acd4540c9177aaa16c56e01651db2a0ffbfb8f15ae476a09"
+    },
+    {
+      "path": "cleanroom-minecraft/build.gradle",
+      "sha256": "eb9c328e8526e5eaffeea4dd0bf7fb90ca9703c47682af9e77a02ba8aac81afe",
+      "gitBlobSHA256": "f7cd6bf4a7704e8bc251e4248bda3da500a9dca048ced078977fe01b88caaa14"
+    },
+    {
+      "path": "cleanroom-minecraft/src/contract/java/dev/scex/energy/minecraft/ContactOrderDirectionContract.java",
+      "sha256": "834eab57f4531f982575ddd6ea932d593d5d663a1329affada9ce74580f14233",
+      "gitBlobSHA256": "834eab57f4531f982575ddd6ea932d593d5d663a1329affada9ce74580f14233"
+    },
+    {
+      "path": "cleanroom-minecraft/src/main/java/dev/scex/energy/minecraft/ContactOrder.java",
+      "sha256": "1a7da61cf2c6d34a7ad1325779572115a29108a05235cffee7824af8931089a4",
+      "gitBlobSHA256": "1a7da61cf2c6d34a7ad1325779572115a29108a05235cffee7824af8931089a4"
+    },
+    {
+      "path": "cleanroom-minecraft/src/main/java/dev/scex/energy/minecraft/IndependentPlatformMod.java",
+      "sha256": "abd26bbd4318c6e20cac62476afb3fd3f9e4ed1ebea8a9d45c0597f971557346",
+      "gitBlobSHA256": "f1d340720a2c8b207e86e8fb1f3981960d31a1382a127dfeef37161fa70980d2"
+    },
+    {
+      "path": "cleanroom-minecraft/src/main/java/dev/scex/energy/minecraft/IndependentSpecialCableBlockEntity.java",
+      "sha256": "c811c8db25efced9b0f8044ef10a902e76458125861d6a2f834dbb0d57bac3db",
+      "gitBlobSHA256": "c811c8db25efced9b0f8044ef10a902e76458125861d6a2f834dbb0d57bac3db"
+    },
+    {
+      "path": "cleanroom-minecraft/src/main/java/dev/scex/energy/minecraft/IndependentTransformerBlockEntity.java",
+      "sha256": "285fdea03527e1e7ce1857632315a37c52f6d2cd2598d34e3d2d047aee09971f",
+      "gitBlobSHA256": "285fdea03527e1e7ce1857632315a37c52f6d2cd2598d34e3d2d047aee09971f"
+    },
+    {
+      "path": "cleanroom-minecraft/src/main/java/dev/scex/energy/minecraft/PlatformTopology.java",
+      "sha256": "6671dbef6c122a305e73b426100bcec76736e793f590cbf8edacfdd2cd1c042e",
+      "gitBlobSHA256": "6671dbef6c122a305e73b426100bcec76736e793f590cbf8edacfdd2cd1c042e"
+    },
+    {
+      "path": "cleanroom-minecraft/src/main/java/dev/scex/energy/minecraft/SmallBlastField.java",
+      "sha256": "1354123f25a9d06f6076ef3a8da9992a073943571807e6f47e19ea63d04072cc",
+      "gitBlobSHA256": "1354123f25a9d06f6076ef3a8da9992a073943571807e6f47e19ea63d04072cc"
+    },
+    {
+      "path": "cleanroom-minecraft/src/main/java/dev/scex/energy/minecraft/integration/SpecialCableFactory.java",
+      "sha256": "464a0dbba8542e07ce49b1149be4c53d21b8cff6d3cfbf194e2674c643ad6d96",
+      "gitBlobSHA256": "464a0dbba8542e07ce49b1149be4c53d21b8cff6d3cfbf194e2674c643ad6d96"
+    },
+    {
+      "path": "cleanroom-minecraft/src/main/java/dev/scex/energy/minecraft/integration/TransformerFactory.java",
+      "sha256": "c093e3126fd20e0275de2cdde48e14f5919b0c1349a99624c1e6853ed31bf3cb",
+      "gitBlobSHA256": "c093e3126fd20e0275de2cdde48e14f5919b0c1349a99624c1e6853ed31bf3cb"
+    },
+    {
+      "path": "cleanroom-minecraft/src/main/java/dev/scex/energy/minecraft/mixin/IndependentChunkMixin.java",
+      "sha256": "a389ac622dda4ee740a848ce59b4aac3830e88f21396472bd2315cf3d975b0fb",
+      "gitBlobSHA256": "141146d02f8d881073f4ab457c4b1d26b367765fc1c455865dc01e020066c74c"
+    },
+    {
+      "path": "cleanroom-minecraft/src/main/java/dev/scex/energy/minecraft/mixin/IndependentSignalMixin.java",
+      "sha256": "61d2a80cc287ed3bb301733b7a5b94339e50b5aa931b327977df2cad4f331439",
+      "gitBlobSHA256": "e7c3516faeb475d5eb368a55a9f6226671ce69596093d917899fd167f8694e49"
+    },
+    {
+      "path": "cleanroom-minecraft/src/main/java/dev/scex/energy/minecraft/mixin/IndependentTypeMixin.java",
+      "sha256": "7e374472a6bd7480dba278dc9dafb8721f267ecd5693f11d0a9a6458060dae67",
+      "gitBlobSHA256": "a99d953dd335d079c638b3ef241865b72c9cbdcd85664fa4bdc29138fabc8051"
+    },
+    {
+      "path": "gradle.properties",
+      "sha256": "e3393a5f8a6e0aebb53b67a83be87be0e8d3b4d28f14f7ef1d86a333cbc9e1ab",
+      "gitBlobSHA256": "b97c980428bcd215c1a23082351a47655e7608f4a34c7411fe728e4c08c8d5cc"
+    },
+    {
+      "path": "gradle/retired-uu-classpath-guard.gradle",
+      "sha256": "4214198d751e04b3cd8552bc8e91ebc73d58eab80fcec60e744e115bc0a9e55d",
+      "gitBlobSHA256": "4214198d751e04b3cd8552bc8e91ebc73d58eab80fcec60e744e115bc0a9e55d"
+    },
+    {
+      "path": "gradle/source-provenance-policy.json",
+      "sha256": "c8f216915fa56cba20321854840e5865d1625768ee5972a0e84cb4baa0d3499b",
+      "gitBlobSHA256": "c8f216915fa56cba20321854840e5865d1625768ee5972a0e84cb4baa0d3499b"
+    },
+    {
+      "path": "settings.gradle",
+      "sha256": "e9a323af040263f3a64b6fc8d83bdda0b00f4b35b6d3e475e56b81db00fe987a",
+      "gitBlobSHA256": "e9a323af040263f3a64b6fc8d83bdda0b00f4b35b6d3e475e56b81db00fe987a"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/Crop/mio_icif_crop_stick.java",
+      "sha256": "ff2354e78b3418636118ceabf9ecbac97a0f0a5c4a18e614530ff1ed3db2dcf5",
+      "gitBlobSHA256": "ff2354e78b3418636118ceabf9ecbac97a0f0a5c4a18e614530ff1ed3db2dcf5"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/Crop/mio_icif_crop_stick_upgraded.java",
+      "sha256": "ecb70f9cad86ec740d9bfd694794a2911a6eeccb0e32a96bb4d39d5038374310",
+      "gitBlobSHA256": "ecb70f9cad86ec740d9bfd694794a2911a6eeccb0e32a96bb4d39d5038374310"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/Pipe/mio_icif_block_pipe_item.java",
+      "sha256": "ab53e1f204f6f239090855aaa7dded8fc9ae5346e1faa37b6f6df26d3079adb0",
+      "gitBlobSHA256": "69727d9b938ca1eb69b0db4ac87d73211484f7402fa09372e801f60432ab71e4"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/Producer/mio_icif_block_advanced_miner_elc.java",
+      "sha256": "c5600fff9314b1a5e581a8b862542599264f3829c49584f45fbe7f118bab2f63",
+      "gitBlobSHA256": "602ce512256736813658388c03d71c50f38e404ca6841ba4839f3cdf19921334"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/Producer/mio_icif_block_miner_elc.java",
+      "sha256": "2aa189579cea28a7def86687411f83ad331a560b95a695f37d52831fb7de22c9",
+      "gitBlobSHA256": "5b1eea0ab5565843012b5fbbdeaf9c7d54ed7f7c17b828b157bdd131cb3cb2c8"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/Producer/mio_icif_block_pattern_storage.java",
+      "sha256": "1c8612786e8958d376d24b9c203f52f1c3528ec306b6a5287b28c917e4966784",
+      "gitBlobSHA256": "7f8222f5e11f1d715213a3e7efdc4a504ee420e8140174686cd9cd446a915a19"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/Producer/mio_icif_block_pump_elc.java",
+      "sha256": "2888fbb1b49841087d55eb6f136e51a9f3b3290bec21a3416a645f5fc9d81da1",
+      "gitBlobSHA256": "d3013add6bd71a6aefd37ff07435610606586514a5c0115a51a2c43a5fdfe66a"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/Producer/mio_icif_block_replicator_elc.java",
+      "sha256": "1c8cd2216377fc4a2089750ddb3d27ebed6c9f78cb4ab306c5b79662f64c1282",
+      "gitBlobSHA256": "73e70978694f57adf7c62b309746fb67a39efaded37f9a4f76b94241485ab7d6"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/Producer/mio_icif_block_scanner_elc.java",
+      "sha256": "f51a9a9cb780cb12b86b3e7ead125de109c9b00606312ecdcd8e5820e92a9854",
+      "gitBlobSHA256": "81f3d161a94d9f82b53c7dc27030422b88821b0f44ea2125db09bf2c7205ce46"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/HUEntity/HuGenerator/mio_icif_fluid_heat_generator.java",
+      "sha256": "dfcee7eefe0e8e049f79295c6092f7c536e815804171ccb9662b8ca53ea782dc",
+      "gitBlobSHA256": "3db9fd33fd3796dc4781507ee82ababc750812b363a4691a89d92e8baf30ef02"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/HUEntity/HuGenerator/mio_icif_heat_generator_elc.java",
+      "sha256": "bd3bc998d0b277f245288823113d768fd68f1a344ffdc94289f020aaa5fb4449",
+      "gitBlobSHA256": "bd3bc998d0b277f245288823113d768fd68f1a344ffdc94289f020aaa5fb4449"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/HUEntity/HuGenerator/mio_icif_heat_source_fluid.java",
+      "sha256": "9d408abf9625cfb167471ec49aa09a11d4b9fa64df259e030a1ca48854b8e6d4",
+      "gitBlobSHA256": "a8963dbed976cceb62aabc9b426d3044fa70e5a4360306d16da755f2682ac276"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/HUEntity/HuGenerator/mio_icif_rt_heat_generator.java",
+      "sha256": "2056d5feedcbbf3763fe16100bb97086fb5ea78cb75aee86b262b6f7b8dcbc15",
+      "gitBlobSHA256": "cb7f26f6dd20d2345fb8e42819561979202550a24707483239e032014bb5d8f0"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/HUEntity/HuGenerator/mio_icif_solid_heat_generator.java",
+      "sha256": "4cae50ad371a5a687e6e1e93c37be4c615efc03489f6054a57e31756e42f1411",
+      "gitBlobSHA256": "39cb1b3b42124ffbcd9b6c17c38c5d376fba6a8446a752b8cbad5701bebd6fdc"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/HUEntity/mio_icif_HeatU_Block.java",
+      "sha256": "49105d5b41e9fafccc13edcd619a6b6c51f48f4ec572bae3a77c1c160a47a62f",
+      "gitBlobSHA256": "2cdc8265c9730a5c188427053a1cb8a2e2ea999c3d61e332610d35551c54a820"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/HUEntity/mio_icif_HeatU_Generator.java",
+      "sha256": "cf1b1ee12c97a0ccbec4d0ac27ff27021bf5290d7f4e096ee13520d22c3f6462",
+      "gitBlobSHA256": "21e3e10427ae760fd25d27eda820d1cb5f16410f772b4a31b39e06a8730390c4"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/KUEntity/KUGenerator/mio_icif_Kinetic_Generator_elc.java",
+      "sha256": "c833806fceb78d7d11121756779d7d51617a78db83fc53fc6c098ddba9b8c0ce",
+      "gitBlobSHA256": "abfed632135d3df43ace450a021df5310fec1fb6ff9ee6d5f6eb727dfdcfa255"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/KUEntity/KUGenerator/mio_icif_Manual_KineticU_Generator.java",
+      "sha256": "ce0d11cc37dddefd85351e6e18fedbad2f527b1bed82f84e427e1af8a91da7d4",
+      "gitBlobSHA256": "30242a94b20e29bdd24e48a77040bd0c39d351ee7d7196273d98bfa861234f1d"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/KUEntity/mio_icif_KineticU_Block.java",
+      "sha256": "685d520c5c335d78ecfa6e5040c6aa51685e113c4f9857cb3fb20c4539cb6e3e",
+      "gitBlobSHA256": "05842e522658ac1dae4f08f8b6a2fcf4a151f9e9b36765ed2a8c640e7b08c73a"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/KUEntity/mio_icif_KineticU_Generator.java",
+      "sha256": "58d4e2343da2afd2170d669e2733c0874a7a1b6b33a041901a6b116a9e0ccc29",
+      "gitBlobSHA256": "826cf8e2344eb799c98d0998203ca0a78aee0eabe9db09ce41771edcbe406dcb"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/crop/mio_icif_crop_entity.java",
+      "sha256": "7e155f30d658e2b77ba8ce9a7de941459e71013c07d7dd6a4ed9865c58ae49ce",
+      "gitBlobSHA256": "7e155f30d658e2b77ba8ce9a7de941459e71013c07d7dd6a4ed9865c58ae49ce"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/generator/mio_icif_AdvancedSolarGenerator.java",
+      "sha256": "24094095302ba3a36595c3ed993b072a8ebfc3db2520ced0635313cdbae079d7",
+      "gitBlobSHA256": "8bc584e78722ce8f9e4f699442ddacab212c26e37db59d9c096a7173233c60c0"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/generator/mio_icif_MetsSolarGeneratorBase.java",
+      "sha256": "94adfed017690fb403e5c705af712ba849a9abe9f126623d389e693e292046ed",
+      "gitBlobSHA256": "76a077ea7e661f22761ad5f04f636eed579886c60302f28c54948eeebe795bbe"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/generator/mio_icif_Semifluid_generator.java",
+      "sha256": "7eb3a7d38dbc8601304e72209445c62d1364d62949ed164dafc76bdb1750af2f",
+      "gitBlobSHA256": "7d0d592a85e6d1eccff12eda9e5844aa8935a43478f9f5a74b758aa385e042cf"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/generator/mio_icif_advanced_drop_generator.java",
+      "sha256": "988a2d19c973f53200333f2d3f1b1ae8ced73b3a5208ad61eada411525876763",
+      "gitBlobSHA256": "4a61374323633ac6c555e046cba66866efdb781772daad10f5fa20daf11c4fb3"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/generator/mio_icif_advanced_experience_generator.java",
+      "sha256": "bce7a5244b8b92e8399e6324779d8f93bbeb84cd40e09ff6a7537b4e078278e4",
+      "gitBlobSHA256": "50f09b65ba178a9de7aa63762ba5bf93e0ca2fbf6d7dc3c124b597ea3ad3ae1e"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/generator/mio_icif_advanced_semifluid_generator.java",
+      "sha256": "7dccc65d79ed65ef2fcb624342695d1a555f74a43ac186d3ead8826d1a9a094b",
+      "gitBlobSHA256": "43bad850b333267436ff651bdbc00860b8dcbb20ed188e26c5f1c169a14d4638"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/generator/mio_icif_diesel_generator.java",
+      "sha256": "9da7b31570d84cd38f494b1742d9e2ca0a59aacb0daddd6153d3562fbbf2f34e",
+      "gitBlobSHA256": "8c89adffdc6eada262148f49052ad240734099ef8e88446c68fbbf1f43b93111"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/generator/mio_icif_drop_generator.java",
+      "sha256": "76e8883016ba31edc4323f6565e3998447f88c80014f64bcfe9ec7bcae4df985",
+      "gitBlobSHA256": "4ed836ed7133d03c12193e62770b8ca9a12bedde9ae01222615c8c628e404406"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/generator/mio_icif_experience_generator.java",
+      "sha256": "1194ea3f05fb59e922dd8f21fccabd828167eb018136b520ba8afa02ec2e6b59",
+      "gitBlobSHA256": "e3422f6fb0b6960d77e1da5d1a9b3f36e25014e7329f980291596aa9c843091d"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/generator/mio_icif_fluid_reactor_handler.java",
+      "sha256": "7a21a6049635ec0b891dc2cfc79e1291c6040eb62815ece83cbaab999ce344eb",
+      "gitBlobSHA256": "7a21a6049635ec0b891dc2cfc79e1291c6040eb62815ece83cbaab999ce344eb"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/generator/mio_icif_geo_generator.java",
+      "sha256": "5f0b2868c14915c3cace40b2dd6538d203e2d4aadcb7de3abbb2abdbaae205bd",
+      "gitBlobSHA256": "c3fe4675972ce5b1a515ce3d7b9647e8eb13e45540338cc1db43363b0bef36fa"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/generator/mio_icif_kinetic_generator.java",
+      "sha256": "819d330930f492d10f648f0befeb540652855860981bc8ed50a0607c6ffbc166",
+      "gitBlobSHA256": "34df4b7d39eeaa2bfd19c71494f59e4e3a664104bf8a1fc5f6bf4438aa8f65f8"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/generator/mio_icif_nuclear_reactor_generator.java",
+      "sha256": "70b34b1fa08ec4f204456e30ec771a07b95be7844bf75a05f38647b5e379d15f",
+      "gitBlobSHA256": "a9e868c3a3bf4c3681a32dd298a5ac1abf5bd0c9b8fa2163484eb4481bc6a1a1"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/generator/mio_icif_rt_generator.java",
+      "sha256": "01e5a50af1d232a9a933c05722c7170bd17c26ac01dcb831b45f2ae1191d0462",
+      "gitBlobSHA256": "424c07bdf16873e5d26af6a509ad9ec87f0a7f3ac8f6f41a31ec30fa181c229f"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/generator/mio_icif_solar_generator.java",
+      "sha256": "0cfd006a47fd7ca0eefaafe81b39088cab1d5894c3f44d93cf2331a1bfa9e686",
+      "gitBlobSHA256": "9c752583960fa0045396417b3a320c48bbaf3c726da2457ff212072be82d10f8"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/generator/mio_icif_stirling_generator.java",
+      "sha256": "2c6435b58a69f608cc04f4bd4d8fcf0287205b079f24ddd9e79b6f0e3493234c",
+      "gitBlobSHA256": "2c6435b58a69f608cc04f4bd4d8fcf0287205b079f24ddd9e79b6f0e3493234c"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/generator/mio_icif_water_generator.java",
+      "sha256": "1466f485aaf547118b38b7665114a45701bd23c2c33f1d009eeb7312f7a2190a",
+      "gitBlobSHA256": "ce70fdb99a11786325da074ecc59c898945de6b22120054a0854dd35b83c7c2f"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/generator/mio_icif_wind_generator.java",
+      "sha256": "7db7c03fcd0b92bebb294617565856b6c7f4a28ba7e30239167844ef308128f7",
+      "gitBlobSHA256": "fcd03274a8d396ae46394e38f1cb095d335a06b6c246b7e8b1da4527bd3db74e"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/mio_icif_Energy_Block.java",
+      "sha256": "16f026eaaf3e0d3f675d39c650772d56961f58540ce250bcbcbcfeb8c3406930",
+      "gitBlobSHA256": "16f026eaaf3e0d3f675d39c650772d56961f58540ce250bcbcbcfeb8c3406930"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/mio_icif_Energy_Container.java",
+      "sha256": "a160133e02a8eeeafe1648cd1ced4e45a07ea032ee0f11d47c78cf45ea87d889",
+      "gitBlobSHA256": "09fed47eee0f5afe1a33de2e637505ef02c7fcd6c1d0579bffb33b94060fe658"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/mio_icif_Energy_Generator.java",
+      "sha256": "6d6291f1b0f57265371cf5bb1c933f8357c03c078c73b50dc004d9d99fa09b15",
+      "gitBlobSHA256": "4cd85e8e7f82d6d7dc961a06586886fe9efe91b3393118ad4e7ab7d9bca8906f"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/mio_icif_Thermal_Generator.java",
+      "sha256": "53c6b1ec59e4eb0eff87889bf4c31db7580fd59054bb81fda8da03c60e79bdfa",
+      "gitBlobSHA256": "a316d7fde9ee5181535ee4a3ee9d2c4640b93df672097a9eb9d2b5e70c95fa5a"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/mio_icif_producer.java",
+      "sha256": "b6dcf149b1bccf7b7ee3ce328d876f76ae41563ccfe789b3dfdd6fd579d71b12",
+      "gitBlobSHA256": "f463eefd4eabd551510cdaa768934b77e8fc2c47d95a1bf0a5dbfae1ddbe6891"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/mio_icif_wire.java",
+      "sha256": "1e5fc9ed7fc98f3e36813ae2e7a9d2f58c15f6a49af81659fc03362fb3b07fdc",
+      "gitBlobSHA256": "1e5fc9ed7fc98f3e36813ae2e7a9d2f58c15f6a49af81659fc03362fb3b07fdc"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/pipe/mio_icif_pipe_default.java",
+      "sha256": "22445e42a23bc41ea9bc7fc4b6db2bf191c0168a7add463b6d82c6d7f096b971",
+      "gitBlobSHA256": "64d434cd865cf06ad31b1ebddbf1e0d59f591ea992f17760de25906b90d20abd"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/pipe/mio_icif_pipe_item.java",
+      "sha256": "202071aa9c40ff219d1c0952167276818688002cb247b3dd7e345a5e20931b4c",
+      "gitBlobSHA256": "b11be24ee5d4f9df7446c25c4c9bb3083646f215025c70d7538e285b64c77101"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/pipe/mio_icif_pipe_item_extract.java",
+      "sha256": "10e095b472debc5ac0a5cc26c01edd80ffbc0ffa6dfbdc5c53bb36b595cdf899",
+      "gitBlobSHA256": "d645e8b219a65edc1f052df084f42a1cba93de081e724ee7cafdd134ee34482b"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_advanced_miner_elc.java",
+      "sha256": "831929550342691a6c3d98884582644860f71522039638fe3d165b378c487bda",
+      "gitBlobSHA256": "10c93836ce564299f4f885fe0f1ae47e92c66783553acbf288f6486917b52e97"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_blast_furnace.java",
+      "sha256": "1a90337d0ccd0634d3ccd93f9082c0d56133ed137a139fdd25347ccc4942fec8",
+      "gitBlobSHA256": "69c3dad05d13073db296609067edea380f7ed22dc419aa6cb2900c26674464e6"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_blast_furnace_elc.java",
+      "sha256": "2c8f89f86c7beec94f1f9dcf1b731439971043a603ae5b57c88aca35200e9e0f",
+      "gitBlobSHA256": "bd18414872d7bad0b48a3939849b25c8c22eee3ae687703ec84c74ec83e9d646"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_block_cutter.java",
+      "sha256": "f609485b9bb7809b8b00b8834ae765ca0f683b7132451af669edefa8702a389b",
+      "gitBlobSHA256": "537323a360c573bd334a60bcaa5597a5e443b5e69b6aa49effae889e8636c2c7"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_centrifuge_elc.java",
+      "sha256": "2674fb639bad08581efb624c2a6a2f4852cae79ba46e0d0eefee9c888292b6f0",
+      "gitBlobSHA256": "01528010be095981278528d9c88903c3b80d0339dfa63597bd1380b8f2167502"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_chunk_loader.java",
+      "sha256": "757d38e998211d2c8efb0b492540d1b45d1ca7d4dac2a1a4a0791250082f295b",
+      "gitBlobSHA256": "0ff20aabdb76b56ebb78919bf0491b0402e3b43c0eca53435c9c72b702859cef"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_compressor_advanced_elc.java",
+      "sha256": "ca77937a2bef520c945c701fcb26cfc8e1d17cdd40b781bfac31fcbc675f1fcf",
+      "gitBlobSHA256": "c761bdd82601f0ca7d53b9c8ff07c9f432b86efcc9c2632d4a9b4d4f457072ae"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_condenser.java",
+      "sha256": "fcab09e2bd2b210f367d0282e05238e6ffb73ef7832ac1daeac4e22ee61389d2",
+      "gitBlobSHA256": "fcab09e2bd2b210f367d0282e05238e6ffb73ef7832ac1daeac4e22ee61389d2"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_electrolyzer_elc.java",
+      "sha256": "cd4bf7086ee39b39d085e8a3a5b7dd598324fd928eabdec2546b970a08238705",
+      "gitBlobSHA256": "ebfb5f48e1f7885404da53a5470c3ed040f10f48a95c16f9600bda8b7b9f4d3e"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_fermenter_elc.java",
+      "sha256": "91c8310e17d7f73dbc62d0aa79fff753cc3c6d26ba6b1c52140d3e1c9ace6af8",
+      "gitBlobSHA256": "03eaf1b5ed876d47131f35674ec4f1ae157912ce7acbc4b7dc9f8bcc4d308c58"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_future_elc.java",
+      "sha256": "4bd4d5dce54517f9a2c58ac09c2c22de08811adbc4766f791d20ba8d9269bd98",
+      "gitBlobSHA256": "a1b7b34b98f0a8433622f8cf039cc24a83c258fd5c9a722d704dfdc090b82375"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_induction_elc.java",
+      "sha256": "f6019555b2069e6b91b7ff2556201f5cfc4bc42530d89e912c9f36aa9ddff964",
+      "gitBlobSHA256": "086715390de44f6546b2e0474d7d0b121471fbe00d0ae99eef973629b6b1bf95"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_matron_elc.java",
+      "sha256": "55acb372d418bd3377aa8363e9c248a215296caa92bf522f0e7f96409cd67543",
+      "gitBlobSHA256": "7370b419bb6de5d14c8efd41b9088a020ff0ab57b2128baaec48a56711d9bf63"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_matter_elc.java",
+      "sha256": "f11eedac13b976056aef4f7c6839f20eaaa24d8a92aa01e94e88f1cd603c6380",
+      "gitBlobSHA256": "f11eedac13b976056aef4f7c6839f20eaaa24d8a92aa01e94e88f1cd603c6380"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_megnetizer.java",
+      "sha256": "4857abaf779fa91a88ac0661aa7e6eeded1fe24d5578e8446ad9c27ecccbac18",
+      "gitBlobSHA256": "782e0324c1f4ce4b10458579b4a08ace3d200d17205ffd1edc014c8fd01bc8dc"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_metal_former.java",
+      "sha256": "bcc88fd618679081c22b5cc0d2e886cd484c401dd22706b169f1f9c3057cd2bb",
+      "gitBlobSHA256": "e0b9a55ff7aedcbb1b4defd9a503d6c5ca3616cbf88f00c9de55a05def6799a2"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_metal_former_advanced.java",
+      "sha256": "eb180b7f113d4f2ff680f59dc01919b253da6b2a02df9a1aa0a9453e561f4122",
+      "gitBlobSHA256": "adf87f1e6fed0e2690e31f4d580f1e50fc88a3e1a57b6dbbf5042927ab6987ae"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_miner_elc.java",
+      "sha256": "eccd51c2ee0904f53a33899a63d20a89a10e20419bc5cc9e2035572e66583479",
+      "gitBlobSHA256": "23158447bedcf2003baed6e4ceec7b854627000599d85fca3384239a6b61630f"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_molecular_transformer.java",
+      "sha256": "a434e64cf77d2615883a9670e9e2b1f900c6faf40def587ad775aad1dac0f273",
+      "gitBlobSHA256": "777b39329089ce910abe2c5312bcbc01b134037bb4d7195a31cb21d65eea9828"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_oil_refinery_elc.java",
+      "sha256": "96247c2fcb534b57c955ecf04f65711e9a841ee180a288c64602b7f2aa21ba64",
+      "gitBlobSHA256": "f46c3d531a25d7d2a0984acff757dd4976bc8439d6a489b917a73455a28c31b3"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_pattern_storage.java",
+      "sha256": "a039ce46de9cb32bd4076229080a04205f6c92805205c1ce33bb1486cf2ac221",
+      "gitBlobSHA256": "a039ce46de9cb32bd4076229080a04205f6c92805205c1ce33bb1486cf2ac221"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_powder_advanced_elc.java",
+      "sha256": "b052757a91eacffc93a06e4682f25bbf3e7a95b97ca943b9dc6d08ed9829d499",
+      "gitBlobSHA256": "6a67dbb18c08f668568ab51bc85c113d69ee94627b0fe6ba94c62a7d53fa2146"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_pump_elc.java",
+      "sha256": "2cd6fb3c3a532a13238f7d53515f3ba6f0896736603cc52decf303d5075664c2",
+      "gitBlobSHA256": "2cd6fb3c3a532a13238f7d53515f3ba6f0896736603cc52decf303d5075664c2"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_recycler_elc.java",
+      "sha256": "343446325072a766facdd198bb5a4868647f35e81c95fa69f2a6b4e760e13456",
+      "gitBlobSHA256": "7e3056b6ac5eee971531c37360d29ff2f784ce419329d26feff94a9c5cea8117"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_replicator_elc.java",
+      "sha256": "0293dfe405e8d4a77cc65955ae5d4a237855ccb00adedf0db45a346b650f9be5",
+      "gitBlobSHA256": "0293dfe405e8d4a77cc65955ae5d4a237855ccb00adedf0db45a346b650f9be5"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_scanner_elc.java",
+      "sha256": "c0fed5d0b2a08b5917d7ac63bbf3d95cd1cda8f80167e4fa16777d47262a849e",
+      "gitBlobSHA256": "c0fed5d0b2a08b5917d7ac63bbf3d95cd1cda8f80167e4fa16777d47262a849e"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_solar_distiller.java",
+      "sha256": "93b2b9935486baad5df264703d2f0b0804376593d087bef4483c609b78ac1b08",
+      "gitBlobSHA256": "535cb77766ae3622c73ab42b64034674c3ce903e9583cf7e3ff1cce2a697c96a"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_tesla.java",
+      "sha256": "20faf50d549f6fefce76874072d409625921a57319e8a7b01fcacb085b5b94f9",
+      "gitBlobSHA256": "20faf50d549f6fefce76874072d409625921a57319e8a7b01fcacb085b5b94f9"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/producer/mio_icif_washer_elc.java",
+      "sha256": "3cf34cb66af0106bd7481d93a59a24501c82f84f460ebe86e53a2e20698e04ca",
+      "gitBlobSHA256": "26958a5fedbc1bc557490f8ec24f5d4d10412e4992a91ed444d15764b3b844d3"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/reactor/mio_icif_reactor_chamber.java",
+      "sha256": "2086a246344f016803113a55c0dd081d32ef78009d274c780797e0918aee9c19",
+      "gitBlobSHA256": "829e8a65ef26db65ca4ca2ec821de14a060d9c1e8c404d3df3ab8f8d7359810d"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/reactor/mio_icif_reactor_fluid_port.java",
+      "sha256": "4905e3ef58ac07373c15da5894d9e61aef752508c97d16f8bcd35d29088db461",
+      "gitBlobSHA256": "9eaf72dc5cc0b5b6153aee0cf1bbab12896244b03899c2e369d2fcc3270bf574"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/slot/MachineItemHandler.java",
+      "sha256": "22ec4e582e923f8208ccae4c4fe716eb13e9ad0c56b853db73a834433f223954",
+      "gitBlobSHA256": "3b47f2fa73b946240117bec0d4dd793b38fa2efa841bb1d96659a5240e39a4cc"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/generator/mio_icif_Block_Nuclear_Reactor_Generator.java",
+      "sha256": "477fc7ef8f4161bb253606a8099a8cf7a4c4e69cd41e491015b162b82082e71a",
+      "gitBlobSHA256": "81817a133e72d3b164f8f5cc3bd387799d94e3e8abfcf2f109d6fdf3d45d050a"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/mio_icif_capacities.java",
+      "sha256": "71f1ce4d17f9d75dc28c26d31a41a113039b931eb6c697deb74c55d1d9e83f04",
+      "gitBlobSHA256": "a57bb711724949b0b324b07a08e7728f07a7fe803d81555d4e53060fc62912a8"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Blocks/reactor/mio_icif_Block_Reactor_Chamber.java",
+      "sha256": "3f649405b9be7f71fffda4f1488d17d861446e3b27accaddcaee91c95cfb2d21",
+      "gitBlobSHA256": "ab7e45840f83d7b9b6f700af72a64b361ef90737819acb9a2bd3152b058f342c"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Items/Armor/mio_icif_advanced_solar_helmet.java",
+      "sha256": "117074bfbb169adeaefbfb792b8074b0231f7eb76e95d1d1681abdaa7b807e6f",
+      "gitBlobSHA256": "a3325ab05e118c717173ba7e61e2b8cb930328a51e394122eb51c50005743108"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Items/Armor/mio_icif_chestplate_advanced_jetpack.java",
+      "sha256": "bf493af84edbd8197c6a92e73b2a3850836cc3707a070978775075f509f4e81d",
+      "gitBlobSHA256": "bf493af84edbd8197c6a92e73b2a3850836cc3707a070978775075f509f4e81d"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Items/Armor/mio_icif_chestplate_energy_pack.java",
+      "sha256": "72c7afc9bf98fdbc2224a33c057e1f6929047f837774a0eee7ae83f92dc10073",
+      "gitBlobSHA256": "72c7afc9bf98fdbc2224a33c057e1f6929047f837774a0eee7ae83f92dc10073"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Items/Armor/mio_icif_chestplate_jetpack_elc.java",
+      "sha256": "12c79077e76bfae8a44fde05055802f8f08d9b957f22728498465ac97998db8f",
+      "gitBlobSHA256": "12c79077e76bfae8a44fde05055802f8f08d9b957f22728498465ac97998db8f"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Items/Armor/mio_icif_hybrid_solar_helmet.java",
+      "sha256": "f41209613c7fc7126913705a4d387e4fc2a95e4add5bcea2a849b7dc69e3b594",
+      "gitBlobSHA256": "a2f40517ced5238295073c5d9dab007393c330f259088ad484aa2eaa53fdc653"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Items/Armor/mio_icif_solar_helmet.java",
+      "sha256": "f9e656cf31ed51c2c94a2f6e7a5b503fcbcda5fb6aef1b2d032bbd6152008439",
+      "gitBlobSHA256": "f9e656cf31ed51c2c94a2f6e7a5b503fcbcda5fb6aef1b2d032bbd6152008439"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Items/Armor/mio_icif_ultimate_solar_helmet.java",
+      "sha256": "8220ff8ef878c10bf28c315aeb60c0a0f1b6ade364c849a9128c90ee7905ba4d",
+      "gitBlobSHA256": "49f100fadc88926a53069a6ccd14ee6d7defc7da1631402a28df2ee1eef82c1b"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Items/Crop/CropSeedItem.java",
+      "sha256": "cbd2d9d02f5c48aca752018f31f60740d33b57ae3af2c231c09c674a24d99a8f",
+      "gitBlobSHA256": "59088a13271cad1e34fd56b1849a72aa7faa542c995548223910112acdfeabe9"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Items/Crop/Enriched/RichSeedItem.java",
+      "sha256": "088537fb2306ca113dd43b376434aa0307563bccd2b77608ee82105eb83a34dc",
+      "gitBlobSHA256": "f928a3990e48149747985f9855be5d2c6e773eeabfaefeb359f499370de36cdd"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Items/Reactor/mio_icif_condensator.java",
+      "sha256": "5e7418f88f628a791ed01ec973f9038dba348040b20857c21d94eba4711fd8b5",
+      "gitBlobSHA256": "5e7418f88f628a791ed01ec973f9038dba348040b20857c21d94eba4711fd8b5"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Items/Reactor/mio_icif_heat_vent.java",
+      "sha256": "159e02496e40cc70652d93222cdee7cd26ed958220c4f091c1a816691093b9bc",
+      "gitBlobSHA256": "159e02496e40cc70652d93222cdee7cd26ed958220c4f091c1a816691093b9bc"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Items/Reactor/mio_icif_mox_reactor.java",
+      "sha256": "344590536073df6e593d67257cba7475bb323e389800a0e98e425f41e67489d5",
+      "gitBlobSHA256": "344590536073df6e593d67257cba7475bb323e389800a0e98e425f41e67489d5"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Items/Reactor/mio_icif_nuclear_reactor.java",
+      "sha256": "9e007c9ee99b75741d71653e4d96d2be38d0d506da1823b3cd693887d55380e6",
+      "gitBlobSHA256": "9e007c9ee99b75741d71653e4d96d2be38d0d506da1823b3cd693887d55380e6"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Items/Reactor/mio_icif_reactors.java",
+      "sha256": "5b7b3e50f056a1e651e8e7b4afeaba801a82e9d28a1ef597ef0b3582ec17fbe4",
+      "gitBlobSHA256": "148e494c05db5f4c8d76cece5c08849aa90cf1a2fb382264ab9118359c69bc63"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Items/Resource/mio_icif_memory.java",
+      "sha256": "7903d0fd2e50a63134d8786a8655f4cf4e33c32ec440417aa36b3673b357679b",
+      "gitBlobSHA256": "ddb6869454d1a77a5e830e95700db2fd71b0411543cac41cb667c30717e4cdad"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Items/Tools/CropAnalyzerItem.java",
+      "sha256": "b3259cd2e7bdbbcc48d2238da86d21e29fe045eefff88fd456cf36fe385eb335",
+      "gitBlobSHA256": "b3259cd2e7bdbbcc48d2238da86d21e29fe045eefff88fd456cf36fe385eb335"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Items/Tools/WeedingTrowelItem.java",
+      "sha256": "9c21ed01367579be8ff92b297efa75417cac21aa83ac5acf26e559a3f4a7823a",
+      "gitBlobSHA256": "ce26e0334c207fd845429619db92f664657afb903be025ad1ceaf970f832c07a"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Items/Upgrade/MachineUpgradeStats.java",
+      "sha256": "471dd21af611e1e9e214d2a6d4c6236b6aaf49f97b28af00573577c4d87cc6b6",
+      "gitBlobSHA256": "dd32314b4dc340f4a523d1046e66b0f54c0feb6b616f91a31792d3b796ba9783"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Menu/Base/mio_icif_machine_menu.java",
+      "sha256": "76d8e13fa247877f4cfbe99e87a57aafe769b062fbdc3c5862784f73129725f9",
+      "gitBlobSHA256": "c598b8ef413baed36f61265092772dbac757d591a06b80c655680a845cca1773"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Menu/Generator/FluidReactorMenu.java",
+      "sha256": "fce927271e0b8503521eafcf539e828b56e37bcbef19423361a3e91178034729",
+      "gitBlobSHA256": "875803a64a1fa9ffd5bdc276fc5cb2825ec689166c13657f012f03cc2728e523"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Menu/Producer/CondenserMenu.java",
+      "sha256": "ac174627647521b697b93132f4271c40aca1f24f1d74aa26dc30fbcf7827b079",
+      "gitBlobSHA256": "6892b9f6a624d3c1bd5dba450f31cecfb6f5184f5ac8bbda55aa144b28c4dc48"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Menu/Producer/FutureElcMenu.java",
+      "sha256": "99cd1a63d64fd9e4c2bbc8a574671724d30954030000bf42c4c4f26c641f4150",
+      "gitBlobSHA256": "9ceb670d2fc8179afa039c3985a381f10d18c9bdbe3bd81708f427416d1548b4"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Menu/Producer/PatternStorageMenu.java",
+      "sha256": "8815a5005166674656a1d3300c3ba8df8d0dabce61c07ea95de5cf6fabe5d45e",
+      "gitBlobSHA256": "23f6a7a6e32dff9e4fcf4fdbdd45963cbb4b71b30427ea783239330fe247662c"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Menu/Producer/PumpElcMenu.java",
+      "sha256": "9d41619e0574ec38281c3446daf20e6fbc099a56cb8f02a25730220b07927d05",
+      "gitBlobSHA256": "eb9ac997f99e5bbee0a272690268d95a83e4b31f13281a9ec66d8ce587cac423"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Menu/Producer/ScannerElcMenu.java",
+      "sha256": "eec2d6f239e3db994e258c863e1a92b78d501526b9cfd6574fdc1f03b8fc9685",
+      "gitBlobSHA256": "abfc3aeda8dff52d9ef116f8497a6e341901941f7eb7f31d0ee1eaa2fddeb097"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Menu/Storage/BatBoxMenu.java",
+      "sha256": "30b35105c2687d49ca6e6f24069bba8696d5c2dfc2b76e7b3ba28b97f2a4ba64",
+      "gitBlobSHA256": "d34d3bb41605f37654cbc89292ad612d434c7b7e9a1539592b710100385fe6af"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Screen/mio_icif_gui_condenser.java",
+      "sha256": "f399482f0b97a50f2e8a77bdd7c6c9417259585781d2e5bceb252c21fe5a627f",
+      "gitBlobSHA256": "309f20d8d037cb450d213f3eadb0e86b69d5f7746704d9bdb7e493aa32f50603"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Screen/mio_icif_gui_pump_elc.java",
+      "sha256": "19d792a3adc1c3a92e1178e7adbf60ca70e51740ec877a3a88d686ac58f438c4",
+      "gitBlobSHA256": "530a527bc822c97dbd9ed6d0d0434afb4c8c5099c0704efee32ea2f3bba851c8"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/Singularity_Iteration.java",
+      "sha256": "daeef2d7b3f942ce8488be1d970d24ebf0479438f90c1d0e748cd7824666d794",
+      "gitBlobSHA256": "0be4cf9187cf7f0f25de4f8d93cfe715f7bc8e6617637d1c0c1c070992b6d45f"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/api/crop/PlantStats.java",
+      "sha256": "7c985251f51eb5d806bf5011650e29575bccc547f6bd27e2c6ed54b4d8c3aa49",
+      "gitBlobSHA256": "7c985251f51eb5d806bf5011650e29575bccc547f6bd27e2c6ed54b4d8c3aa49"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/api/crop/PlantType.java",
+      "sha256": "dfc4e3977aea0c85df8772221625b578feb95f8dd96dad6298b6f550e9b79fdf",
+      "gitBlobSHA256": "dfc4e3977aea0c85df8772221625b578feb95f8dd96dad6298b6f550e9b79fdf"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/api/internal/crop/PlantHybridization.java",
+      "sha256": "d586ea30d1c70801d0426ce0646bd26218781f85b10b03aec473196c74dd67a2",
+      "gitBlobSHA256": "d586ea30d1c70801d0426ce0646bd26218781f85b10b03aec473196c74dd67a2"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/api/internal/machine/GenericMachineBlockEntity.java",
+      "sha256": "56273fbbac8d7288bd4aea9c7aeb8ca472f797be790a303e9b3cb14e44329130",
+      "gitBlobSHA256": "ba79e417ebb128e1518704bb93b63126460075029844b0fa05e9ec3f517a3b8e"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/api/item/AbstractBattery.java",
+      "sha256": "5c5e647f0413071700ef5d64b4bad6a4e1197191b8fad5c601883521c600d381",
+      "gitBlobSHA256": "ff56cb852e81aca18ad36a6befcf7b170bd96350921ec7688bc09148e8b32635"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/api/item/AbstractElectricArmor.java",
+      "sha256": "2972505ab700ab82117ba6711108140f42ff239b06d49fd2b0ac838ede39f34f",
+      "gitBlobSHA256": "5290edd48fa306e59d35d6d9585c9e806f0c01c3c733a2d3aca8f0f2c5cc776e"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/api/item/AbstractElectricTool.java",
+      "sha256": "19052f4eee941aba39d841f86180a0084d9e2654a6d98fedb8e6c2d49a8d810d",
+      "gitBlobSHA256": "9c0ac8d66d8e359994d32b86d8dd49ec0487be60e2d3cf120212203bba14f976"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/api/item/BatteryElectricAdapter.java",
+      "sha256": "c75d3faf356c8fd00826b9ed6a43c68e4a7a2aa261090d0022a5fe33886b66db",
+      "gitBlobSHA256": "c75d3faf356c8fd00826b9ed6a43c68e4a7a2aa261090d0022a5fe33886b66db"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/api/item/IElectricArmorItem.java",
+      "sha256": "3cbe2b67e9484f8085cf747ca88ace19763b61038a45a9bcedb56026c0697e5b",
+      "gitBlobSHA256": "3cbe2b67e9484f8085cf747ca88ace19763b61038a45a9bcedb56026c0697e5b"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/api/item/IJetpackItem.java",
+      "sha256": "f05d3d00764350cf76731f0840d052c87cf596a90c9d5067b68b61993804d57e",
+      "gitBlobSHA256": "f05d3d00764350cf76731f0840d052c87cf596a90c9d5067b68b61993804d57e"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/api/item/ItemAPIImpl.java",
+      "sha256": "b7821ba9c4870b3e802b6ae71cf89f56f84bf169307a08af9217d650864d5382",
+      "gitBlobSHA256": "80b613ea422b2561d36cbeb81d2558ef2aaca0143140a35f03073d87a98c1477"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/api/item/electric/IBackupElectricItemManager.java",
+      "sha256": "4cf5f1e20b5b5dd1410bca887fb321b80fd6ee1d2440d05d3235f50ac85d54dc",
+      "gitBlobSHA256": "4cf5f1e20b5b5dd1410bca887fb321b80fd6ee1d2440d05d3235f50ac85d54dc"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/api/item/electric/IElectricItem.java",
+      "sha256": "90b49b530dcbf24079a7ec2fd13913f99fad0076e016070c1ae82c6998f7facc",
+      "gitBlobSHA256": "90b49b530dcbf24079a7ec2fd13913f99fad0076e016070c1ae82c6998f7facc"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/api/item/electric/IElectricItemManager.java",
+      "sha256": "4a3285c46cc3b2535778f24c0cfa2b6e63df6d4cfcdc49ab8775cdffe37b29fe",
+      "gitBlobSHA256": "4a3285c46cc3b2535778f24c0cfa2b6e63df6d4cfcdc49ab8775cdffe37b29fe"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/api/item/electric/ISpecialElectricItem.java",
+      "sha256": "66662c04bd90394be9e25c4d7f32659742c16107f179b1a009c804c9f64d128d",
+      "gitBlobSHA256": "66662c04bd90394be9e25c4d7f32659742c16107f179b1a009c804c9f64d128d"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/api/reactor/IBaseReactorComponent.java",
+      "sha256": "afd38941edf0d0dafd4fb29b5d314269bb4362396d01784d97e6b20e2bf5e32b",
+      "gitBlobSHA256": "afd38941edf0d0dafd4fb29b5d314269bb4362396d01784d97e6b20e2bf5e32b"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/api/reactor/IReactor.java",
+      "sha256": "a426de8c94f40c44dacf14bc50c1221e0cc5a5dc030bb6e7ff8e80d17a7ad4e8",
+      "gitBlobSHA256": "a426de8c94f40c44dacf14bc50c1221e0cc5a5dc030bb6e7ff8e80d17a7ad4e8"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/crop/PlantEatingPlant.java",
+      "sha256": "dfd64a073026da3851c24ab992e71d199076879e7dd7522965c2f7d39aac8374",
+      "gitBlobSHA256": "dfd64a073026da3851c24ab992e71d199076879e7dd7522965c2f7d39aac8374"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/crop/PlantWheat.java",
+      "sha256": "29606deb4b02602c9dea2c11601b61fa80b2d3190362e9e65df9bd81b374c0d7",
+      "gitBlobSHA256": "d806e28b80a0165555ddb2b45c6029f3f55618ae97229b46f62b439e671fd360"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/energy/CustomEUEnergyStorage.java",
+      "sha256": "61a03ee89dbf69a3d0a707b7c8b622a1d331e8dcce1c5253c271cd7b619b9758",
+      "gitBlobSHA256": "afc7d9d50794b630bd4fc34e18645f8d9ea265417f071e5d7445c8bd2bf2788b"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/energy/heat/HeatStorage.java",
+      "sha256": "e78bdf765f2af278e76551f4cccd91b65713b6bcd118f8f8147ec8f71d4ab624",
+      "gitBlobSHA256": "39f1f69bbe420581a4383a2a4ea2210a42fcfd8a37da79e5471692e2ca8c8c65"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/energy/heat/IHeatStorage.java",
+      "sha256": "91025bfaee7407f3852b8f4010769fda62313c4bd161a81aa3970e5283164983",
+      "gitBlobSHA256": "933f9a16c09fb3af6deeaecf62ea6bef5f01168bef53131b32acac6916adb720"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/energy/kinetic/IKineticStorage.java",
+      "sha256": "f12f8fccefdfe55e3a934f22b9718b1b9c4c4f2a95455d3d1154da068db8766f",
+      "gitBlobSHA256": "8f23c4ecab4a3e8a8ae3111fb795ef14f8d4549d53745e2264619238b8cb3788"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/energy/kinetic/KineticStorage.java",
+      "sha256": "318f7a2787c4ed34303660f3f313dd0de4b05d3cf54504ab2ed0cbcfe6abd2e2",
+      "gitBlobSHA256": "fffef24ed682797f70ea3e69b0cbe7f2bb576eb9800ba72c6c21589fb0f45371"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/event/CropRegistryEvent.java",
+      "sha256": "2b5c4624da65d16aa8ef42dfd7d34d045d1064b87d7427cdf027cf0c98093354",
+      "gitBlobSHA256": "2b5c4624da65d16aa8ef42dfd7d34d045d1064b87d7427cdf027cf0c98093354"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/event/mio_icif_events.java",
+      "sha256": "150901256fa1971366c819a6fd8e9ff66cc660c21a2e7a2d692d9bc84ae3ed97",
+      "gitBlobSHA256": "c7287848fc1fd536e662f93fd3fbb435c5de9b26912da58dec1e7e1771f20384"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/integration/curios/JetpackCuriosAdapter.java",
+      "sha256": "4ad67a4fbe8a05958787fbbb7521c2b3e09b06d29486a3ca3437298a81773224",
+      "gitBlobSHA256": "4ad67a4fbe8a05958787fbbb7521c2b3e09b06d29486a3ca3437298a81773224"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/multiblock/mio_icif_fluid_reactor_validator.java",
+      "sha256": "ba3adab6dd6b563c93c419184a3040c0a0163fea5fa060939794b511242be8d0",
+      "gitBlobSHA256": "ba3adab6dd6b563c93c419184a3040c0a0163fea5fa060939794b511242be8d0"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/network/ChunkLoaderTogglePacket.java",
+      "sha256": "0463bdf5ec430f208b757c6a552bc3e8c1e6d2b0ccd705dc6aec70368075e3da",
+      "gitBlobSHA256": "543a28df9b4673c7feb2825aa8396f0fe8f2ce25d46194c1ec99d7a40629b3ef"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/network/FutureTradePacket.java",
+      "sha256": "4768419b2d7d34934933e9720ab1e50e7d94508c3c2ae950b0d38d6968b8e29a",
+      "gitBlobSHA256": "5fda0c4268e8625dc1cfdde0065b6c65fa2636e6e1cfafd5b6fa19b2cab78bf3"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/network/JetpackKeyStatePacket.java",
+      "sha256": "55eaad57c37418501ad33b07a79e5d1312da056983112c2b11c13580add369a7",
+      "gitBlobSHA256": "55eaad57c37418501ad33b07a79e5d1312da056983112c2b11c13580add369a7"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/network/JetpackModeSwitchPacket.java",
+      "sha256": "18be2d1f8d8f650219047b8a5740f48f862bb423e676948e12d34edc2bb43ed3",
+      "gitBlobSHA256": "18be2d1f8d8f650219047b8a5740f48f862bb423e676948e12d34edc2bb43ed3"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/network/ScannerButtonPacket.java",
+      "sha256": "d20ca63c3fb25f61bfe02f5ec9a69e77e6712b5f45e269bf7e4590a768372463",
+      "gitBlobSHA256": "4a7cec0cc6a96d6288d2f0fcbb883076bfd0219d587cdf04c6c910de7802a8ce"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/network/mio_icif_KeyboardManager.java",
+      "sha256": "188b07a7fef963eec103bbd43628902fda9bf6f32fba16e6db3245755171d4e2",
+      "gitBlobSHA256": "188b07a7fef963eec103bbd43628902fda9bf6f32fba16e6db3245755171d4e2"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/recipe/compressor/mio_icif_CompressorRecipe.java",
+      "sha256": "31180cacd2426f5d11a9835e55252dda93b4b7f0ff7f63e77bcd89218b15e0a8",
+      "gitBlobSHA256": "0fc88b930277d3d8dca7c8119aa75e43aae39adb4336944611021fab1c3d3712"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/recipe/extractor/mio_icif_ExtractorRecipe.java",
+      "sha256": "f4c044a88a33adcc67a5f7a0dea563b07055e7ae2b5a56ab64aace985b405b4c",
+      "gitBlobSHA256": "06eb5be352af4ada03f422e19fc181b795d1ffe03f8e01b9411ca7043a478ab7"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/recipe/metal_former/cutting/mio_icif_CuttingRecipe.java",
+      "sha256": "bbd26f25b284bb34a90dfc2d6d3e9f4253af6b7f0d1dcb7fdb6679c54aaa0fe1",
+      "gitBlobSHA256": "40af75219c8ec6a194de5a24577ba766106b3866b3e8bfb6f470757b1ad6ab2f"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/recipe/metal_former/extruding/mio_icif_ExtrudingRecipe.java",
+      "sha256": "5ef7bef4b3e1567f0cc44fc96848578dc5df6349ed3443fa63015b71f6a5439c",
+      "gitBlobSHA256": "58008d340a885858e5bdd3ed096fe171f37df27d69816819c0ec45226fefc142"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/recipe/metal_former/rolling/mio_icif_RollingRecipe.java",
+      "sha256": "a144cb8bd950fe7fb045d62322af6eee0a6399beefeda54337ec40eec121eb8b",
+      "gitBlobSHA256": "316a33a833314f8ca9b2ee71deaab3ffc0e4d1d1ab27c001bcdea38e4d9acee7"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/recipe/mio_icif_PowderRecipe.java",
+      "sha256": "4d3ce158516641a1ed13c0517fda935793daadd6026e4aeef746d21979cc97bc",
+      "gitBlobSHA256": "77b1eb3492d8c08445692419349e25e692dab36dcf0bfa1955840b09023486c5"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/util/JetpackKeyHandler.java",
+      "sha256": "5f183c14422fd1abfd23cd89fe8a1c861b158e11416e10e1bf7a26aeecf7dfa2",
+      "gitBlobSHA256": "5f183c14422fd1abfd23cd89fe8a1c861b158e11416e10e1bf7a26aeecf7dfa2"
+    },
+    {
+      "path": "src/main/java/com/singularity_iteration/mio_icif/util/JetpackKeyHandlerClient.java",
+      "sha256": "cb4f243c4eb6950875e9bb9120858a256c125336c60ea85ca91039245d632fd8",
+      "gitBlobSHA256": "cb4f243c4eb6950875e9bb9120858a256c125336c60ea85ca91039245d632fd8"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/crop/ConfiguredPlant.java",
+      "sha256": "8320a7606453b50ed799fa6e9f212859b19edc51b79f06c9e346e93cd77a6045",
+      "gitBlobSHA256": "8320a7606453b50ed799fa6e9f212859b19edc51b79f06c9e346e93cd77a6045"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/energy/BatteryTransfer.java",
+      "sha256": "ad0f836eb1249c5e56c51db7fda1b7043bd3fea9d6e9be04ccf2a2998c85b768",
+      "gitBlobSHA256": "ad0f836eb1249c5e56c51db7fda1b7043bd3fea9d6e9be04ccf2a2998c85b768"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/energy/ContainerToTank.java",
+      "sha256": "a639df592965437aa80d763659ebad0cc995f6e384f82d44af5ba7951d7a966c",
+      "gitBlobSHA256": "a639df592965437aa80d763659ebad0cc995f6e384f82d44af5ba7951d7a966c"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/energy/DemandEnergySource.java",
+      "sha256": "68d9289b21181a572e5d61b80564fe2bb3baeb9fe0337ec30310a4a4b2580179",
+      "gitBlobSHA256": "68d9289b21181a572e5d61b80564fe2bb3baeb9fe0337ec30310a4a4b2580179"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/energy/ElectricMotorKinetics.java",
+      "sha256": "08013a222f117d1bc3a767f5ce71eb5b5dccf9614265e668a52579f80b6f0df1",
+      "gitBlobSHA256": "08013a222f117d1bc3a767f5ce71eb5b5dccf9614265e668a52579f80b6f0df1"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/energy/EnergyPackCharging.java",
+      "sha256": "0fc714d69222bde306461eee720c231bb090e4f0122427f5faddf444f25d10f9",
+      "gitBlobSHA256": "0fc714d69222bde306461eee720c231bb090e4f0122427f5faddf444f25d10f9"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/energy/FeLedger.java",
+      "sha256": "a0a00aaf16d4e3ab9a011c090025bc3fba6feded8e8a5843d151fed0dfb65853",
+      "gitBlobSHA256": "a0a00aaf16d4e3ab9a011c090025bc3fba6feded8e8a5843d151fed0dfb65853"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/energy/FeMachineBridge.java",
+      "sha256": "a6e6bd73220d603e4e77867141e22acc6405bec6925ee7fda41ef7bb1cbf87d2",
+      "gitBlobSHA256": "a6e6bd73220d603e4e77867141e22acc6405bec6925ee7fda41ef7bb1cbf87d2"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/energy/FluidFuelGeneration.java",
+      "sha256": "964873c997a5f85c46b14fca52300610c542c90a1b29244443530b574d2f87bb",
+      "gitBlobSHA256": "964873c997a5f85c46b14fca52300610c542c90a1b29244443530b574d2f87bb"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/energy/IndependentSiEnergy.java",
+      "sha256": "521cecae81085b90e7d57cb26d3b184111e24f3cf1bc6285a7399f654664f867",
+      "gitBlobSHA256": "43947c84d9a3b9872ee5c8b3b5d5dc06573f67dc1ad9a7a1b7cad799ba7d1ed3"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/energy/InternalPaymentLedger.java",
+      "sha256": "ea2746c553d11cba9c01653a3d0c9b0a912a6269c758e04c8836e8ddca96b19b",
+      "gitBlobSHA256": "ea2746c553d11cba9c01653a3d0c9b0a912a6269c758e04c8836e8ddca96b19b"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/energy/KineticOutput.java",
+      "sha256": "817847b51bed95f030c13c331cb82fb51aaa028c9bd4bf8bb4b2a7919d9eefc9",
+      "gitBlobSHA256": "817847b51bed95f030c13c331cb82fb51aaa028c9bd4bf8bb4b2a7919d9eefc9"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/energy/MachineItemDischarging.java",
+      "sha256": "45296a13b731219b4a4ff251a06791e1f027bd528a37f096e9efe1de4917e022",
+      "gitBlobSHA256": "45296a13b731219b4a4ff251a06791e1f027bd528a37f096e9efe1de4917e022"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/energy/OwnedChunkTickets.java",
+      "sha256": "198d59c1c5566086fbbe23a1ea16946f08211d199de62a33ff08ce5b2d8161c8",
+      "gitBlobSHA256": "198d59c1c5566086fbbe23a1ea16946f08211d199de62a33ff08ce5b2d8161c8"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/energy/OwnedHeatExchange.java",
+      "sha256": "c04636f719d78c83738673385e8ff8b45ce156e3041fbe0d04c3d9af9669750f",
+      "gitBlobSHA256": "c04636f719d78c83738673385e8ff8b45ce156e3041fbe0d04c3d9af9669750f"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/energy/PlatformHeatStorage.java",
+      "sha256": "865eb513199a2376584665193163f51be1cf05279c85d0e3a9096d89c2dcae17",
+      "gitBlobSHA256": "865eb513199a2376584665193163f51be1cf05279c85d0e3a9096d89c2dcae17"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/energy/PlatformKineticStorage.java",
+      "sha256": "1a7d2faef784115ff669dcdd1666968574429d45ff14cec2015ac7f6e6c15f8a",
+      "gitBlobSHA256": "1a7d2faef784115ff669dcdd1666968574429d45ff14cec2015ac7f6e6c15f8a"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/energy/SolarHelmetCharging.java",
+      "sha256": "29c7762487a93912e5480e605a794ff8cef4c6d159c51bda8d84142ff39164cc",
+      "gitBlobSHA256": "29c7762487a93912e5480e605a794ff8cef4c6d159c51bda8d84142ff39164cc"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/energy/SolarItemCharging.java",
+      "sha256": "7593b61109744e633ac81a8d2cc5e9f4caf2f3cad2ebd17be4f8e7b29fb9cf7f",
+      "gitBlobSHA256": "7593b61109744e633ac81a8d2cc5e9f4caf2f3cad2ebd17be4f8e7b29fb9cf7f"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/energy/StorageItemCharging.java",
+      "sha256": "834b47097b09fbd4885e15dc10dc4b396135527f0b3f280493407f6c875da285",
+      "gitBlobSHA256": "834b47097b09fbd4885e15dc10dc4b396135527f0b3f280493407f6c875da285"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/energy/StoredFuelGeneration.java",
+      "sha256": "5f0428b927ca2980a9d2df3f14f353a72313da720797f44320089380030a8d6c",
+      "gitBlobSHA256": "5f0428b927ca2980a9d2df3f14f353a72313da720797f44320089380030a8d6c"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/energy/ThermalOutput.java",
+      "sha256": "d42d1f9ab5da70ddba0257b0bc093808c4100cd283b4b51eee2aa296a4e613c9",
+      "gitBlobSHA256": "d42d1f9ab5da70ddba0257b0bc093808c4100cd283b4b51eee2aa296a4e613c9"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/energy/ToolEnergy.java",
+      "sha256": "bc6cbfe7658c41a14c978acb4d66960f1cec9f8c0f8340b80bf5206717b7ed09",
+      "gitBlobSHA256": "bc6cbfe7658c41a14c978acb4d66960f1cec9f8c0f8340b80bf5206717b7ed09"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/energy/WorldFuelCollection.java",
+      "sha256": "e305fcf4268cd6d71ed6315115ef5554854a6eeb8f346cc0daeee14fe114efb9",
+      "gitBlobSHA256": "e305fcf4268cd6d71ed6315115ef5554854a6eeb8f346cc0daeee14fe114efb9"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/flight/JetpackFlightController.java",
+      "sha256": "6e14e072f63e416b50374bd1409c4a137cfaecaeb749c6f1683e63c0b82b5735",
+      "gitBlobSHA256": "6e14e072f63e416b50374bd1409c4a137cfaecaeb749c6f1683e63c0b82b5735"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/CropSeedData.java",
+      "sha256": "e87c43bf13cc46093efbc0b743443782601ad5611c2aac2d3102062d592ee401",
+      "gitBlobSHA256": "e87c43bf13cc46093efbc0b743443782601ad5611c2aac2d3102062d592ee401"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/FluidSourceSearch.java",
+      "sha256": "de38822d354137ca8e4c17cff7c3114634dc95528c594070040f6d6b40cc6c80",
+      "gitBlobSHA256": "de38822d354137ca8e4c17cff7c3114634dc95528c594070040f6d6b40cc6c80"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/FluidTransferBuffer.java",
+      "sha256": "6d48ef125923b42d073f3b22717644ee250a22d6df06bb1ed6990fd3192419e4",
+      "gitBlobSHA256": "6d48ef125923b42d073f3b22717644ee250a22d6df06bb1ed6990fd3192419e4"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/IndependentReplicationTransaction.java",
+      "sha256": "8daa3ce3b8a85ddbf65694bc629dffff01cabc6963bb518aba7e234d0e7706af",
+      "gitBlobSHA256": "8daa3ce3b8a85ddbf65694bc629dffff01cabc6963bb518aba7e234d0e7706af"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/IndependentScanSession.java",
+      "sha256": "ada11dde22b88322af741b94ba937746100b7015ad3ff6633626c4de1dd6667e",
+      "gitBlobSHA256": "ada11dde22b88322af741b94ba937746100b7015ad3ff6633626c4de1dd6667e"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/IndependentUuBuffer.java",
+      "sha256": "09a9bddffd6243b75ab9f25670f468b2f801287d61d81982910ac0146f2bfc8e",
+      "gitBlobSHA256": "09a9bddffd6243b75ab9f25670f468b2f801287d61d81982910ac0146f2bfc8e"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/IndependentUuValueIndex.java",
+      "sha256": "d4c2c56aebc710dd7e3575a3cea4c1427d459a507762e8ae9bdf7f74ddcd41a4",
+      "gitBlobSHA256": "d4c2c56aebc710dd7e3575a3cea4c1427d459a507762e8ae9bdf7f74ddcd41a4"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/ItemPipeRoute.java",
+      "sha256": "37a49075a1d174b104d286533b8529ec70a24e69f512cf751fd05bab7bdfb035",
+      "gitBlobSHA256": "37a49075a1d174b104d286533b8529ec70a24e69f512cf751fd05bab7bdfb035"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/MachineActionOwner.java",
+      "sha256": "a3865b1000c8c064562134dcac62b6827b34eccb4223b75ca7ea89d0532ae8f0",
+      "gitBlobSHA256": "a3865b1000c8c064562134dcac62b6827b34eccb4223b75ca7ea89d0532ae8f0"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/MachineMenuAccess.java",
+      "sha256": "39fa8a36f54b55845e7ac6ceb1d76d9d55f0bf512806356321aec410821158bf",
+      "gitBlobSHA256": "39fa8a36f54b55845e7ac6ceb1d76d9d55f0bf512806356321aec410821158bf"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/MemoryReplicationService.java",
+      "sha256": "bc6f9762a8adcbcad5602da8b54285ee19c1b6d3e8a6e7116a28df984b338348",
+      "gitBlobSHA256": "bc6f9762a8adcbcad5602da8b54285ee19c1b6d3e8a6e7116a28df984b338348"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/MiningLayer.java",
+      "sha256": "00cdb1647153256e720908e85efa6456131fcbc6d93b96b928c87df75ff5bf82",
+      "gitBlobSHA256": "00cdb1647153256e720908e85efa6456131fcbc6d93b96b928c87df75ff5bf82"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/MiningLoot.java",
+      "sha256": "dc8558a6ba3ace6ba007cb0947dd50fff4627d9850c23c48e6e8906b26f49a64",
+      "gitBlobSHA256": "dc8558a6ba3ace6ba007cb0947dd50fff4627d9850c23c48e6e8906b26f49a64"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/MiningPayment.java",
+      "sha256": "f8a0d8c29be92e64e571a1a0bec10b56307c5156503eb4c8989f49f757948703",
+      "gitBlobSHA256": "f8a0d8c29be92e64e571a1a0bec10b56307c5156503eb4c8989f49f757948703"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/MiningPlacement.java",
+      "sha256": "51f3c498fb4956c725ac14ad93e2931009b6d68ded821b42807f751ae8755d87",
+      "gitBlobSHA256": "51f3c498fb4956c725ac14ad93e2931009b6d68ded821b42807f751ae8755d87"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/MiningRoute.java",
+      "sha256": "f9d07e4b51058c04d77241d335455ba94814016097f1be568817499aa1f50bb1",
+      "gitBlobSHA256": "f9d07e4b51058c04d77241d335455ba94814016097f1be568817499aa1f50bb1"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/OwnedFluidConversion.java",
+      "sha256": "a11d5e231b1c9bddcebcd73ae05d35170f15bf8d0417767a6d3d9b512d184e2b",
+      "gitBlobSHA256": "a11d5e231b1c9bddcebcd73ae05d35170f15bf8d0417767a6d3d9b512d184e2b"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/PatternMenuData.java",
+      "sha256": "28fc480116df372e8dfac5ac39133df5045eb5c3ab085621c816f28a185cb0f6",
+      "gitBlobSHA256": "28fc480116df372e8dfac5ac39133df5045eb5c3ab085621c816f28a185cb0f6"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/PendingDrops.java",
+      "sha256": "6be5f3f53eddb03f9368956271c02a0e2bc6ba38573545aec4fad683d14354b3",
+      "gitBlobSHA256": "6be5f3f53eddb03f9368956271c02a0e2bc6ba38573545aec4fad683d14354b3"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/PipeAdvance.java",
+      "sha256": "6528f6651600b7ce018ec4d74b75109c6ac05602db97cdba63a396ab2b71acd2",
+      "gitBlobSHA256": "6528f6651600b7ce018ec4d74b75109c6ac05602db97cdba63a396ab2b71acd2"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/PipeRecoveryCommand.java",
+      "sha256": "27e76af1320589e5675f55028dd11fdc1d0a123c9757dd5c7edbf8c6dc2e3106",
+      "gitBlobSHA256": "27e76af1320589e5675f55028dd11fdc1d0a123c9757dd5c7edbf8c6dc2e3106"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/RecipeSlots.java",
+      "sha256": "89ecda2840b6ac56f58f09b6664c960aa260f1a0231f172a9d16be66c42e657f",
+      "gitBlobSHA256": "89ecda2840b6ac56f58f09b6664c960aa260f1a0231f172a9d16be66c42e657f"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/StoredPattern.java",
+      "sha256": "b1705bfaa663b0984cca9397f04f92afb8a12b64ea36f6912266e558c922e238",
+      "gitBlobSHA256": "b1705bfaa663b0984cca9397f04f92afb8a12b64ea36f6912266e558c922e238"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/UuCraftingRecipes.java",
+      "sha256": "313587da21a8cf49a05d8d6da7d7cb83be36fff73a8a294c1b5b218094ad1562",
+      "gitBlobSHA256": "313587da21a8cf49a05d8d6da7d7cb83be36fff73a8a294c1b5b218094ad1562"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/UuMappedCatalog.java",
+      "sha256": "f4aeb2aa5cb82676e1f76da133013e8204be58c8c8ef7f7482ca3a331805f633",
+      "gitBlobSHA256": "f4aeb2aa5cb82676e1f76da133013e8204be58c8c8ef7f7482ca3a331805f633"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/UuPatternMigration.java",
+      "sha256": "51ad2e8467f0ced4d44e3ba5fc0024849984ba9909e66b3c89b9b6c7614ac150",
+      "gitBlobSHA256": "51ad2e8467f0ced4d44e3ba5fc0024849984ba9909e66b3c89b9b6c7614ac150"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/UuPricingLifecycle.java",
+      "sha256": "0ca63128d1b38a8b82046406082c5f130b9b9a27bb5a28781f5cad866caa07d5",
+      "gitBlobSHA256": "0ca63128d1b38a8b82046406082c5f130b9b9a27bb5a28781f5cad866caa07d5"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/UuProcessingPolicy.java",
+      "sha256": "11bfa23b6c271d39b51995497b1e985afaf1387a27c3589934d35d1ddb809b74",
+      "gitBlobSHA256": "11bfa23b6c271d39b51995497b1e985afaf1387a27c3589934d35d1ddb809b74"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/UuProcessingRecipes.java",
+      "sha256": "352b60c9430af7dc28da93b0da14d048c885cd05a2a37b93b1be7f578b44c378",
+      "gitBlobSHA256": "352b60c9430af7dc28da93b0da14d048c885cd05a2a37b93b1be7f578b44c378"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/UuQuoteBook.java",
+      "sha256": "0e4a04f5ca7d5fe5a93f3602faafb3e9b7fe72a029bc19236d9eec7a8f5c4896",
+      "gitBlobSHA256": "0e4a04f5ca7d5fe5a93f3602faafb3e9b7fe72a029bc19236d9eec7a8f5c4896"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/UuRecipeSolver.java",
+      "sha256": "49a620cf5f7a0d0df018388717b9f730e55c7a7683b5322f7f419bb3f1fe04f9",
+      "gitBlobSHA256": "49a620cf5f7a0d0df018388717b9f730e55c7a7683b5322f7f419bb3f1fe04f9"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/UuReferenceCatalog.java",
+      "sha256": "caf5dcd0bae193b01312fea4b0e9a778ed5987bb1e3eb7649143bc6f6c973190",
+      "gitBlobSHA256": "caf5dcd0bae193b01312fea4b0e9a778ed5987bb1e3eb7649143bc6f6c973190"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/processing/UuScanEligibility.java",
+      "sha256": "93c990ccf7a55c84a18745e7e3472e80d7dfc4eb6e8dcc54e7c91611b6a87322",
+      "gitBlobSHA256": "93c990ccf7a55c84a18745e7e3472e80d7dfc4eb6e8dcc54e7c91611b6a87322"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/reactor/ChamberTopology.java",
+      "sha256": "d27d084a9c6d50e1e62b901bd2daa8dc6c4c08507a12c420efdcec8d910e893a",
+      "gitBlobSHA256": "d27d084a9c6d50e1e62b901bd2daa8dc6c4c08507a12c420efdcec8d910e893a"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/reactor/FluidReactorCycle.java",
+      "sha256": "69d56db41e0dc786b8f760f6a88c7669e656a5bb80e4e86438324e5f9facf3ff",
+      "gitBlobSHA256": "69d56db41e0dc786b8f760f6a88c7669e656a5bb80e4e86438324e5f9facf3ff"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/reactor/GuardedReactorHeat.java",
+      "sha256": "f9755f60b8dcc651ee15cf07adc2c1d0159b9fc30d0b75e7f4b77a8a04be113f",
+      "gitBlobSHA256": "f9755f60b8dcc651ee15cf07adc2c1d0159b9fc30d0b75e7f4b77a8a04be113f"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/reactor/ReactorAccidentLatch.java",
+      "sha256": "995c326570c0ce28a7e7d385ea878824ccd9ef0cf2820945d08fec26746010d0",
+      "gitBlobSHA256": "995c326570c0ce28a7e7d385ea878824ccd9ef0cf2820945d08fec26746010d0"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/reactor/ReactorCycle.java",
+      "sha256": "cf9cbcfad5c87699a21e494f47be926a57d68b41d729f00f102a579dae362dfd",
+      "gitBlobSHA256": "cf9cbcfad5c87699a21e494f47be926a57d68b41d729f00f102a579dae362dfd"
+    },
+    {
+      "path": "src/main/java/dev/scex/si/reactor/ReactorInventory.java",
+      "sha256": "ebdb4c1e65c0cf0601f497a584c539f6f481851754432c0ba58ddda366a07a29",
+      "gitBlobSHA256": "ebdb4c1e65c0cf0601f497a584c539f6f481851754432c0ba58ddda366a07a29"
+    },
+    {
+      "path": "src/main/resources/data/mio_icif/recipe/blast_furnace/iron_ingot_to_adviron.json",
+      "sha256": "b3f8536e1fd98184862abe65e28dbd1de779218b7b4cc653ba467eb229ccd1a0",
+      "gitBlobSHA256": "af39113b901edc98cfe26aedddd4e8a4e43eaf206f98137b655ff22896c39a33"
+    },
+    {
+      "path": "src/main/resources/data/mio_icif/uu/mapped_ic2.json",
+      "sha256": "f1957346c509af050c07bec51b847bd460dd5e8ad5af4b5eb8909578915cb87e",
+      "gitBlobSHA256": "f1957346c509af050c07bec51b847bd460dd5e8ad5af4b5eb8909578915cb87e"
+    },
+    {
+      "path": "src/main/resources/data/mio_icif/uu/observed_1122.json",
+      "sha256": "b8229acd201f8a597d47ea0b4f79fa1523167ca7a9658255ed173ee31128fb08",
+      "gitBlobSHA256": "6c6e670711808aea2d4638821ccb012f4e11834a300ad4699edd51dc04004aae"
+    },
+    {
+      "path": "src/main/resources/data/mio_icif/uu/processing_policy.json",
+      "sha256": "601a328c8d3af91682a13652b39d9e2ce0a491f3ed1b388d6af3f9abffb7b1d3",
+      "gitBlobSHA256": "24f2e156fb084e691ebb141f238645260ee076330c713750133fe1b2425669c8"
+    },
+    {
+      "path": "src/main/resources/data/mio_icif/uu/scan_eligibility.json",
+      "sha256": "7e76d65b22f6f7cd2c53c22410816f5db28ad8f100380c58e320e06b42ee9782",
+      "gitBlobSHA256": "7e76d65b22f6f7cd2c53c22410816f5db28ad8f100380c58e320e06b42ee9782"
+    },
+    {
+      "path": "src/reviewedContract/java/dev/scex/si/FluidReactorReferenceContract.java",
+      "sha256": "57ae4737096a39fffef3f8ecd8bb212420ab7430c4b78f4deecd4384c2262f14",
+      "gitBlobSHA256": "57ae4737096a39fffef3f8ecd8bb212420ab7430c4b78f4deecd4384c2262f14"
+    },
+    {
+      "path": "src/reviewedContract/java/dev/scex/si/FuelContainerContract.java",
+      "sha256": "58ceaf66392b57545969cab94379be8722b76078e00db58ef066cda93f8e21ac",
+      "gitBlobSHA256": "f39db80e01bf502f3e9c6ddc887face43fee49b878b44eb94b66fedeeaa18848"
+    },
+    {
+      "path": "src/reviewedContract/java/dev/scex/si/HeatKineticStorageContract.java",
+      "sha256": "fac5be14c36a3d21457dbf1350beae885c30997f04d3726d0a8eef01ab2d470b",
+      "gitBlobSHA256": "fac5be14c36a3d21457dbf1350beae885c30997f04d3726d0a8eef01ab2d470b"
+    },
+    {
+      "path": "src/reviewedContract/java/dev/scex/si/PatternMigrationContract.java",
+      "sha256": "13a21ca962e15fdbd2b539da86f55c1eade4fe93ac65498a983a53721ec5ad75",
+      "gitBlobSHA256": "13a21ca962e15fdbd2b539da86f55c1eade4fe93ac65498a983a53721ec5ad75"
+    },
+    {
+      "path": "src/reviewedContract/java/dev/scex/si/PipeTransferContract.java",
+      "sha256": "47a7edf0484a59c43d0471b96dc2ee40f0e6294491789fca1b8b37f59cc07a38",
+      "gitBlobSHA256": "47a7edf0484a59c43d0471b96dc2ee40f0e6294491789fca1b8b37f59cc07a38"
+    },
+    {
+      "path": "src/reviewedContract/java/dev/scex/si/ReactorReferenceContract.java",
+      "sha256": "98fba3533116ad7247ca94a228df32cc5a1bc1c63a5b6a27e9b50cfb064146a1",
+      "gitBlobSHA256": "98fba3533116ad7247ca94a228df32cc5a1bc1c63a5b6a27e9b50cfb064146a1"
+    },
+    {
+      "path": "src/reviewedContract/java/dev/scex/si/ReplicatorMachineContract.java",
+      "sha256": "ba724ec7013cdb5208ece51f1440b8874f50e192301345cb9d187bd3df49a70b",
+      "gitBlobSHA256": "ba724ec7013cdb5208ece51f1440b8874f50e192301345cb9d187bd3df49a70b"
+    },
+    {
+      "path": "src/reviewedContract/java/dev/scex/si/ScannerDeniedContract.java",
+      "sha256": "02f6a21b4678d13c6134a66c434d43535a9307ad9409203e9256b617b747ff72",
+      "gitBlobSHA256": "02f6a21b4678d13c6134a66c434d43535a9307ad9409203e9256b617b747ff72"
+    },
+    {
+      "path": "src/reviewedContract/java/dev/scex/si/ScannerMachineContract.java",
+      "sha256": "6de53dcf222462eff20cdf691381bd386c2aed9d279d7ebbba591a6887128faa",
+      "gitBlobSHA256": "6de53dcf222462eff20cdf691381bd386c2aed9d279d7ebbba591a6887128faa"
+    },
+    {
+      "path": "src/reviewedContract/java/dev/scex/si/UuBufferContract.java",
+      "sha256": "53ea524772311d69763269089585d4eb95109617f94c5c232b91eba32d5ca57d",
+      "gitBlobSHA256": "53ea524772311d69763269089585d4eb95109617f94c5c232b91eba32d5ca57d"
+    },
+    {
+      "path": "src/reviewedContract/java/dev/scex/si/UuMappedCatalogContract.java",
+      "sha256": "9f6b27bb83283ac9d016c66c8a905947f957473d8f0709f06d37eda99502b2b6",
+      "gitBlobSHA256": "9f6b27bb83283ac9d016c66c8a905947f957473d8f0709f06d37eda99502b2b6"
+    },
+    {
+      "path": "src/reviewedContract/java/dev/scex/si/UuPricingContract.java",
+      "sha256": "aaba4fd7675582fa30122da54408e8fc42d01048fe76d7dbd70d13675cbf8752",
+      "gitBlobSHA256": "aaba4fd7675582fa30122da54408e8fc42d01048fe76d7dbd70d13675cbf8752"
+    },
+    {
+      "path": "src/reviewedContract/java/dev/scex/si/UuProcessingContract.java",
+      "sha256": "0a56fcac11eca3b0e981e2c342d10f9a1975961527e3d40d3a99e5fcffade224",
+      "gitBlobSHA256": "0a56fcac11eca3b0e981e2c342d10f9a1975961527e3d40d3a99e5fcffade224"
+    },
+    {
+      "path": "src/reviewedContract/java/dev/scex/si/UuScanContract.java",
+      "sha256": "f9fd327a601efa4b1234dd26872482d82a7e6c663c0b44e5d45adffc6262d71f",
+      "gitBlobSHA256": "f9fd327a601efa4b1234dd26872482d82a7e6c663c0b44e5d45adffc6262d71f"
+    },
+    {
+      "path": "src/reviewedContract/resources/fluid-reactor-reference-r119.tsv",
+      "sha256": "fdeb6438454dba877443d9a69222896d9262f431200d2a8a0afd68cab3d10940",
+      "gitBlobSHA256": "00afdf187d120875129c51227c0aa83b21b8ce0df3e479f99220c80377233df5"
+    },
+    {
+      "path": "src/reviewedContract/resources/reactor-reference-r116.tsv",
+      "sha256": "48ce3657b1c461a24baaef3a0bd00c75d5c5a17255d9e7825429fb5e4bcf0ff3",
+      "gitBlobSHA256": "678f6e4d250f62547c8ce370f5da4e42bae1bfc444fc99414a75941e8bb733bb"
+    },
+    {
+      "path": "src/reviewedContract/resources/uu-buffer-reference-r94.json",
+      "sha256": "6210904fdeae80f70252c99e524a73677d35ebd5f1897bb8c7680190107253eb",
+      "gitBlobSHA256": "25595df53f3ed041c28e60881201d1626b142d18397af0de2d65b5a9946e7de7"
+    },
+    {
+      "path": "src/reviewedContract/resources/uu-replicator-reference-r95.json",
+      "sha256": "3ae1e82ee992e86d9bf910269cb2d7cfaad2909c0b94abcea53d5a0f9fb62a47",
+      "gitBlobSHA256": "bdcaba858f13269c395412eec8fea3c0cfeea4ea82dc21bb85f8191cf530c755"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/ArmorApiCandidateProbe.java",
+      "sha256": "f8499d131f518c10834ec155c5f650cf25a6fae94ff8e6bc587a17c90318e38c",
+      "gitBlobSHA256": "928cf82421750ba3655deba4eb712b073d85df571c209350cba7a9ccffc12224"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/ArmorApiDefaultsProbe.java",
+      "sha256": "1ed664ffe16b5a574a855fa95103e943f6d051419dbd2e213d27cddd5ead44bf",
+      "gitBlobSHA256": "1ed664ffe16b5a574a855fa95103e943f6d051419dbd2e213d27cddd5ead44bf"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/BlastStateProbe.java",
+      "sha256": "f175d1713b228c71abb9663dad1d425f707e5dadca2ae332890dddc18dd8d71b",
+      "gitBlobSHA256": "f175d1713b228c71abb9663dad1d425f707e5dadca2ae332890dddc18dd8d71b"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/BlastWorldProbe.java",
+      "sha256": "eb3c76ebd410ae73fb0ed97a0a9902db6b202e30c9e4f927e5e8d3320adde47b",
+      "gitBlobSHA256": "eb3c76ebd410ae73fb0ed97a0a9902db6b202e30c9e4f927e5e8d3320adde47b"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/ChamberColdProbe.java",
+      "sha256": "53f2603e748b574c66413b94f6f20ddba93f3b6441fbca8c6806d4eb45d93878",
+      "gitBlobSHA256": "53f2603e748b574c66413b94f6f20ddba93f3b6441fbca8c6806d4eb45d93878"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/ChamberLifecycleProbe.java",
+      "sha256": "4f23c9c451c6a39e6d844f9c6383dbdf70374ada6ac432063dea62de0467118c",
+      "gitBlobSHA256": "6d6dd49701528317118a9a4baa0093a38ef5e14c1f74b36377d8b63d70b1780e"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/ChamberWorldProbe.java",
+      "sha256": "9528b4252f7272b3b7ee8638a164cc59b10990e55e767095d21ca971e8a4bffa",
+      "gitBlobSHA256": "1806641458e3e72e907b01ca15235b28ff332090cfc4a6a557b95c7849b4cb3f"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/ChunkTicketColdProbe.java",
+      "sha256": "be69a02fab1c8fd21e141b98f91596617b5f2455f2adfc79ddb2ead6ad8f18e0",
+      "gitBlobSHA256": "dd53cdab47140f2246e07084327c3b587b4fa9e4a0f7588fb915e59650610226"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/ChunkTicketWorldProbe.java",
+      "sha256": "ff3173374d0bc644877904471bd421848da6f3515d9c38e1ec4ac6a5ce27a644",
+      "gitBlobSHA256": "0b50ef62560d81f39d6d5c7a20e6c9515104ccb0ebf9c7af71a6be279b453076"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/ClientAudioProbe.java",
+      "sha256": "c55b67de8c1b38dd52660533663ecf802c673c51a8706d15ba197a587ee866ab",
+      "gitBlobSHA256": "c55b67de8c1b38dd52660533663ecf802c673c51a8706d15ba197a587ee866ab"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/ConversionCalibrationBootstrap.java",
+      "sha256": "9e24d5ae1c8762b696a646552fb399a700ffea166c2ce32719376408483f689c",
+      "gitBlobSHA256": "9e24d5ae1c8762b696a646552fb399a700ffea166c2ce32719376408483f689c"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/CropBaselineWorldProbe.java",
+      "sha256": "f29866448116d261af39aff833580058ba71c29541f03ecf1e125620c64b7a8d",
+      "gitBlobSHA256": "f29866448116d261af39aff833580058ba71c29541f03ecf1e125620c64b7a8d"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/CropLifecycleWorldProbe.java",
+      "sha256": "4a29b49bd18c38beee23381414fd033fc0e8a6a17f56a4479df7fdb303ef0c5a",
+      "gitBlobSHA256": "4a29b49bd18c38beee23381414fd033fc0e8a6a17f56a4479df7fdb303ef0c5a"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/CropRegionInspector.java",
+      "sha256": "dc5b17b9d512dc63f6f2df3de3bce570f1778196183e663842607f1b54d39a51",
+      "gitBlobSHA256": "dc5b17b9d512dc63f6f2df3de3bce570f1778196183e663842607f1b54d39a51"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/CropReplacementWorldProbe.java",
+      "sha256": "a95d5369928bd77a82f173d9534d101f2ee2f5de5b79529dc5f81c3ddfb9ec16",
+      "gitBlobSHA256": "a95d5369928bd77a82f173d9534d101f2ee2f5de5b79529dc5f81c3ddfb9ec16"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/CuriosProbe.java",
+      "sha256": "9fe59ed2c40e7ef5f725a2d6dde4dec0d808f606aca9e0ef8a27d5275f973120",
+      "gitBlobSHA256": "9fe59ed2c40e7ef5f725a2d6dde4dec0d808f606aca9e0ef8a27d5275f973120"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/DefaultPlacementProbe.java",
+      "sha256": "965a01885a8bda7acdb8b5859bc658e4bc7f2f8c9ee99fa9bc6d00998a41dfe2",
+      "gitBlobSHA256": "965a01885a8bda7acdb8b5859bc658e4bc7f2f8c9ee99fa9bc6d00998a41dfe2"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/EnergyDirectionWorldProbe.java",
+      "sha256": "5d76a8aaba7aebdd0473b8ec0859db4644bc1a648f44abd85f14f4c384c17a5e",
+      "gitBlobSHA256": "d8843ab62622cd1f4765213548e3b77386493036409e37b3fe14cfa3926e8346"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/EnergyOwnershipWorldProbe.java",
+      "sha256": "38ef1fc7a865c900687996bf431a2e0643a71f817d48112c21ba585a26d33fd8",
+      "gitBlobSHA256": "b51d19d0412326a8a6ddecbf98301fca650e21f86480a94ea2811be0f3194d17"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/EquipmentSourceReplacementWorldProbe.java",
+      "sha256": "1c9a2278bccea6040520d47d65785ab9a58cf65046e0dfe61229156ee74be4af",
+      "gitBlobSHA256": "1c9a2278bccea6040520d47d65785ab9a58cf65046e0dfe61229156ee74be4af"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/F04ColdJvmWorldProbe.java",
+      "sha256": "68b01f269496710b9dc1d5736dde5ca2050c1e08917b0a71f03539e4e176b691",
+      "gitBlobSHA256": "68b01f269496710b9dc1d5736dde5ca2050c1e08917b0a71f03539e4e176b691"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/F04LifecyclePerformanceWorldProbe.java",
+      "sha256": "a17c4629e98fe28c2709f0fbac0c69335014f95e61ccb714d4b24bb0bc2f2229",
+      "gitBlobSHA256": "a17c4629e98fe28c2709f0fbac0c69335014f95e61ccb714d4b24bb0bc2f2229"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/F04WorldProbe.java",
+      "sha256": "c69a46733bf06cba197249d358386831ba5493979a690537ad89cf4c0c735f60",
+      "gitBlobSHA256": "c69a46733bf06cba197249d358386831ba5493979a690537ad89cf4c0c735f60"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/FlightBaselineWorldProbe.java",
+      "sha256": "1c86698be98080712c0c9cb34765b7d363068de8cc82fe911742d5ca3725e3ba",
+      "gitBlobSHA256": "1c86698be98080712c0c9cb34765b7d363068de8cc82fe911742d5ca3725e3ba"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/FlightReplacementWorldProbe.java",
+      "sha256": "2502a0366d8f8de3412f4bff2ddb37fc59019a18cacf6a93acef3f1a1a8f42ae",
+      "gitBlobSHA256": "2502a0366d8f8de3412f4bff2ddb37fc59019a18cacf6a93acef3f1a1a8f42ae"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/FluidReactorWorldProbe.java",
+      "sha256": "dd2c6df1f354c3e87403261e7a79ad767195972132408e440875ffe49212e280",
+      "gitBlobSHA256": "dd2c6df1f354c3e87403261e7a79ad767195972132408e440875ffe49212e280"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/FutureTradeColdProbe.java",
+      "sha256": "0e678ab83c9f8f672c99b45314748eda8e2a5d66dd3a203b5c93dbf2e60e94b0",
+      "gitBlobSHA256": "392661e404e342014edb41ec782d8d32b0965eeb2c25c00d9395eb42bc70d4d9"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/FutureTradeWorldProbe.java",
+      "sha256": "e67c16d679bb928b1fb8090d928bd21e4ded86ceeaddf2a63f67a0a9815bcb54",
+      "gitBlobSHA256": "e67c16d679bb928b1fb8090d928bd21e4ded86ceeaddf2a63f67a0a9815bcb54"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/HeaterCalibrationProbe.java",
+      "sha256": "3d9cc1b5950f45f65fbba6894a4a36f7ca9e202b23350b6742ee043f87b361da",
+      "gitBlobSHA256": "3d9cc1b5950f45f65fbba6894a4a36f7ca9e202b23350b6742ee043f87b361da"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/HeaterWorldProbe.java",
+      "sha256": "079074ebb7c86e0f3d7c944a5ce84c0f7aa9afe4d27930026e78da8c6200719a",
+      "gitBlobSHA256": "079074ebb7c86e0f3d7c944a5ce84c0f7aa9afe4d27930026e78da8c6200719a"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/HeldItemStateProbe.java",
+      "sha256": "86df0c2e3fe52614a9940cb7b29f27375c37358f4b5def74855489a6f77ee3b5",
+      "gitBlobSHA256": "86df0c2e3fe52614a9940cb7b29f27375c37358f4b5def74855489a6f77ee3b5"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/HeldScanWorldProbe.java",
+      "sha256": "3a28caf96d91f77942ffca7f33ac1ab4db473714000a0dee8f67f897d1bd85a6",
+      "gitBlobSHA256": "3a28caf96d91f77942ffca7f33ac1ab4db473714000a0dee8f67f897d1bd85a6"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/InteropRestartProbe.java",
+      "sha256": "33ff531fd1b9c260375ff81d2f1c47204b2a44fa072c30c6bd22575cdd66ce30",
+      "gitBlobSHA256": "33ff531fd1b9c260375ff81d2f1c47204b2a44fa072c30c6bd22575cdd66ce30"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/InteropWorldProbe.java",
+      "sha256": "618cdd993555550cf4eadf062f6c9ec282e3d4db913e4d17fd6a64bdf8c1dae9",
+      "gitBlobSHA256": "618cdd993555550cf4eadf062f6c9ec282e3d4db913e4d17fd6a64bdf8c1dae9"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/ItemEquipmentWorldProbe.java",
+      "sha256": "2a46149d6ef9c49361642aaf34994a3c67335bb04fa33f35b3a35a0e3d6fc390",
+      "gitBlobSHA256": "2a46149d6ef9c49361642aaf34994a3c67335bb04fa33f35b3a35a0e3d6fc390"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/KineticStateProbe.java",
+      "sha256": "fac9f583b718f891a1ff5d1735ad81fcb5d9e3ec14d6dc319feece429a69be1c",
+      "gitBlobSHA256": "fac9f583b718f891a1ff5d1735ad81fcb5d9e3ec14d6dc319feece429a69be1c"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/KineticWorldProbe.java",
+      "sha256": "2bde2a4e76fc5ba9d4f379325957884cd88f6e2853893463d9e9fe5a72ac3f63",
+      "gitBlobSHA256": "2bde2a4e76fc5ba9d4f379325957884cd88f6e2853893463d9e9fe5a72ac3f63"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/LegacyElectricAdapterDonorProbe.java",
+      "sha256": "09d05b29dec2d71665055f998f4565da71f2ae9a7e6da6864fb70d7ade4b7f51",
+      "gitBlobSHA256": "09d05b29dec2d71665055f998f4565da71f2ae9a7e6da6864fb70d7ade4b7f51"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/LegacyElectricAdapterPublicProbe.java",
+      "sha256": "278f12eccb532ec695ad69579a1901cf98fc54396af6f7731ce099fbb13b7e19",
+      "gitBlobSHA256": "278f12eccb532ec695ad69579a1901cf98fc54396af6f7731ce099fbb13b7e19"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/LegacyUuAbsenceProbe.java",
+      "sha256": "389d8466d2923d6eb500ec42950a7710e877668f916ab71878d966c6a69fabcf",
+      "gitBlobSHA256": "389d8466d2923d6eb500ec42950a7710e877668f916ab71878d966c6a69fabcf"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/LegacyUuStateProbe.java",
+      "sha256": "23f3f15d2f5231d90065c3c90d8237da36767d07451bb2777693a80c02b56d7b",
+      "gitBlobSHA256": "23f3f15d2f5231d90065c3c90d8237da36767d07451bb2777693a80c02b56d7b"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/MachineBoundaryProbe.java",
+      "sha256": "003e7521ec25fe77e9389e5e70a217e8d394dbe13146d028bf071d4d24b8c8de",
+      "gitBlobSHA256": "003e7521ec25fe77e9389e5e70a217e8d394dbe13146d028bf071d4d24b8c8de"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/MachineOwnerWorldProbe.java",
+      "sha256": "9dd16ad49c083a1ba7ea0eef92bf8878be0f479fc22e95c6f52c65f52ad6a380",
+      "gitBlobSHA256": "9dd16ad49c083a1ba7ea0eef92bf8878be0f479fc22e95c6f52c65f52ad6a380"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/MachinePaymentWorldProbe.java",
+      "sha256": "c9db90d8c0d430f2bec9776fe1e4e2b09b5d7886717c9068ee389d85699bcadd",
+      "gitBlobSHA256": "c9db90d8c0d430f2bec9776fe1e4e2b09b5d7886717c9068ee389d85699bcadd"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/MachineReferenceProbe.java",
+      "sha256": "ea10f3757ed6cfd3085ae29425cf8070fe82797e29de386dae63dfb7cfafc248",
+      "gitBlobSHA256": "ea10f3757ed6cfd3085ae29425cf8070fe82797e29de386dae63dfb7cfafc248"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/MatronHydrationWorldProbe.java",
+      "sha256": "e05596abfc3e5ab96ef7ce0a941de22f10a71cbeb22fab3d92aa6d9ecaaac5b5",
+      "gitBlobSHA256": "e05596abfc3e5ab96ef7ce0a941de22f10a71cbeb22fab3d92aa6d9ecaaac5b5"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/MatterStateProbe.java",
+      "sha256": "15bbd2ee892d9db3b524e160b796166496255d3cf178f0432c56b6573d0a31d1",
+      "gitBlobSHA256": "15bbd2ee892d9db3b524e160b796166496255d3cf178f0432c56b6573d0a31d1"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/MatterWorldProbe.java",
+      "sha256": "0c23d816a34bcdce65d5b7a9ba8812a1e6227f160ef1386e1abab25e8e4402ed",
+      "gitBlobSHA256": "0c23d816a34bcdce65d5b7a9ba8812a1e6227f160ef1386e1abab25e8e4402ed"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/MiningProductWorldProbe.java",
+      "sha256": "9dc7d5bba1e3628b4c6d7252e1d550dabf35c69371484f2c05b876136ae5ac0d",
+      "gitBlobSHA256": "9dc7d5bba1e3628b4c6d7252e1d550dabf35c69371484f2c05b876136ae5ac0d"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/MixedOutputWorldProbe.java",
+      "sha256": "18d5b899d518146289d87819f33522d98fb5c0f6333ada0d3027be37156f8480",
+      "gitBlobSHA256": "18d5b899d518146289d87819f33522d98fb5c0f6333ada0d3027be37156f8480"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/NetworkCommitProbe.java",
+      "sha256": "a232b910105893e85a3d5e8385946ee80f9154b4e9d5d8c581232e555c833277",
+      "gitBlobSHA256": "a232b910105893e85a3d5e8385946ee80f9154b4e9d5d8c581232e555c833277"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/NuclearItemWorldProbe.java",
+      "sha256": "03a44222ee44ccc5f46c554f058686e0d2632da1f05f5b995bb0a363cd088d26",
+      "gitBlobSHA256": "03a44222ee44ccc5f46c554f058686e0d2632da1f05f5b995bb0a363cd088d26"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/OrdinaryConsumerWorldProbe.java",
+      "sha256": "fb55552668b141d9db18fd953efc3d29420355969a20a2202b230e9fc0192441",
+      "gitBlobSHA256": "fb55552668b141d9db18fd953efc3d29420355969a20a2202b230e9fc0192441"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/PatternMigrationWorldProbe.java",
+      "sha256": "5a409aac34f7cd2d41983f2462cf19b34568b9c424804770fa3beae4918666e8",
+      "gitBlobSHA256": "5a409aac34f7cd2d41983f2462cf19b34568b9c424804770fa3beae4918666e8"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/PatternStorageWorldProbe.java",
+      "sha256": "1b210f44c1528f98812a7cab1fb2a9cab5e3257d9abddf50d6c0f7794929b749",
+      "gitBlobSHA256": "1b210f44c1528f98812a7cab1fb2a9cab5e3257d9abddf50d6c0f7794929b749"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/PipeFailureWorldProbe.java",
+      "sha256": "2569c28509e474f2ff11c9705ae02bd9a85564e6ad46676dd837a1c7607cf20f",
+      "gitBlobSHA256": "2569c28509e474f2ff11c9705ae02bd9a85564e6ad46676dd837a1c7607cf20f"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/PipeRecoveryWorldProbe.java",
+      "sha256": "eff88757a2cc354fc1bab7043d1d7560aa4f2dc766a52532669233b200c1593f",
+      "gitBlobSHA256": "eff88757a2cc354fc1bab7043d1d7560aa4f2dc766a52532669233b200c1593f"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/PumpProductWorldProbe.java",
+      "sha256": "d8eeb06c8df057ef805a7ebe7221f563b65940d5009e365c0301b1a9d8b12791",
+      "gitBlobSHA256": "d8eeb06c8df057ef805a7ebe7221f563b65940d5009e365c0301b1a9d8b12791"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/ReactorAccidentEffectWorldProbe.java",
+      "sha256": "6ddfbae32f840b0711fcd4a29c795fff4a0afd02b7737543094bd027ade0dc83",
+      "gitBlobSHA256": "6ddfbae32f840b0711fcd4a29c795fff4a0afd02b7737543094bd027ade0dc83"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/ReactorAccidentWorldProbe.java",
+      "sha256": "c03db19c4f7d9ceefd2b5c13d3e19680ab5e1c2b9f2da364d7c522a1b40eb9d4",
+      "gitBlobSHA256": "c03db19c4f7d9ceefd2b5c13d3e19680ab5e1c2b9f2da364d7c522a1b40eb9d4"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/ReactorItemCallsProbe.java",
+      "sha256": "e290d9e47e726c35cfaf9c02497b273ba3fcfcd2d199e22ced2c720e1718a92e",
+      "gitBlobSHA256": "4e8d291f05817e938836eb0df2b3c4e94e50b9e2d2aade54610f4ba52246c355"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/ReactorStateProbe.java",
+      "sha256": "2b34dda944393139e4883b617321616ed581dbf377eda7109e9635eba2c49d15",
+      "gitBlobSHA256": "2b34dda944393139e4883b617321616ed581dbf377eda7109e9635eba2c49d15"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/ReactorWorldProbe.java",
+      "sha256": "548100194d336c4461bbb9b9294a45ad31f2baebbac5341a93ce5339d328c1b7",
+      "gitBlobSHA256": "d6e068fe3fcb23179d0334902302c389702e9e4d317d7741e60df8d18253c5df"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/RemainingConsumerWorldProbe.java",
+      "sha256": "2de31837ccf5944ffbffa65d05a371dd2fa46eb34e3d8e36d9f9c6cafc1420a8",
+      "gitBlobSHA256": "6d6266187ebea3d30e71787f66deff6cdaa29b629566a93e174b80b414e72016"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/ReplicatorWorldProbe.java",
+      "sha256": "196f6446c8df8fa07f6b03ffb335e9f37efc549626ee78f2af6457c03bab0928",
+      "gitBlobSHA256": "196f6446c8df8fa07f6b03ffb335e9f37efc549626ee78f2af6457c03bab0928"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/ScannerDeniedWorldProbe.java",
+      "sha256": "d3dcd974cbe67c430b304c6e040269ebd7050d63f42bbc4fccaff340b25a798d",
+      "gitBlobSHA256": "d3dcd974cbe67c430b304c6e040269ebd7050d63f42bbc4fccaff340b25a798d"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/ScannerWorldProbe.java",
+      "sha256": "6c365953d0a9167e7b944e03f512fe42ddbcf1229577dec21968d019379c4a49",
+      "gitBlobSHA256": "6c365953d0a9167e7b944e03f512fe42ddbcf1229577dec21968d019379c4a49"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/SmokeProbe.java",
+      "sha256": "84ad055a5e507c3b291ca52367a1904aa6eafbd4d17e89c4bff233d3c080eaa2",
+      "gitBlobSHA256": "84ad055a5e507c3b291ca52367a1904aa6eafbd4d17e89c4bff233d3c080eaa2"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/SolarHeadgearWorldProbe.java",
+      "sha256": "91e4d546783d62efd23214bef6d1a10f2ce19cb66bc379fd8967057f4c5e11cb",
+      "gitBlobSHA256": "91e4d546783d62efd23214bef6d1a10f2ce19cb66bc379fd8967057f4c5e11cb"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/SolarProductWorldProbe.java",
+      "sha256": "61b76b1b0bfd00998921c31213c8c70200ca279af8d296bb7788b01fa31c9f17",
+      "gitBlobSHA256": "61b76b1b0bfd00998921c31213c8c70200ca279af8d296bb7788b01fa31c9f17"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/SpecialCableInteractionProbe.java",
+      "sha256": "3bad1a86b3f0f877bc4162763a295cc1a199357ea1f607bd64a2a809313e7baf",
+      "gitBlobSHA256": "3bad1a86b3f0f877bc4162763a295cc1a199357ea1f607bd64a2a809313e7baf"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/StirlingCalibrationProbe.java",
+      "sha256": "0bb9d4e1f4d757bf73495f43cca802abfed8869bc4f967954b3bd7828672aaa4",
+      "gitBlobSHA256": "0bb9d4e1f4d757bf73495f43cca802abfed8869bc4f967954b3bd7828672aaa4"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/StirlingWorldProbe.java",
+      "sha256": "e2f8683dcc4f515d1dcb513a981f9ce352e64febd7dba402c44849d91dde430d",
+      "gitBlobSHA256": "e2f8683dcc4f515d1dcb513a981f9ce352e64febd7dba402c44849d91dde430d"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/TeslaPaymentWorldProbe.java",
+      "sha256": "c0cb2ba961f16a896f40c30cba05a294fce87808594cf50fa50b8f758b637cec",
+      "gitBlobSHA256": "c0cb2ba961f16a896f40c30cba05a294fce87808594cf50fa50b8f758b637cec"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/TopologyScenarioProbe.java",
+      "sha256": "f921ff89b151b5ea74580e1cd7e1c38619319def3278f01fa35481485c586f21",
+      "gitBlobSHA256": "f921ff89b151b5ea74580e1cd7e1c38619319def3278f01fa35481485c586f21"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/TransformerFactoryProbe.java",
+      "sha256": "8435b5d0120df05af45eded423a458c5fbb39591a05b994dee8e93a297e5ee9d",
+      "gitBlobSHA256": "4ef8a73c5e637dbd09a70abfb459589f6afe17a272de88bb4eac87476505c9b6"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/TransformerLifecycleProbe.java",
+      "sha256": "4f14d171340aae3cd3cf6c3dd3de102ea3fd23df30a94ff703acf9ec5a92d9d0",
+      "gitBlobSHA256": "4f14d171340aae3cd3cf6c3dd3de102ea3fd23df30a94ff703acf9ec5a92d9d0"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/TransformerModeProbe.java",
+      "sha256": "1c64fcbc4c2e06d0cefecd3fa98c1e774e33c700193f1eba3fd1f9bf2505ffd8",
+      "gitBlobSHA256": "1c64fcbc4c2e06d0cefecd3fa98c1e774e33c700193f1eba3fd1f9bf2505ffd8"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/TransformerStateProbe.java",
+      "sha256": "b09df618d11796729a38724f462acd369fb516a21a9e2130029daee94d69ab2e",
+      "gitBlobSHA256": "b09df618d11796729a38724f462acd369fb516a21a9e2130029daee94d69ab2e"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/UuCatalogWorldProbe.java",
+      "sha256": "f53a678c6fbd1524a5ac688fb284cab062b2154fa4cfc43decf6555675b73228",
+      "gitBlobSHA256": "f53a678c6fbd1524a5ac688fb284cab062b2154fa4cfc43decf6555675b73228"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/UuChargeWorldProbe.java",
+      "sha256": "20963cae3f10bb5c6d2c726c02d9bc307718ab08549016881086832aca39cac2",
+      "gitBlobSHA256": "20963cae3f10bb5c6d2c726c02d9bc307718ab08549016881086832aca39cac2"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/UuDefaultIdentityWorldProbe.java",
+      "sha256": "30bd761fdde442b3c631f6b9a09a4a14f285197d3fba86aaa1baf4f0a75cfcb1",
+      "gitBlobSHA256": "30bd761fdde442b3c631f6b9a09a4a14f285197d3fba86aaa1baf4f0a75cfcb1"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/UuLegacyAdmissionWorldProbe.java",
+      "sha256": "8aa3995a5771409ac8bd0b8f14c07e938b93f4a47809b27588e025abcedc0fa3",
+      "gitBlobSHA256": "8aa3995a5771409ac8bd0b8f14c07e938b93f4a47809b27588e025abcedc0fa3"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/UuPricingWorldProbe.java",
+      "sha256": "43d609630a87c3200555cfaabdc0a5ddc20a392bb5933e2837e4845400ff3a01",
+      "gitBlobSHA256": "43d609630a87c3200555cfaabdc0a5ddc20a392bb5933e2837e4845400ff3a01"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/UuProcessingWorldProbe.java",
+      "sha256": "ec814d10a01c59db7bc4a83d9e9e1d52a3e7fae45a1629e3583fd89ad3462422",
+      "gitBlobSHA256": "ec814d10a01c59db7bc4a83d9e9e1d52a3e7fae45a1629e3583fd89ad3462422"
+    },
+    {
+      "path": "src/smoke/java/dev/scex/si/WorldScenarioProbe.java",
+      "sha256": "c67d225603ae4f4675f0388136aa88ee1d72d2bd2c1a2cb3f126f661621f0bd0",
+      "gitBlobSHA256": "c67d225603ae4f4675f0388136aa88ee1d72d2bd2c1a2cb3f126f661621f0bd0"
+    },
+    {
+      "path": "src/smoke/resources/META-INF/neoforge.mods.toml",
+      "sha256": "2c7e404b30a21b88aa3812d6fab4282703ea55c54b5bff443f9570d33a02d210",
+      "gitBlobSHA256": "972c51382cdda7167bfa42fb596bf2fde56247bf7d65708625a797967f015eeb"
+    }
+  ],
+  "hashConvention": "sha256 is frozen input bytes; gitBlobSHA256 is published Git blob bytes; differences are CRLF/LF normalization only."
+}

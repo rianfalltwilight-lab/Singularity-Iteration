@@ -15,12 +15,14 @@ import net.neoforged.neoforge.event.EventHooks;
 /** Standard public placement event and conditional restoration for the miner's two simple block states. */
 public final class MiningPlacement {
     private MiningPlacement() { }
-    public static PipeAdvance.Outcome replace(ServerLevel level, BlockPos pos, BlockState expected, BlockState placed, ItemStack tool) {
-        if (!level.getServer().isSameThread() || !level.getChunkSource().hasChunk(pos.getX() >> 4, pos.getZ() >> 4)
+    public static PipeAdvance.Outcome replace(ServerLevel level, BlockPos pos, BlockState expected, BlockState placed,
+                                               ItemStack tool, MachineActionOwner owner) {
+        if (!level.getServer().isSameThread() || owner == null || !owner.canAct()
+                || !level.getChunkSource().hasChunk(pos.getX() >> 4, pos.getZ() >> 4)
                 || !level.getWorldBorder().isWithinBounds(pos) || level.isOutsideBuildHeight(pos)) return PipeAdvance.Outcome.RETRY;
         if (expected.hasBlockEntity() || placed.hasBlockEntity() || level.getBlockState(pos) != expected) return PipeAdvance.Outcome.RETRY;
         var snapshot = BlockSnapshot.create(level.dimension(), level, pos);
-        var actor = FakePlayerFactory.get(level, MiningLoot.machineProfile());
+        var actor = FakePlayerFactory.get(level, owner.actorProfile());
         var oldTool = actor.getMainHandItem().copy(); var oldPosition = actor.position();
         try {
             actor.setItemInHand(InteractionHand.MAIN_HAND, tool.copy()); actor.setPos(pos.getX() + .5, pos.getY() + .5, pos.getZ() + .5);

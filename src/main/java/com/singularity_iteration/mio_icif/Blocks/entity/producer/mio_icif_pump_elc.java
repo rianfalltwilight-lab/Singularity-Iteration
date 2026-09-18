@@ -10,6 +10,7 @@ import com.singularity_iteration.mio_icif.Menu.Producer.PumpElcMenu;
 import com.singularity_iteration.mio_icif.energy.EnergyUnit.CableTier;
 import dev.scex.si.energy.ContainerToTank;
 import dev.scex.si.processing.FluidSourceSearch;
+import dev.scex.si.processing.MachineActionOwner;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
@@ -22,6 +23,7 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -58,7 +60,7 @@ public class mio_icif_pump_elc extends mio_icif_producer {
     public static final int IDLE_RETRY_TICKS = 20;
     private static final String SAVE_KEY = "scex_pump_v1";
     private static final SlotLayout LAYOUT = SlotLayout.builder().battery().upgrade(4).input(1).output(1).build();
-    private static final GameProfile ACTOR = new GameProfile(
+    private static final GameProfile LEGACY_ACTOR = new GameProfile(
         UUID.nameUUIDFromBytes("mio_icif:automated_pump".getBytes(StandardCharsets.UTF_8)), "[SI Pump]");
     private final FluidTank tank = new FluidTank(FLUID_CAPACITY) {
         @Override protected void onContentsChanged() { ContainerToTank.markUnsaved(mio_icif_pump_elc.this); }
@@ -72,6 +74,7 @@ public class mio_icif_pump_elc extends mio_icif_producer {
     private int paidWork;
     private boolean changing;
     private CompoundTag unmappedLegacy, uncertainRemoval;
+    private MachineActionOwner actionOwner = MachineActionOwner.legacy(LEGACY_ACTOR);
     private final int[] clientData = new int[7];
 
     public mio_icif_pump_elc(BlockPos pos, BlockState state) {
@@ -103,7 +106,7 @@ public class mio_icif_pump_elc extends mio_icif_producer {
         return !server.isOutsideBuildHeight(pos) && server.getWorldBorder().isWithinBounds(pos)
             && server.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4) != null;
     }
-    private boolean mayTransfer() { return !changing && !hasHeldState() && operational(); }
+    private boolean mayTransfer() { return actionOwner.canAct() && !changing && !hasHeldState() && operational(); }
     public boolean hasUnmappedLegacy() { return unmappedLegacy != null; }
     public boolean hasUncertainRemoval() { return uncertainRemoval != null; }
     private boolean hasHeldState() { return hasUnmappedLegacy() || hasUncertainRemoval(); }
@@ -159,7 +162,7 @@ public class mio_icif_pump_elc extends mio_icif_producer {
             && tank.fill(new FluidStack(fluid, amount), IFluidHandler.FluidAction.SIMULATE) == amount;
     }
     public static void tick(Level level, BlockPos pos, BlockState state, mio_icif_pump_elc pump) {
-        if (!pump.operational() || pump.hasHeldState()) return;
+        if (!pump.operational() || pump.hasHeldState() || !pump.actionOwner.canAct()) return;
         mio_icif_producer.tick(level, pos, state, pump);
         pump.setLit(pump.isWorking);
     }
@@ -191,6 +194,7 @@ public class mio_icif_pump_elc extends mio_icif_producer {
     /** The pump owns removal and output together; callers must never remove the source again. */
     public boolean tryCollectForMiner(mio_icif_miner_elc miner, BlockPos pos) {
         if (!mayTransfer() || !(level instanceof ServerLevel server) || miner.getLevel() != server
+                || !actionOwner.canShareAutomationWith(miner.getActionOwner())
                 || !available(server, miner.getBlockPos()) || server.getBlockEntity(miner.getBlockPos()) != miner
                 || worldPosition.distManhattan(miner.getBlockPos()) != 1 || !canWorkRedstone()
                 || lastCompletion == currentTick() || paidWork > 0 && paidWork < DEFAULT_WORK_TIME) return false;
@@ -223,7 +227,7 @@ public class mio_icif_pump_elc extends mio_icif_producer {
     /** Vanilla liquid pickup plus the public protection event; no IC2 types or internals. */
     protected boolean removeSource(BlockPos pos, BlockState expected, Fluid fluid) {
         if (!(level instanceof ServerLevel server) || !operational() || sourceState(pos) != expected) return false;
-        var actor = FakePlayerFactory.get(server, ACTOR);
+        var actor = FakePlayerFactory.get(server, actionOwner.actorProfile());
         var oldHand = actor.getMainHandItem().copy(); var oldPosition = actor.position();
         try {
             actor.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.BUCKET));
@@ -287,7 +291,9 @@ public class mio_icif_pump_elc extends mio_icif_producer {
         try { ContainerToTank.drainToContainer(itemHandler, SLOT_EMPTY_CONTAINER, SLOT_OUTPUT, tank, content, filled); }
         finally { changing = false; }
     }
-    @Override protected void handleAutomationUpgrades() { if (!hasHeldState() && !changing) super.handleAutomationUpgrades(); }
+    @Override protected void handleAutomationUpgrades() {
+        if (actionOwner.canAct() && !hasHeldState() && !changing) super.handleAutomationUpgrades();
+    }
     public IFluidHandler getFluidHandler() { return fluidPort; }
     @Override public IFluidHandler getFluidHandlerCapability(@Nullable Direction side) { return fluidPort; }
     public int getFluidAmount() { return tank.getFluidAmount(); }
@@ -295,6 +301,11 @@ public class mio_icif_pump_elc extends mio_icif_producer {
     public FluidStack getFluid() { return tank.getFluid().copy(); }
     public int getFluidProgress() { return getFluidAmount() * 100 / FLUID_CAPACITY; }
     public String getFluidTypeName() { return tank.isEmpty() ? "" : tank.getFluid().getHoverName().getString(); }
+    public MachineActionOwner getActionOwner() { return actionOwner; }
+    public void setActionOwnerFromPlacer(@Nullable LivingEntity placer) {
+        actionOwner = MachineActionOwner.fromPlacer(placer);
+        ContainerToTank.markUnsaved(this);
+    }
     @Override public Component getDisplayName() { return Component.translatable("container.mio_icif.pump_elc"); }
     @Override public AbstractContainerMenu createMenu(int id, Inventory inventory, Player player) { return new PumpElcMenu(id, inventory, this); }
     public ContainerData getContainerData() {
@@ -318,6 +329,7 @@ public class mio_icif_pump_elc extends mio_icif_producer {
         super.saveAdditional(tag, registries);
         var own = new CompoundTag(); own.putInt("PaidWork", paidWork);
         own.put("Tank", tank.writeToNBT(registries, new CompoundTag()));
+        own.put("ActionOwner", actionOwner.save());
         if (unmappedLegacy != null) own.put("UnmappedLegacy", unmappedLegacy.copy());
         if (uncertainRemoval != null) own.put("UncertainRemoval", uncertainRemoval.copy());
         tag.put(SAVE_KEY, own);
@@ -329,6 +341,7 @@ public class mio_icif_pump_elc extends mio_icif_producer {
         forgetSearch(false); lastCompletion = Long.MIN_VALUE;
         if (tag.contains(SAVE_KEY, Tag.TAG_COMPOUND)) {
             var own = tag.getCompound(SAVE_KEY);
+            actionOwner = MachineActionOwner.load(own, "ActionOwner", LEGACY_ACTOR);
             if (!own.contains("PaidWork", Tag.TAG_INT) || own.getInt("PaidWork") < 0 || own.getInt("PaidWork") > DEFAULT_WORK_TIME
                     || !own.contains("Tank", Tag.TAG_COMPOUND)
                     || own.contains("UnmappedLegacy") && !own.contains("UnmappedLegacy", Tag.TAG_COMPOUND)
@@ -340,7 +353,10 @@ public class mio_icif_pump_elc extends mio_icif_producer {
                 else if (own.contains("UnmappedLegacy", Tag.TAG_COMPOUND)) unmappedLegacy = own.getCompound("UnmappedLegacy").copy();
                 if (own.contains("UncertainRemoval", Tag.TAG_COMPOUND)) uncertainRemoval = own.getCompound("UncertainRemoval").copy();
             }
-        } else if (!tag.isEmpty()) unmappedLegacy = tag.copy();
+        } else {
+            actionOwner = MachineActionOwner.legacy(LEGACY_ACTOR);
+            if (!tag.isEmpty()) unmappedLegacy = tag.copy();
+        }
         isWorking = false; progress = paidWork;
     }
     @Override public CompoundTag getUpdateTag(HolderLookup.Provider registries) {

@@ -1,10 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.scex.si.processing;
 
-import com.mojang.authlib.GameProfile;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.UUID;
 import java.util.function.Predicate;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -17,27 +14,24 @@ import net.neoforged.neoforge.event.level.BlockEvent;
 
 /** Public Minecraft loot and NeoForge break-event boundary; no mining/search/reference algorithm. */
 public final class MiningLoot {
-    private static final GameProfile MACHINE = new GameProfile(
-        UUID.nameUUIDFromBytes("mio_icif:automated_miner".getBytes(StandardCharsets.UTF_8)), "[SI Miner]");
     private MiningLoot() { }
-    static GameProfile machineProfile() { return MACHINE; }
-    public static boolean capture(ServerLevel level, BlockPos pos, ItemStack tool, PendingDrops custody,
+    public static boolean capture(ServerLevel level, BlockPos pos, ItemStack tool, MachineActionOwner owner, PendingDrops custody,
                                   Predicate<List<ItemStack>> fits) {
-        return capture(level, pos, tool, custody, fits, null);
+        return capture(level, pos, tool, owner, custody, fits, null);
     }
-    public static boolean capture(ServerLevel level, BlockPos pos, ItemStack tool, PendingDrops custody,
+    public static boolean capture(ServerLevel level, BlockPos pos, ItemStack tool, MachineActionOwner owner, PendingDrops custody,
                                   Predicate<List<ItemStack>> fits, MiningPayment.Permit payment) {
-        return capture(level, pos, tool, custody, fits, payment, () -> {});
+        return capture(level, pos, tool, owner, custody, fits, payment, () -> {});
     }
-    public static boolean capture(ServerLevel level, BlockPos pos, ItemStack tool, PendingDrops custody,
+    public static boolean capture(ServerLevel level, BlockPos pos, ItemStack tool, MachineActionOwner owner, PendingDrops custody,
                                   Predicate<List<ItemStack>> fits, MiningPayment.Permit payment, Runnable accountRemoval) {
-        if (!level.getServer().isSameThread() || !custody.isEmpty()
+        if (!level.getServer().isSameThread() || owner == null || !owner.canAct() || !custody.isEmpty()
                 || !level.getChunkSource().hasChunk(pos.getX() >> 4, pos.getZ() >> 4)
                 || !level.getWorldBorder().isWithinBounds(pos)) return false;
         var state = level.getBlockState(pos);
         if (state.isAir()) return payment == null;
         if (state.getDestroySpeed(level, pos) < 0) return false;
-        var actor = FakePlayerFactory.get(level, MACHINE);
+        var actor = FakePlayerFactory.get(level, owner.actorProfile());
         var oldTool = actor.getMainHandItem().copy(); var oldPosition = actor.position();
         if (!custody.beginWorldChange()) return false;
         try {

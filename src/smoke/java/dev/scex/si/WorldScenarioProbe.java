@@ -38,8 +38,15 @@ public final class WorldScenarioProbe {
     private final FlightReplacementWorldProbe flightReplacement;
     private final CropBaselineWorldProbe cropBaseline;
     private final CropReplacementWorldProbe cropReplacement;
+    private final CropLifecycleWorldProbe cropLifecycle;
     private final PumpProductWorldProbe pumpProduct;
     private final SolarProductWorldProbe solarProduct;
+    private final SolarHeadgearWorldProbe solarHeadgear;
+    private final MiningProductWorldProbe miningProduct;
+    private final F04LifecyclePerformanceWorldProbe f04LifecyclePerformance;
+    private final F04ColdJvmWorldProbe f04ColdJvm;
+    private final MachineOwnerWorldProbe machineOwner;
+    private final MatronHydrationWorldProbe matronHydration;
     private final MixedOutputWorldProbe mixedOutput;
     private final PatternStorageWorldProbe patternStorage;
     private final F04WorldProbe f04;
@@ -149,8 +156,15 @@ public final class WorldScenarioProbe {
         flightReplacement=Files.exists(Path.of("flight-replacement-r148.json")) ? new FlightReplacementWorldProbe() : null;
         cropBaseline=Files.exists(Path.of("crop-baseline-r151.json")) ? new CropBaselineWorldProbe() : null;
         cropReplacement=Files.exists(Path.of("crop-replacement-r156.json")) ? new CropReplacementWorldProbe() : null;
+        cropLifecycle=Files.exists(Path.of("crop-lifecycle-r174.json")) ? new CropLifecycleWorldProbe() : null;
         pumpProduct=Files.exists(Path.of("pump-product-r158.json")) ? new PumpProductWorldProbe() : null;
         solarProduct=Files.exists(Path.of("extended-solar-product-r159.json")) ? new SolarProductWorldProbe() : null;
+        solarHeadgear=Files.exists(Path.of("solar-headgear-r178.json")) ? new SolarHeadgearWorldProbe() : null;
+        miningProduct=Files.exists(Path.of("mining-product-r168.json")) ? new MiningProductWorldProbe() : null;
+        f04LifecyclePerformance=Files.exists(Path.of("f04-lifecycle-performance-r172.json")) ? new F04LifecyclePerformanceWorldProbe(server) : null;
+        f04ColdJvm=Files.exists(Path.of("f04-cold-r173.json")) ? new F04ColdJvmWorldProbe() : null;
+        machineOwner=Files.exists(Path.of("machine-owner-f05.json")) ? new MachineOwnerWorldProbe() : null;
+        matronHydration=Files.exists(Path.of("matron-hydration-world.json")) ? new MatronHydrationWorldProbe() : null;
         interopRestart=Files.exists(Path.of("interop-restart.json")) ? new InteropRestartProbe() : null;
         interopWorld=interopRestart==null && Files.exists(Path.of("interop-world.json")) ? new InteropWorldProbe() : null;
         transformerLifecycle=Files.exists(Path.of("transformer-lifecycle.json")) ? new TransformerLifecycleProbe() : null;
@@ -440,6 +454,10 @@ public final class WorldScenarioProbe {
                 var result=cropReplacement.inspect(world,tick);
                 if(result!=null)record("crop-replacement-r156",result);
             }
+            if(cropLifecycle!=null) {
+                var result=cropLifecycle.inspect(world,tick);
+                if(result!=null)record("crop-lifecycle-r174",result);
+            }
             if(pumpProduct!=null) {
                 var result=pumpProduct.inspect(world,tick);
                 if(result!=null)record("pump-product-r158",result);
@@ -447,6 +465,30 @@ public final class WorldScenarioProbe {
             if(solarProduct!=null) {
                 var result=solarProduct.inspect(world,tick);
                 if(result!=null)record("solar-product-r159",result);
+            }
+            if(solarHeadgear!=null) {
+                var result=solarHeadgear.inspect(world,tick);
+                if(result!=null)record("solar-headgear-r178",result);
+            }
+            if(miningProduct!=null) {
+                var result=miningProduct.inspect(world,tick);
+                if(result!=null)record("mining-product-r168",result);
+            }
+            if(f04LifecyclePerformance!=null) {
+                var result=f04LifecyclePerformance.inspect(world,tick);
+                if(result!=null)record("f04-lifecycle-performance-r172",result);
+            }
+            if(f04ColdJvm!=null) {
+                var result=f04ColdJvm.inspect(world,tick);
+                if(result!=null)record("f04-cold-r173",result);
+            }
+            if(machineOwner!=null) {
+                var result=machineOwner.inspect(world,tick);
+                if(result!=null)record("machine-owner-f05",result);
+            }
+            if(matronHydration!=null) {
+                var result=matronHydration.inspect(world,tick);
+                if(result!=null)record("matron-hydration-f06",result);
             }
             if(specialCableInteraction!=null) {
                 var result=specialCableInteraction.inspect(world,tick);

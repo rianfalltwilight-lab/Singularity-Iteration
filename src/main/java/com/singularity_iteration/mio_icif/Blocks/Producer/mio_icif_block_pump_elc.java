@@ -11,6 +11,7 @@ import net.minecraft.world.Containers;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.MenuProvider;
 import net.minecraft.world.SimpleMenuProvider;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -62,6 +63,15 @@ public class mio_icif_block_pump_elc extends mio_icif_entity_block {
     public RenderShape getRenderShape(BlockState state) {
         // 使用模型渲染
         return RenderShape.MODEL;
+    }
+
+    @Override
+    public void setPlacedBy(Level level, BlockPos pos, BlockState state, @Nullable LivingEntity placer, ItemStack stack) {
+        super.setPlacedBy(level, pos, state, placer, stack);
+        if (!level.isClientSide() && level.getBlockEntity(pos) instanceof mio_icif_pump_elc pump) {
+            // Always replace any packed block-entity owner with the current placer.
+            pump.setActionOwnerFromPlacer(placer);
+        }
     }
 
     /**

@@ -160,6 +160,16 @@ public final class UuMappedCatalogContract {
         check(defaultScope.catalog().prices().containsKey(IndependentUuValueIndex.keyOf(expected))
                 &&!defaultScope.allowsDerivedOutput(IndependentUuValueIndex.keyOf(expected)),
                 "Explicit empty patch preserves all registered defaults and restricts inferred variants");
+        var defaultEquivalent=document.deepCopy();defaultEquivalent.getAsJsonArray("entries").get(0).getAsJsonObject()
+                .addProperty("target_stack","{id:'"+DEFAULTS+"',count:1,components:{'minecraft:custom_data':{default_marker:'retained'}}}");
+        var explicitDefault=UuMappedCatalog.readReviewed(new StringReader(defaultEquivalent.toString()),registries);
+        check(explicitDefault.catalog().prices().containsKey(IndependentUuValueIndex.keyOf(new ItemStack(defaults)))
+                &&!explicitDefault.allowsDerivedOutput(IndependentUuValueIndex.keyOf(new ItemStack(defaults))),
+                "Explicit saved component equal to the registered default preserves the full identity and scope");
+        var changedDefault=new ItemStack(defaults);var changedDefaultData=new CompoundTag();changedDefaultData.putString("default_marker","changed");
+        changedDefault.set(DataComponents.CUSTOM_DATA,CustomData.of(changedDefaultData));
+        check(!explicitDefault.catalog().prices().containsKey(IndependentUuValueIndex.keyOf(changedDefault)),
+                "Default-equivalent explicit prototype never quotes a changed component value");
         var data=new CompoundTag();data.putInt("r108",1);expected.set(DataComponents.CUSTOM_DATA,CustomData.of(data));
         check(resolved.prices().get(IndependentUuValueIndex.keyOf(expected))==184996.01285682071/100000.0,
                 "Explicit complete components receive measured bucket quote");
@@ -171,7 +181,7 @@ public final class UuMappedCatalogContract {
         for(String bad:List.of(saved.replace("count:1","count:2"),saved.replace("count:1","count:1b"),
                 saved.replace(DEFAULTS,OTHER),saved.replace("count:1","count:1,ignored:0"),
                 saved.replace("minecraft:custom_data","mio_icif:unregistered_component"),
-                saved.replace("{r108:1}","[]"),saved.replace("{r108:1}","{default_marker:'retained'}"))){
+                saved.replace("{r108:1}","[]"))){
             var value=document.deepCopy();value.getAsJsonArray("entries").get(0).getAsJsonObject().addProperty("target_stack",bad);
             reject(value,"Malformed or lossy explicit prototype "+bad);
         }

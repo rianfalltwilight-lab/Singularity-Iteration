@@ -31,11 +31,11 @@ public final class ScannerMachineContract {
         @Override protected HolderLookup.Provider patternRegistries(){return registries;}
     }
     private static final class Machine extends mio_icif_scanner_elc {
-        long time;boolean quotes=true,authority=true,storage=true;double cost=.00015;final Library library=new Library();
+        long time,generation=1;boolean quotes=true,authority=true,storage=true;double cost=.00015;final Library library=new Library();
         Machine(){super(BlockPos.ZERO,Blocks.FURNACE.defaultBlockState(),BlockEntityType.FURNACE);put(new ItemStack(Items.STONE));}
         @Override protected boolean serverThread(){return authority;}
         @Override protected long gameTime(){return time;}
-        @Override protected UuQuoteBook.Quote trustedQuote(ItemStack item){return !quotes||item.isEmpty()?null:new UuQuoteBook.Quote(cost,1);}
+        @Override protected UuQuoteBook.Quote trustedQuote(ItemStack item){return !quotes||item.isEmpty()?null:new UuQuoteBook.Quote(cost,generation);}
         @Override protected List<mio_icif_pattern_storage> nearbyStorage(){return storage?List.of(library):List.of();}
         void put(ItemStack stack){itemHandler.setStackInSlot(SCANNER_SLOT,stack.copy());}
         void step(){time++;tickProduction();}
@@ -47,17 +47,21 @@ public final class ScannerMachineContract {
         var m=new Machine();long consumed=0;
         for(int i=0;i<1300;i++){consumed+=m.powered();require(!m.isScanComplete()&&m.getItem(0).is(Items.STONE),"Input remains until full observed scan work");}
         require(m.getProgress()==1300&&consumed==332800,"Observed 256 EU per work tick");
-        var snapshot=m.saved();var resumed=new Machine();resumed.time=m.time;resumed.loadAdditional(snapshot,registries);
-        require(!resumed.hasHeldScanData()&&resumed.getProgress()==1300,"In-progress component and input survive registry-aware save");
+        m.generation++;long generationDebit=m.powered();consumed+=generationDebit;require(generationDebit==256&&m.getProgress()==1301&&!m.hasHeldScanData(),"Same-price generation change preserves paid scan progress");
+        m.cost=.0002;m.generation++;long changedDebit=m.powered();consumed+=changedDebit;require(changedDebit==256&&m.getProgress()==1302&&!m.hasHeldScanData()&&m.getUUMatterCost()==.0002,
+            "Scanner work has fixed EU debit while its eventual pattern follows the current authoritative quote");
+        var snapshot=m.saved();var resumed=new Machine();resumed.cost=.0002;resumed.generation=m.generation;resumed.time=m.time;resumed.loadAdditional(snapshot,registries);
+        require(!resumed.hasHeldScanData()&&resumed.getProgress()==1302,"In-progress component, paid work and quote-policy boundary survive registry-aware save");
         resumed.getEnergyStorageInternal().setEnergy(256);resumed.repeat();
-        require(resumed.getEnergyStorageInternal().getAmount()==256&&resumed.getProgress()==1300,"Same saved world tick cannot be debited twice");
-        for(int i=1300;i<3300;i++)consumed+=resumed.powered();
+        require(resumed.getEnergyStorageInternal().getAmount()==256&&resumed.getProgress()==1302,"Same saved world tick cannot be debited twice");
+        for(int i=1302;i<3300;i++)consumed+=resumed.powered();
         require(consumed==844800&&resumed.isScanComplete()&&resumed.getItem(0).isEmpty(),"Observed completion boundary consumes exactly one input and 844800 EU");
         var complete=resumed.saved();var loaded=new Machine();loaded.time=resumed.time;loaded.loadAdditional(complete,registries);
         require(loaded.isScanComplete()&&loaded.getScanResult().item.is(Items.STONE),"Completed result survives before explicit save action");
         loaded.getScanResult().item.setCount(32);require(loaded.getScanResult().item.getCount()==1,"Public result is defensive");
-        loaded.cost=.0002;require(loaded.storeResult(),"Current authoritative price stores in adjacent library");
-        require(loaded.library.getStoredCount()==1&&loaded.library.getCurrentUuCost()==.0002&&loaded.library.getCurrentEuCost()==844800,"Stale scan quote repriced when saved");
+        loaded.cost=.00025;loaded.generation=resumed.generation+1;require(loaded.storeResult(),"Current authoritative price stores in adjacent library");
+        require(loaded.library.getStoredCount()==1&&loaded.library.getCurrentUuCost()==.00025&&loaded.library.getCurrentEuCost()==844800,
+            "Completed scan is repriced exactly at the explicit storage commit boundary");
         require(!loaded.storeResult()&&loaded.library.getEnergyStorageInternal().getAmount()==900,"Repeated button cannot replay storage payment");
         loaded.put(new ItemStack(Items.STONE));long eu=loaded.powered();require(eu==0&&loaded.getScanState()==mio_icif_scanner_elc.State.ALREADY_RECORDED,"Existing component identity avoids repeat scan payment");
     }

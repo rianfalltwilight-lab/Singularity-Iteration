@@ -1,5 +1,6 @@
 package com.singularity_iteration.mio_icif.Blocks.entity.producer;
 
+import com.mojang.authlib.GameProfile;
 import com.singularity_iteration.mio_icif.Items.Upgrade.MachineUpgradeStats;
 import com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_block_entities;
 import com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_producer;
@@ -12,6 +13,7 @@ import dev.scex.si.processing.PendingDrops;
 import dev.scex.si.processing.MiningLoot;
 import dev.scex.si.processing.MiningPayment;
 import dev.scex.si.processing.MiningLayer;
+import dev.scex.si.processing.MachineActionOwner;
 import dev.scex.si.energy.ToolEnergy;
 import dev.scex.si.energy.ContainerToTank;
 import net.minecraft.core.BlockPos;
@@ -21,6 +23,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.tags.BlockTags;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -37,8 +40,10 @@ import net.neoforged.neoforge.common.Tags;
 import net.neoforged.neoforge.items.IItemHandler;
 import org.jetbrains.annotations.Nullable;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 
@@ -51,12 +56,16 @@ import com.mojang.logging.LogUtils;
  * - 自动处理液体（不需要泵 * - 更大的扫描范围（9x9 * - HV电压等级
  */
 public class mio_icif_advanced_miner_elc extends mio_icif_producer {
+    private static final String ACTION_OWNER_KEY = "scex_machine_action_owner";
+    private static final GameProfile LEGACY_ACTOR = new GameProfile(
+        UUID.nameUUIDFromBytes("mio_icif:automated_miner".getBytes(StandardCharsets.UTF_8)), "[SI Miner]");
     private final MiningPayment scexMiningPayment = new MiningPayment(() -> ContainerToTank.markUnsaved(this));
     private boolean scexScanConfigurationDirty = true;
     private final int[] scexOutputCursors = new int[6];
     private final boolean[] scexOutputScanned = new boolean[6];
     private ItemStack scexOutputHead = ItemStack.EMPTY;
     private final PendingDrops scexPendingDrops = new PendingDrops(() -> ContainerToTank.markUnsaved(this));
+    private MachineActionOwner actionOwner = MachineActionOwner.legacy(LEGACY_ACTOR);
 
     private static final Logger LOGGER = LogUtils.getLogger();
 
@@ -253,7 +262,7 @@ private int currentDepth = 0;           // 当前挖掘深度
 
     @Override
     protected boolean canWork() {
-        if (scexMiningPayment.isBusy() || scexPendingDrops.isBusy() || !scexPendingDrops.isEmpty()) return false;
+        if (!actionOwner.canAct() || scexMiningPayment.isBusy() || scexPendingDrops.isBusy() || !scexPendingDrops.isEmpty()) return false;
         // 检查基本条
    if (level == null || level.isClientSide) {
             return false;
@@ -310,6 +319,7 @@ private int currentDepth = 0;           // 当前挖掘深度
 
     @Override
     protected void onTick() {
+        if (!actionOwner.canAct()) return;
         if (level instanceof ServerLevel && (scexScanConfigurationDirty || level.getGameTime() % 100 == 0)) {
             scanUpgrades(); scexScanConfigurationDirty = false;
         }
@@ -494,7 +504,7 @@ private int currentDepth = 0;           // 当前挖掘深度
         final ItemStack lootTool = tool;
         boolean removed = scexMiningPayment.attempt(energyStorage, itemHandler, SLOT_SCANNER, getItemAPI(),
             BASE_ENERGY_COST, SCANNER_ENERGY_COST,
-            payment -> MiningLoot.capture(serverLevel, pos, lootTool, scexPendingDrops, drops -> true, payment));
+            payment -> MiningLoot.capture(serverLevel, pos, lootTool, actionOwner, scexPendingDrops, drops -> true, payment));
         if (removed) flushPendingLoot();
         return removed;
     }
@@ -542,6 +552,7 @@ private int currentDepth = 0;           // 当前挖掘深度
     @Override
     protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.saveAdditional(tag, registries);
+        tag.put(ACTION_OWNER_KEY, actionOwner.save());
         tag.put("scex_pending_mining_drops", scexPendingDrops.save(registries));
         tag.put("scex_mining_payment", scexMiningPayment.save());
         tag.putInt("currentDepth", currentDepth);
@@ -567,6 +578,7 @@ private int currentDepth = 0;           // 当前挖掘深度
     @Override
     public void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
+        actionOwner = MachineActionOwner.load(tag, ACTION_OWNER_KEY, LEGACY_ACTOR);
         scexPendingDrops.load(registries, tag.getList("scex_pending_mining_drops", net.minecraft.nbt.Tag.TAG_COMPOUND));
         scexMiningPayment.load(tag.getCompound("scex_mining_payment"));
         scexScanConfigurationDirty = true;
@@ -663,6 +675,7 @@ private int currentDepth = 0;           // 当前挖掘深度
      * 每tick更新逻辑
      */
         public static void tick(Level level, BlockPos pos, BlockState state, mio_icif_advanced_miner_elc blockEntity) {
+        if (!blockEntity.actionOwner.canAct()) { blockEntity.stopWork(); return; }
         mio_icif_producer.tick(level, pos, state, blockEntity);
 
         if (!level.isClientSide()) {
@@ -722,4 +735,9 @@ private int currentDepth = 0;           // 当前挖掘深度
     public int getTractorBeamCount() { return tractorBeamCount; }
     public int getEffectiveScanRadius() { return effectiveScanRadius; }
     public int getCurrentDepth() { return currentDepth; }
+    public MachineActionOwner getActionOwner() { return actionOwner; }
+    public void setActionOwnerFromPlacer(@Nullable LivingEntity placer) {
+        actionOwner = MachineActionOwner.fromPlacer(placer);
+        ContainerToTank.markUnsaved(this);
+    }
 }

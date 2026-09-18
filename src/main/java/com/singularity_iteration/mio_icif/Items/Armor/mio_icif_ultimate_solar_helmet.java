@@ -30,11 +30,11 @@ import java.util.List;
 @SuppressWarnings({"null", "deprecation"})
 public class mio_icif_ultimate_solar_helmet extends mio_icif_armor_elc implements ISolarHelmetItem {
 
-    // 能量配置 (转换为 FE，1 EU = 4 FE)
-    public static final int MAX_ENERGY = 10_000_000 * 4; // 40,000,000 FE
-    public static final int DAY_GENERATION = 512 * 4; // 2048 FE/t
-    public static final int NIGHT_GENERATION = 64 * 4; // 256 FE/t
-    public static final int TRANSFER_LIMIT = 10000 * 4; // 40000 FE/t
+    // AbstractElectricArmor and the SI item API store and transfer EU directly.
+    public static final int MAX_ENERGY = 10_000_000;
+    public static final int DAY_GENERATION = 512;
+    public static final int NIGHT_GENERATION = 64;
+    public static final int TRANSFER_LIMIT = 10000;
     public static final int TIER = 4;
     public static final double DAMAGE_ABSORPTION = 1.0;
 
@@ -55,10 +55,10 @@ public class mio_icif_ultimate_solar_helmet extends mio_icif_armor_elc implement
             return false;
         }
 
-        // 检查玩家y+1位置的天空光照等级
-        int skyLightLevel = level.getBrightness(net.minecraft.world.level.LightLayer.SKY,
-            net.minecraft.core.BlockPos.containing(entity.position().x, entity.position().y + 1, entity.position().z));
-        return skyLightLevel >= 10;
+        // Sky exposure is independent of time-of-day: night still has a configured
+        // low-output mode, while a roof must disable both day and night output.
+        var headPos = net.minecraft.core.BlockPos.containing(entity.position().x, entity.position().y + 1, entity.position().z);
+        return level.canSeeSky(headPos);
     }
 
     /**
@@ -78,7 +78,8 @@ public class mio_icif_ultimate_solar_helmet extends mio_icif_armor_elc implement
         }
 
         // 检查天气
-        boolean isRaining = level.isRaining() || level.isThundering();
+        var headPos = net.minecraft.core.BlockPos.containing(entity.position().x, entity.position().y + 1, entity.position().z);
+        boolean isRaining = level.isRainingAt(headPos) || level.isThundering();
 
         if (isDay(level) && !isRaining) {
             return DAY_GENERATION;
@@ -103,7 +104,7 @@ public class mio_icif_ultimate_solar_helmet extends mio_icif_armor_elc implement
             return;
         }
 
-        dev.scex.si.energy.SolarHelmetCharging.tick(stack, this, level, player,
+        dev.scex.si.energy.SolarHelmetCharging.tickArmorOnly(stack, this, level, player,
             getGenerationRate(level, entity), TRANSFER_LIMIT);
         // 3. 水下呼吸功能
         if (getEnergy(stack) >= 1000 * 4) { // 需要至少 1000 EU
@@ -147,11 +148,11 @@ public class mio_icif_ultimate_solar_helmet extends mio_icif_armor_elc implement
     public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
         super.appendHoverText(stack, context, tooltip, flag);
 
-        tooltip.add(Component.translatable("tooltip.mio_icif.ultimate_solar_helmet.day", DAY_GENERATION / 4)
+        tooltip.add(Component.translatable("tooltip.mio_icif.ultimate_solar_helmet.day", DAY_GENERATION)
                 .withStyle(net.minecraft.ChatFormatting.YELLOW));
-        tooltip.add(Component.translatable("tooltip.mio_icif.ultimate_solar_helmet.night", NIGHT_GENERATION / 4)
+        tooltip.add(Component.translatable("tooltip.mio_icif.ultimate_solar_helmet.night", NIGHT_GENERATION)
                 .withStyle(net.minecraft.ChatFormatting.AQUA));
-        tooltip.add(Component.translatable("tooltip.mio_icif.ultimate_solar_helmet.transfer", TRANSFER_LIMIT / 4)
+        tooltip.add(Component.translatable("tooltip.mio_icif.ultimate_solar_helmet.transfer", TRANSFER_LIMIT)
                 .withStyle(net.minecraft.ChatFormatting.GREEN));
         tooltip.add(Component.translatable("tooltip.mio_icif.ultimate_solar_helmet.water_breathing")
                 .withStyle(net.minecraft.ChatFormatting.BLUE));
@@ -163,6 +164,11 @@ public class mio_icif_ultimate_solar_helmet extends mio_icif_armor_elc implement
     @Override
     public long getEnergyPerDamage() {
         return (int) (2000 * DAMAGE_ABSORPTION);
+    }
+
+    @Override
+    public float getDamageAbsorptionRatio(EquipmentSlot slot) {
+        return slot == EquipmentSlot.HEAD ? (float) DAMAGE_ABSORPTION : 0.0F;
     }
 
     // ==================== ISolarHelmetItem API ====================
