@@ -7,6 +7,20 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.mojang.authlib.GameProfile;
+import com.singularity_iteration.mio_icif.api.item.electric.ISpecialElectricItem;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ArmorItem;
+import net.minecraft.world.item.ArmorMaterials;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.level.ClientInformation;
+import net.minecraft.server.network.ServerGamePacketListenerImpl;
+import net.minecraft.server.network.CommonListenerCookie;
+import net.minecraft.network.Connection;
+import net.minecraft.network.PacketSendListener;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.PacketFlow;
+import net.neoforged.neoforge.registries.RegisterEvent;
+
 import com.singularity_iteration.mio_icif.api.item.BatteryElectricAdapter;
 import com.singularity_iteration.mio_icif.api.item.IBatteryItem;
 import com.singularity_iteration.mio_icif.api.item.electric.IElectricItem;
@@ -39,15 +53,15 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.CustomData;
 import net.neoforged.neoforge.common.util.FakePlayer;
 
-/** Old SI public calls only. No reflection, registration, world placement or player inventory access. */
-public final class LegacyElectricAdapterPublicProbe {
-    private static final Path MARKER=Path.of("legacy-electric-adapter-candidate-r135.json");
-    private static final Path CASES=Path.of("legacy-electric-adapter-cases-r133.json");
-    private static final Path ROWS=Path.of("legacy-electric-adapter-candidate-r135-observations.jsonl");
-    private static final Path OUTPUT=Path.of("legacy-electric-adapter-candidate-r135-result.json");
-    private static final String CASES_SHA="424b2b188b95ebce4946b4eb7aac351cc1866348c034059b04c280db74f581f8";
+/** Registered test armor and ordinary detached ServerPlayer public calls. No IC2 or old implementation access. */
+public final class LegacyElectricAdapterDonorProbe {
+    private static final Path MARKER=Path.of("legacy-electric-donor-candidate-r135.json");
+    private static final Path CASES=Path.of("legacy-electric-donor-cases-r135.json");
+    private static final Path ROWS=Path.of("legacy-electric-donor-candidate-r135-observations.jsonl");
+    private static final Path OUTPUT=Path.of("legacy-electric-donor-candidate-r135-result.json");
+    private static final String CASES_SHA="1a37dbbb04a0517a0e4489f7679a7603301347498531137c217914cf93c3cf49";
     private static final String CLASS_JSON="{\"com/singularity_iteration/mio_icif/api/item/BatteryElectricAdapter.class\":\"87057ce8d8422d6b84b1e311dfb6cead93e1262ff5fa93a8652538ccdeeed31e\",\"com/singularity_iteration/mio_icif/api/item/electric/ISpecialElectricItem.class\":\"8723300c3156951fd5d6a75f7d831bd11e783d43383135cf29f5bb66c7f88a04\",\"com/singularity_iteration/mio_icif/api/item/electric/IElectricItemManager.class\":\"f0f0691f5d5716de259242fad336de1acbf9f00650ede829f00c9ce5fc00bd3b\",\"com/singularity_iteration/mio_icif/api/item/electric/IElectricItem.class\":\"41cb06fde0a5c50cb7760d82688f3fefbd263a21f9ac4179008442708e56c858\",\"com/singularity_iteration/mio_icif/api/item/electric/IBackupElectricItemManager.class\":\"622fb888fe9e0e65c69002dbe61c457781823b5c46ac3c9ef5a779e270f7a29b\",\"com/singularity_iteration/mio_icif/api/item/BatteryElectricAdapter$ElectricItemWrapper.class\":\"a6cea4356ef2503fdd4b97e7adc8aa41d4278270d97fbc1376d907e2827f98bc\",\"com/singularity_iteration/mio_icif/api/item/BatteryElectricAdapter$BatteryItemWrapper.class\":\"ec4c645a24a479e246b00a331b97abb34daf624ec4dbfa2b7958a9b7a168b07a\"}";
-    private static final int EXPECTED_ROWS=2885;
+    private static final int EXPECTED_ROWS=840;
     private static final Gson GSON=new GsonBuilder().serializeNulls().create();
     private static final String ENERGY="scex_r133_fixture_energy", CAPACITY="scex_r133_fixture_capacity", RATE="scex_r133_fixture_rate";
     private JsonArray cases;
@@ -85,11 +99,11 @@ public final class LegacyElectricAdapterPublicProbe {
         return new ItemStack(holder,count);
     }
     private static ItemStack carrier(ServerLevel world,JsonObject row) {
-        var stack=item(world,"minecraft:paper",(int)number(row,"stack_count",1));
+        var stack=item(world,str(row,"target_kind","paper").equals("legacy")?"scex_si_smoke:r135_legacy_head":"minecraft:paper",(int)number(row,"stack_count",1));
         if(stack.isEmpty())return stack;
         var tag=new CompoundTag();tag.putLong(ENERGY,number(row,"initial_energy",333));
         tag.putLong(CAPACITY,number(row,"capacity",1000));tag.putLong(RATE,number(row,"charge_rate",64));
-        tag.putString("scex_r133_keep","unrelated sentinel");
+        tag.putString("scex_r133_keep","unrelated sentinel");tag.putString("r135_label","target");tag.putLong("r135_tier",1);tag.putBoolean("r135_provide",true);
         stack.set(DataComponents.CUSTOM_DATA,CustomData.of(tag));return stack;
     }
     private static boolean sameComponents(DataComponentMap a,DataComponentMap b) {
@@ -138,7 +152,7 @@ public final class LegacyElectricAdapterPublicProbe {
         private Map<String,Object> call(String name,ItemStack stack) {
             if(calls.size()>=256)throw new ProviderFault("controlled callback budget exceeded");
             var row=new LinkedHashMap<String,Object>();row.put("method",name);
-            row.put("original_stack_identity",stack==original);row.put("before",stack==null?null:read(stack,ENERGY));
+            row.put("owner_label",stack==null?"none":data(stack).getString("r135_label"));row.put("original_stack_identity",stack==original);row.put("before",stack==null?null:read(stack,ENERGY));
             row.put("count",stack==null?null:stack.getCount());calls.add(row);return row;
         }
         private long query(String name,ItemStack stack,long value) {
@@ -150,12 +164,17 @@ public final class LegacyElectricAdapterPublicProbe {
             query(name,stack,value?1:0);return value;
         }
         private long transfer(String name,ItemStack stack,long amount,boolean charging,Integer tier,boolean... flags) {
+            String mode=data(stack).contains("r135_mode")?data(stack).getString("r135_mode"):this.mode;
             var row=call(name,stack);row.put("requested",amount);row.put("tier",tier);
             row.put("boolean_arguments",flags);row.put("fixture_mode",mode);
             if(mode.equals("THROW_BEFORE")){row.put("thrown","ProviderFault/before");throw new ProviderFault("controlled pre-mutation failure");}
             long before=read(stack,ENERGY),capacity=read(stack,CAPACITY);
             long room=charging?Math.max(0,capacity-before):Math.max(0,before);
             long changed=amount<=0?0:Math.min(amount,room);
+            if(name.startsWith("manager.")&&str(spec,"manager_policy","").equals("OBSERVED_WRAPPER_FLAGS")
+                    && flags.length>=2 && (flags[1] || !charging&&flags.length>=3&&!flags[2])) {
+                row.put("fixture_simulation",true);row.put("reported",changed);row.put("after",before);return changed;
+            }
             if(mode.equals("REFUSE"))changed=0;
             if(mode.equals("PARTIAL"))changed=Math.min(3,changed);
             if(mode.equals("REENTER_ONCE")&&!reentered&&reentry!=null){
@@ -208,43 +227,64 @@ public final class LegacyElectricAdapterPublicProbe {
         @Override public String getToolTip(ItemStack stack){state.call("manager.getToolTip",stack);return "controlled-fixture-tooltip";}
     }
 
-    private static void equip(ServerLevel world,LivingEntity actor,EquipmentSlot slot,String id) {
-        var stack=item(world,id,1);
-        if(stack.getItem() instanceof IBatteryItem battery){
-            long before=battery.getEnergy(stack);
-            if(before>0)battery.extractEnergy(stack,before);
-            require(battery.getEnergy(stack)==0,"donor clear via public API "+id);
-            long wanted=Math.min(777,battery.getMaxEnergy(stack));
-            require(wanted>0&&battery.addEnergy(stack,wanted)==wanted&&battery.getEnergy(stack)==wanted,"donor public initialization "+id);
-        }
-        actor.setItemSlot(slot,stack);
+    private static State activeState;
+    private static int suppressedPackets;
+    private static State active(){if(activeState==null)throw new IllegalStateException("fixture callback outside observed call");return activeState;}
+    public static class LegacyArmor extends ArmorItem implements IElectricItem,ISpecialElectricItem {
+        public LegacyArmor(ArmorItem.Type type){super(ArmorMaterials.LEATHER,type,new Item.Properties().stacksTo(1));}
+        @Override public boolean canProvideEnergy(ItemStack stack){return active().query("donor.canProvideEnergy",stack,data(stack).getBoolean("r135_provide"));}
+        @Override public long getMaxCharge(ItemStack stack){return active().query("donor.getMaxCharge",stack,read(stack,CAPACITY));}
+        @Override public int getTier(ItemStack stack){return (int)active().query("donor.getTier",stack,read(stack,"r135_tier"));}
+        @Override public long getTransferLimit(ItemStack stack){return active().query("donor.getTransferLimit",stack,read(stack,RATE));}
+        @Override public IElectricItemManager getManager(ItemStack stack){active().call("donor.getManager",stack);return new ControlledElectric(active());}
     }
-    private static LivingEntity actor(ServerLevel world,JsonObject spec) {
-        if(str(spec,"entity","null").equals("null"))return null;
-        // Neither object is added to the world, PlayerList or a tick list. The
-        // FakePlayer's dummy connection sends no network traffic; damage/tick
-        // semantics are irrelevant to this public item API-only observation.
-        LivingEntity actor=str(spec,"entity","").equals("player")
-            ?new FakePlayer(world,new GameProfile(UUID.nameUUIDFromBytes(str(spec,"id","").getBytes(StandardCharsets.UTF_8)),"R133AdapterProbe"))
-            :new ArmorStand(world,0,0,0);
-        String mode=str(spec,"equipment","none");
-        if(mode.equals("vanilla"))equip(world,actor,EquipmentSlot.CHEST,"minecraft:iron_chestplate");
-        if(mode.equals("nano-head")||mode.equals("nano-all")||mode.equals("nano-and-batpack"))equip(world,actor,EquipmentSlot.HEAD,"mio_icif:armor/item_armor_nano_helmet");
-        if(mode.equals("nano-chest")||mode.equals("nano-all"))equip(world,actor,EquipmentSlot.CHEST,"mio_icif:armor/item_armor_nano_chestplate");
-        if(mode.equals("nano-legs")||mode.equals("nano-all"))equip(world,actor,EquipmentSlot.LEGS,"mio_icif:armor/item_armor_nano_leggings");
-        if(mode.equals("nano-feet")||mode.equals("nano-all"))equip(world,actor,EquipmentSlot.FEET,"mio_icif:armor/item_armor_nano_boots");
-        if(mode.equals("batpack")||mode.equals("nano-and-batpack"))equip(world,actor,EquipmentSlot.CHEST,"mio_icif:armor/item_armor_batpack");
-        if(mode.equals("iron-tool-in-chest"))equip(world,actor,EquipmentSlot.CHEST,"mio_icif:item_tool_iron_driller");
+    public static final class DualArmor extends LegacyArmor implements IBatteryItem {
+        public DualArmor(ArmorItem.Type type){super(type);}
+        @Override public long getMaxEnergy(){return 1000;}
+        @Override public long getMaxEnergy(ItemStack stack){return active().query("dual.getMaxEnergy",stack,read(stack,CAPACITY));}
+        @Override public long getEnergy(ItemStack stack){return active().query("dual.getEnergy",stack,read(stack,ENERGY));}
+        @Override public long addEnergy(ItemStack stack,long amount){return active().transfer("dual.addEnergy",stack,amount,true,null);}
+        @Override public long extractEnergy(ItemStack stack,long amount){return active().transfer("dual.extractEnergy",stack,amount,false,null);}
+        @Override public boolean isFull(ItemStack stack){return getEnergy(stack)>=getMaxEnergy(stack);}
+        @Override public boolean isEmpty(ItemStack stack){return getEnergy(stack)<=0;}
+        @Override public long getChargeRate(ItemStack stack){return active().query("dual.getChargeRate",stack,read(stack,RATE));}
+    }
+    public static void registerItems(RegisterEvent event){
+        for(String kind:List.of("legacy","dual"))for(var slot:List.of(EquipmentSlot.HEAD,EquipmentSlot.CHEST,EquipmentSlot.LEGS,EquipmentSlot.FEET)){
+            var type=switch(slot){case HEAD->ArmorItem.Type.HELMET;case CHEST->ArmorItem.Type.CHESTPLATE;case LEGS->ArmorItem.Type.LEGGINGS;case FEET->ArmorItem.Type.BOOTS;default->throw new IllegalArgumentException();};
+            event.register(Registries.ITEM,ResourceLocation.fromNamespaceAndPath("scex_si_smoke","r135_"+kind+"_"+slot.name().toLowerCase(java.util.Locale.ROOT)),
+                ()->kind.equals("legacy")?new LegacyArmor(type):new DualArmor(type));
+        }
+    }
+    private static LivingEntity actor(ServerLevel world,JsonObject spec){
+        var profile=new GameProfile(UUID.nameUUIDFromBytes(("SCEX-R135-"+str(spec,"id","")).getBytes(StandardCharsets.UTF_8)),"R135DonorProbe");
+        require(world.getServer().getPlayerList().getPlayer(profile.getId())==null,"fixture UUID is not a connected player");
+        var actor=new ServerPlayer(world.getServer(),world,profile,ClientInformation.createDefault());
+        // Keep ordinary ServerPlayer inventory/equipment methods; only outgoing test packets are discarded.
+        new ServerGamePacketListenerImpl(world.getServer(),new Connection(PacketFlow.SERVERBOUND),actor,CommonListenerCookie.createInitial(profile,false)){
+            @Override public void send(Packet<?> packet){suppressedPackets++;}
+            @Override public void send(Packet<?> packet,PacketSendListener listener){suppressedPackets++;}
+        };
+        require(actor.getClass()==ServerPlayer.class&&!world.getServer().getPlayerList().getPlayers().contains(actor),"ordinary detached ServerPlayer");
+        var seen=new java.util.HashSet<EquipmentSlot>();
+        for(var value:spec.getAsJsonArray("donors")){
+            var donor=value.getAsJsonObject();var slot=EquipmentSlot.valueOf(donor.get("slot").getAsString());require(seen.add(slot),"unique equipped donor slot");
+            var stack=item(world,"scex_si_smoke:r135_"+donor.get("kind").getAsString()+"_"+slot.name().toLowerCase(java.util.Locale.ROOT),1);
+            require(stack.getItem() instanceof ArmorItem&&stack.getItem() instanceof IElectricItem&&stack.getItem() instanceof ISpecialElectricItem,"normal registered legacy armor donor");
+            var tag=new CompoundTag();tag.putLong(ENERGY,donor.get("energy").getAsLong());tag.putLong(CAPACITY,1000);tag.putLong(RATE,donor.get("rate").getAsLong());
+            tag.putLong("r135_tier",donor.get("tier").getAsLong());tag.putBoolean("r135_provide",donor.get("can_provide").getAsBoolean());
+            tag.putString("r135_mode",donor.get("mode").getAsString());tag.putString("r135_label",slot.name());tag.putString("r135_sentinel","preserve-donor-components");
+            stack.set(DataComponents.CUSTOM_DATA,CustomData.of(tag));actor.setItemSlot(slot,stack);
+            require(actor.getItemBySlot(slot)==stack&&actor.getInventory().armor.get(slot.getIndex())==stack,"real ServerPlayer armor inventory receives exact donor");
+        }
         return actor;
     }
-    private static List<Map<String,Object>> equipment(ServerLevel world,LivingEntity actor) {
-        var rows=new ArrayList<Map<String,Object>>();if(actor==null)return rows;
+    private static List<Map<String,Object>> equipment(ServerLevel world,LivingEntity actor){
+        var rows=new ArrayList<Map<String,Object>>();
         for(var slot:EquipmentSlot.values()){
-            var stack=actor.getItemBySlot(slot);var row=new LinkedHashMap<String,Object>();
-            row.put("slot",slot.name());row.put("stack",snapshot(world,stack));
-            if(!stack.isEmpty())row.put("actual_item_class",stack.getItem().getClass().getName());
-            if(!stack.isEmpty()&&stack.getItem() instanceof IBatteryItem battery){row.put("public_energy",battery.getEnergy(stack));row.put("public_capacity",battery.getMaxEnergy(stack));}
-            rows.add(row);
+            var stack=actor.getItemBySlot(slot);var row=new LinkedHashMap<String,Object>();row.put("slot",slot.name());row.put("stack",snapshot(world,stack));
+            row.put("fixture_energy",read(stack,ENERGY));row.put("legacy_electric",stack.getItem() instanceof IElectricItem);row.put("special_manager",stack.getItem() instanceof ISpecialElectricItem);
+            row.put("battery_interface",stack.getItem() instanceof IBatteryItem);if(!stack.isEmpty())row.put("actual_item_class",stack.getItem().getClass().getName());rows.add(row);
         }
         return rows;
     }
@@ -312,7 +352,7 @@ public final class LegacyElectricAdapterPublicProbe {
         var actor=actor(world,spec);row.put("before",snapshot(world,stack));row.put("equipment_before",equipment(world,actor));
         row.put("entity_added_to_world",false);row.put("entity_type",actor==null?null:actor.getClass().getName());
         String construction=str(spec,"construction","factory"),nulls=str(spec,"nulls","none");
-        row.put("phase","constructor");
+        row.put("phase","constructor");activeState=state;
         try{
             Object value;
             if(str(spec,"direction","").equals("IBatteryItem-to-ElectricItemWrapper")){
@@ -339,11 +379,11 @@ public final class LegacyElectricAdapterPublicProbe {
         }finally{
             // Drop callback closures before the row leaves; no cross-row retained
             // provider/stack/entity references or repeat callbacks are possible.
-            state.reentry=null;
+            state.reentry=null;activeState=null;if(actor instanceof ServerPlayer player)player.getTextFilter().leave();
         }
         row.put("provider_callbacks",List.copyOf(state.calls));row.put("after",snapshot(world,stack));
         row.put("equipment_after",equipment(world,actor));row.put("components_and_count_unchanged",ItemStack.matches(before,stack));
-        row.put("fixture_energy_delta",read(stack,ENERGY)-originalEnergy);
+        row.put("fixture_energy_delta",read(stack,ENERGY)-originalEnergy);row.put("ordinary_server_player",actor.getClass()==ServerPlayer.class);
         row.put("semantic_assertion","NONE_OBSERVATION_ONLY");
         groups.merge(str(spec,"group","unknown"),1,Integer::sum);return row;
     }
@@ -358,7 +398,7 @@ public final class LegacyElectricAdapterPublicProbe {
         require(expected.equals(marker.getAsJsonObject("expected_class_sha256")),"fixed seven-class identity");
         for(var entry:expected.entrySet()){
             byte[] bytes;
-            try(var stream=LegacyElectricAdapterPublicProbe.class.getClassLoader().getResourceAsStream(entry.getKey())){
+            try(var stream=LegacyElectricAdapterDonorProbe.class.getClassLoader().getResourceAsStream(entry.getKey())){
                 require(stream!=null,"baseline class resource exists: "+entry.getKey());bytes=stream.readNBytes(1024*1024+1);
             }
             require(bytes.length<=1024*1024,"class resource bound");String actual=hash(bytes);
@@ -374,7 +414,7 @@ public final class LegacyElectricAdapterPublicProbe {
                 "com/singularity_iteration/mio_icif/api/item/AbstractElectricArmor.class",
                 "com/singularity_iteration/mio_icif/api/item/AbstractBattery.class",
                 "dev/scex/si/energy/BatteryTransfer.class")){
-            try(var stream=LegacyElectricAdapterPublicProbe.class.getClassLoader().getResourceAsStream(resource)){
+            try(var stream=LegacyElectricAdapterDonorProbe.class.getClassLoader().getResourceAsStream(resource)){
                 require(stream!=null,"context class resource exists: "+resource);
                 byte[] bytes=stream.readNBytes(1024*1024+1);require(bytes.length<=1024*1024,"context class bound");
                 contextIdentities.add(Map.of("path",resource,"sha256",hash(bytes)));
@@ -388,18 +428,18 @@ public final class LegacyElectricAdapterPublicProbe {
     }
     private Map<String,Object> finish(int tick,Exception failure)throws Exception {
         finished=true;var result=new LinkedHashMap<String,Object>();
-        result.put("passed",failure==null&&next==EXPECTED_ROWS);result.put("status",failure==null?"PASS_SCOPED_CANDIDATE_PUBLIC_ADAPTER_OBSERVATION":"FAIL_PUBLIC_ADAPTER_OBSERVATION_HARNESS");
+        result.put("passed",failure==null&&next==EXPECTED_ROWS);result.put("status",failure==null?"PASS_SCOPED_CANDIDATE_LEGACY_DONOR_OBSERVATION":"FAIL_REGISTERED_LEGACY_DONOR_HARNESS");
         result.put("cases",next);result.put("expected_cases",EXPECTED_ROWS);result.put("caught_call_exceptions",thrown);
         result.put("group_counts",groups);result.put("started_tick",startedTick);result.put("finished_tick",tick);
         result.put("cases_sha256",CASES_SHA);result.put("baseline_class_resources",classIdentities);
         result.put("surrounding_context_resources",contextIdentities);
         result.put("reflection_used",false);result.put("old_method_code_decoded",false);result.put("candidate_activated",true);result.put("sampled_class_role","INDEPENDENT_R135_CANDIDATE");
         result.put("entities_added_to_world",0);result.put("real_player_inventories_touched",0);result.put("blocks_changed",0);
-        result.put("detached_fixture_inventories_used",true);
+        result.put("detached_fixture_inventories_used",true);result.put("ordinary_server_player",true);result.put("test_items_registered",8);result.put("suppressed_packet_calls",suppressedPackets);
         result.put("behavior_equivalence_approved",false);result.put("full_mod_gate","UNCHANGED_INCOMPLETE");
         if(Files.exists(ROWS)){result.put("observations_file",ROWS.toString());result.put("observations_bytes",Files.size(ROWS));result.put("observations_sha256",hash(Files.readAllBytes(ROWS)));}
         if(failure!=null){result.put("failure_type",failure.getClass().getName());result.put("failure_message",String.valueOf(failure.getMessage()));}
-        result.put("scope","Independent R135 candidate constructor/public-method observations against unchanged frozen inputs. Exceptions, refused transfers and callback mutations are raw observations. No automatic parity, armor balance, external addon or IC2 behavior claim.");
+        result.put("scope","Independent R135 candidate constructor/public-method observations against unchanged frozen inputs. Exceptions, refused transfers and callback mutations are raw observations. Ordinary detached ServerPlayer and two explicit controlled manager policies; no automatic parity, external addon, connected-client or IC2 behavior claim.");
         Files.writeString(OUTPUT,new GsonBuilder().serializeNulls().setPrettyPrinting().create().toJson(result)+"\n",StandardCharsets.UTF_8,StandardOpenOption.CREATE_NEW);
         return result;
     }

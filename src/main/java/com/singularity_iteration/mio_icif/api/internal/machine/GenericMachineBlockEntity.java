@@ -251,17 +251,33 @@ public class GenericMachineBlockEntity extends mio_icif_producer
         return false;
     }
 
+    /** Reject detached/replaced owners without loading any chunk. */
+    protected final boolean scexLiveWorkOwner() {
+        if (isRemoved() || !(level instanceof net.minecraft.server.level.ServerLevel world)
+                || !world.getServer().isSameThread()
+                || !world.shouldTickBlocksAt(net.minecraft.world.level.ChunkPos.asLong(worldPosition))) return false;
+        var chunk = world.getChunkSource().getChunkNow(worldPosition.getX() >> 4, worldPosition.getZ() >> 4);
+        return chunk != null && chunk.getBlockEntity(worldPosition,
+            net.minecraft.world.level.chunk.LevelChunk.EntityCreationType.CHECK) == this;
+    }
+
     @Override
     protected void doWork() {
+        if (!scexLiveWorkOwner()) { stopWork(); return; }
         // 先验证配方是否有效，避免无效工作时消耗能量
-        if (!canProcessWithHandler()) {
+        if (!canWork() || !canProcessWithHandler() || !scexLiveWorkOwner()) {
             stopWork();
             return;
         }
 
-        // 消耗能量 (使用 extract 方法，因为 energyStorage 是 ILongEnergyStorage)
+        // Machine work is an internal debit, independent of the external output limit.
         long energyCost = getEffectiveEnergyPerTick();
-        energyStorage.extract(energyCost, false);
+        if (energyCost < 0) { stopWork(); return; }
+        if (energyCost > 0) {
+            var payment = getEnergyStorageInternal().scexReserveInternal(energyCost);
+            if (payment == null) { stopWork(); return; }
+            payment.commit();
+        }
 
         // 增加进度
         int progressPerTick = getProgressPerTick();
@@ -314,12 +330,13 @@ public class GenericMachineBlockEntity extends mio_icif_producer
      * 工作完成时调用
      */
     protected void onWorkComplete() {
+        if (!scexLiveWorkOwner()) { stopWork(); return; }
         if (getLevel() != null && !getLevel().isClientSide) {
             if (workCompleteCallback != null) {
                 workCompleteCallback.onWorkComplete(getLevel(), getBlockPos(), ItemStack.EMPTY);
             }
         }
-        if (workHandler == null) return;
+        if (workHandler == null || !scexLiveWorkOwner()) { stopWork(); return; }
         // 确保仅在服务端执行回调，防止客户端/服务端不同步
         if (getLevel() != null && getLevel().isClientSide) return;
 

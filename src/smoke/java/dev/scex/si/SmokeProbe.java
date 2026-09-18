@@ -21,11 +21,14 @@ public final class SmokeProbe {
     public SmokeProbe(net.neoforged.bus.api.IEventBus modBus) {
         if (Files.exists(Path.of("interop-world.json"))) modBus.addListener(InteropWorldProbe::register);
         if (Files.exists(Path.of("pipe-failure-world.json")) || Files.exists(Path.of("pipe-recovery-world.json"))) modBus.addListener(PipeFailureWorldProbe::register);
-        if (Files.exists(Path.of("item-equipment-world.json")) || Files.exists(Path.of("mixed-output-world.json")) || Files.exists(Path.of("ordinary-consumer-world.json")) || Files.exists(Path.of("chunk-ticket-cold.json"))) {
+        if (Files.exists(Path.of("item-equipment-world.json")) || Files.exists(Path.of("equipment-source-r145.json")) || Files.exists(Path.of("mixed-output-world.json")) || Files.exists(Path.of("ordinary-consumer-world.json")) || Files.exists(Path.of("remaining-consumer-world.json")) || Files.exists(Path.of("chunk-ticket-cold.json"))) {
             modBus.addListener(ItemEquipmentWorldProbe::registerItems);
             modBus.addListener(ItemEquipmentWorldProbe::registerCapabilities);
         }
+        if (Files.exists(Path.of("future-trade-world-r134.json")) || Files.exists(Path.of("future-trade-cold-r134.json"))) modBus.addListener(FutureTradeWorldProbe::registerItems);
+        if (Files.exists(Path.of("legacy-electric-donor-candidate-r135.json"))) modBus.addListener(LegacyElectricAdapterDonorProbe::registerItems);
         ChunkTicketColdProbe.installIfPresent();
+        FutureTradeColdProbe.installIfPresent();
         NeoForge.EVENT_BUS.addListener(this::started);
         if ("topology".equals(System.getProperty("scex.smoke.mode"))) {
             NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.server.ServerAboutToStartEvent event) -> {

@@ -73,7 +73,10 @@ public class mio_icif_megnetizer extends mio_icif_producer {
     public static final double ATTRACT_SPEED = 0.15;
 
     // 已被磁化的铁栏杆集合（范围上下20格内）
+    // Per paid tick, inspect at most this many distinct positions; never load a chunk.
+    public static final int MAX_FENCE_SCAN_POSITIONS = 512;
     private final Set<BlockPos> magnetizedFences = new HashSet<>();
+    private int scexLastFenceScanPositions;
 
     public mio_icif_megnetizer(BlockPos pos, BlockState state) {
         this(pos, state, mio_icif_block_entities.MAGNETIZER_ENTITY_TYPE.get());
@@ -151,13 +154,21 @@ public class mio_icif_megnetizer extends mio_icif_producer {
      */
     @Override
     protected void doWork() {
-        if (level == null || level.isClientSide()) return;
-
-        // 执行磁化栏杆
+        if (!scexLiveOwner()) { stopWork(); return; }
+        long cost = getEffectiveEnergyPerTick();
+        if (cost <= 0) { stopWork(); return; }
+        var payment = getEnergyStorageInternal().scexReserveInternal(cost);
+        if (payment == null) { stopWork(); return; }
+        payment.commit(); // Pay once before any work or player callback can observe an effect.
+        isWorking = true;
         magnetizeFences();
-
-        // 吸引玩家
         attractPlayers();
+    }
+
+    @Override
+    protected void stopWork() {
+        super.stopWork();
+        demagnetizeFences();
     }
 
     /**
@@ -166,55 +177,34 @@ public class mio_icif_megnetizer extends mio_icif_producer {
      * 连接的栏杆会被加入集合中供吸引系统使用，已被磁化的连接重复磁化的栏杆不会被重复添加
      */
     private void magnetizeFences() {
-        if (level == null || level.isClientSide()) return;
-
         magnetizedFences.clear();
-        Queue<BlockPos> queue = new LinkedList<>();
+        scexLastFenceScanPositions = 0;
+        if (level == null || level.isClientSide()) return;
+        Queue<BlockPos> queue = new ArrayDeque<>();
         Set<BlockPos> visited = new HashSet<>();
-
-        // 从磁化机器六个面开始搜索
-        for (Direction direction : Direction.values()) {
-            BlockPos startPos = worldPosition.relative(direction);
-            if (isMagnetizableFence(startPos) && !visited.contains(startPos)) {
-                // 检查起始位置是否在范围内
-                if (Math.abs(startPos.getY() - worldPosition.getY()) <= MAGNETIZE_RANGE) {
-                    queue.offer(startPos);
-                    visited.add(startPos);
-                }
-            }
-        }
-
-        // BFS搜索连接的铁栏杆
-        while (!queue.isEmpty()) {
-            BlockPos currentPos = queue.poll();
-
-            // 添加到磁化集合
-            magnetizedFences.add(currentPos);
-
-            // 遍历四个方向的邻居
+        for (Direction direction : Direction.values()) queue.add(worldPosition.relative(direction));
+        while (!queue.isEmpty() && visited.size() < MAX_FENCE_SCAN_POSITIONS) {
+            BlockPos at = queue.remove();
+            if (at.equals(worldPosition) || !visited.add(at)) continue;
+            if (Math.abs((long) at.getY() - worldPosition.getY()) > MAGNETIZE_RANGE
+                    || !isMagnetizableFence(at)) continue;
+            magnetizedFences.add(at);
             for (Direction direction : Direction.values()) {
-                BlockPos neighborPos = currentPos.relative(direction);
-
-                // 检查是否未访问过且不是机器本身
-                if (!visited.contains(neighborPos) && !neighborPos.equals(worldPosition)) {
-                    // 检查邻居是否在垂直范围内
-                    if (Math.abs(neighborPos.getY() - worldPosition.getY()) <= MAGNETIZE_RANGE) {
-                        if (isMagnetizableFence(neighborPos)) {
-                            queue.offer(neighborPos);
-                            visited.add(neighborPos);
-                        }
-                    }
-                }
+                BlockPos next = at.relative(direction);
+                if (!visited.contains(next)) queue.add(next);
             }
         }
+        scexLastFenceScanPositions = visited.size();
     }
 
     /**
      * 检查指定位置是否为可磁化铁栏杆
      */
     private boolean isMagnetizableFence(BlockPos pos) {
-        if (level == null) return false;
-        BlockState state = level.getBlockState(pos);
+        if (!(level instanceof net.minecraft.server.level.ServerLevel world)) return false;
+        var chunk = world.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4);
+        if (chunk == null) return false;
+        BlockState state = chunk.getBlockState(pos);
         // 检查是否原版铁栏杆
         if (state.is(Blocks.IRON_BARS)) return true;
         // 检查是否自定义铁栏杆
@@ -227,6 +217,31 @@ public class mio_icif_megnetizer extends mio_icif_producer {
      */
     private void demagnetizeFences() {
         magnetizedFences.clear();
+        scexLastFenceScanPositions = 0;
+    }
+
+    private boolean scexLiveOwner() {
+        if (isRemoved() || !(level instanceof net.minecraft.server.level.ServerLevel world)
+                || !world.getServer().isSameThread()
+                || !world.shouldTickBlocksAt(net.minecraft.world.level.ChunkPos.asLong(worldPosition))) return false;
+        var chunk = world.getChunkSource().getChunkNow(worldPosition.getX() >> 4, worldPosition.getZ() >> 4);
+        return chunk != null && chunk.getBlockEntity(worldPosition,
+            net.minecraft.world.level.chunk.LevelChunk.EntityCreationType.CHECK) == this;
+    }
+
+    /** Count of distinct positions considered by the latest paid scan, including rejected positions. */
+    public int scexLastFenceScanPositions() { return scexLastFenceScanPositions; }
+
+    @Override
+    public void setRemoved() {
+        stopWork();
+        super.setRemoved();
+    }
+
+    @Override
+    public void onChunkUnloaded() {
+        stopWork();
+        super.onChunkUnloaded();
     }
 
     /**
@@ -259,10 +274,11 @@ public class mio_icif_megnetizer extends mio_icif_producer {
         List<Player> players = level.getEntitiesOfClass(Player.class, attractBox);
 
         for (Player player : players) {
+            if (!scexLiveOwner()) { stopWork(); return; }
             // 检查玩家是否穿戴金属靴子
             if (hasMetalBoots(player)) {
                 // 检查玩家是否在磁化栏杆内部
-                if (isInsideMagnetizedFence(player)) {
+                if (scexLiveOwner() && isInsideMagnetizedFence(player)) {
                     // 向上吸引玩家
                     attractPlayerUp(player);
                 }
@@ -280,12 +296,11 @@ public class mio_icif_megnetizer extends mio_icif_producer {
         // 检查是否是可用盔甲类靴子
         if (boots.getItem() instanceof ArmorItem armorItem) {
             // 检查是否是脚部装备
-            if (armorItem.getEquipmentSlot() == EquipmentSlot.FEET) {
-                // 检查材质类型 - 使用 ArmorMaterials 类判断
-                return armorItem.getMaterial() == net.minecraft.world.item.ArmorMaterials.IRON ||
-                       armorItem.getMaterial() == net.minecraft.world.item.ArmorMaterials.GOLD ||
-                       armorItem.getMaterial() == net.minecraft.world.item.ArmorMaterials.NETHERITE;
-            }
+            if (armorItem.getEquipmentSlot() != EquipmentSlot.FEET) return false;
+            if (armorItem.getMaterial() == net.minecraft.world.item.ArmorMaterials.IRON ||
+                    armorItem.getMaterial() == net.minecraft.world.item.ArmorMaterials.GOLD ||
+                    armorItem.getMaterial() == net.minecraft.world.item.ArmorMaterials.NETHERITE) return true;
+            // Electric boots may use another material; continue to the existing item API check.
         }
 
         // 检查是否是电动靴（IC2电动靴）
@@ -391,15 +406,9 @@ public class mio_icif_megnetizer extends mio_icif_producer {
     public void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
         super.loadAdditional(tag, registries);
 
-        // 读取磁化铁栏杆位置集合
-        magnetizedFences.clear();
-        if (tag.contains("magnetized_x") && tag.contains("magnetized_y") && tag.contains("magnetized_z")) {
-            int[] magnetizedX = tag.getIntArray("magnetized_x");
-            int[] magnetizedY = tag.getIntArray("magnetized_y");
-            int[] magnetizedZ = tag.getIntArray("magnetized_z");
-            for (int i = 0; i < magnetizedX.length; i++) {
-                magnetizedFences.add(new BlockPos(magnetizedX[i], magnetizedY[i], magnetizedZ[i]));
-            }
-        }
+        // Derived connectivity is rebuilt only after a paid natural tick.
+        // Historical arrays may be stale or have different lengths; never trust them as active work.
+        demagnetizeFences();
+        isWorking = false;
     }
 }

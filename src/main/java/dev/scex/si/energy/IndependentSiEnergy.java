@@ -100,7 +100,7 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
         id("producer/block_recycler_elc"), id("producer/block_induction_elc"),
         id("producer/block_miner_elc"), id("producer/block_advanced_miner_elc"), id("producer/block_electrolyzer_elc"), id("producer/block_condenser"), id("producer/block_pump_elc"), id("producer/block_pattern_storage"));
     // R130 reviewed ordinary consumers: one owned CustomEU balance, six input faces.
-    // Work-accounting exceptions stay outside this allowlist; see the R130 evidence.
+    // R134 also admits the three consumers after their internal payment repairs.
     private static final Set<ResourceLocation> ORDINARY_CONSUMERS = Set.of(
         id("producer/block_canner_elc"),
         id("producer/block_neutron_polymerizer"),
@@ -112,7 +112,8 @@ public final class IndependentSiEnergy implements PlatformTopology.Observer {
         id("producer/block_teleporter_elc"),
         id("producer/block_sorter_elc"),
         id("producer/block_fluid_regulator_elc"),
-        id("producer/block_batch_crafter"), id("producer/block_tesla"), id("producer/block_chunk_loader"));
+        id("producer/block_batch_crafter"), id("producer/block_tesla"), id("producer/block_chunk_loader"),
+        id("producer/block_blast_furnace_elc"), id("producer/block_magnetizer"), id("producer/block_future_elc"));
     private static final Set<ResourceLocation> BASIC_PROCESSORS = Set.of(id("producer/block_furnace_elc"),
         id("producer/block_powder_elc"), id("producer/block_extractor_elc"), id("producer/block_compressor_elc"));
     // Packet sizes are explicit public-game observations, not old grid tiers.

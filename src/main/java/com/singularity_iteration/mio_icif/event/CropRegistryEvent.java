@@ -1,320 +1,128 @@
+// SPDX-License-Identifier: Apache-2.0
 package com.singularity_iteration.mio_icif.event;
 
-import com.singularity_iteration.mio_icif.Singularity_Iteration;
-import com.singularity_iteration.mio_icif.Items.Resource.mio_icif_resources;
+import com.singularity_iteration.mio_icif.api.crop.PlantStats;
+import com.singularity_iteration.mio_icif.api.crop.PlantType;
 import com.singularity_iteration.mio_icif.api.internal.crop.PlantRegistry;
-import com.singularity_iteration.mio_icif.crop.*;
+import com.singularity_iteration.mio_icif.crop.PlantBaseSapling;
+import com.singularity_iteration.mio_icif.crop.PlantEatingPlant;
+import com.singularity_iteration.mio_icif.crop.PlantGenericCrop;
+import java.util.List;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
-import net.minecraft.world.level.block.Blocks;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
 
-/**
- * 作物注册事件处理�? * 负责在游戏启动时注册所有作物类�? */
-@SuppressWarnings("null")
+/** Independent registration of the 54 observed SI crop types and 28 base seeds. */
 public class CropRegistryEvent {
+    private static final String PACKAGE = "com.singularity_iteration.mio_icif.crop.";
+    private static final String[] ZERO_ARG_PLANTS = {
+        "PlantAurelia", "PlantBeetroot", "PlantBlackthorn", "PlantBrownMushroom", "PlantCarrots",
+        "PlantCocoa", "PlantCoffee", "PlantCyazint", "PlantCyprium", "PlantDandelion", "PlantFerru",
+        "PlantFlax", "PlantHops", "PlantMelon", "PlantNetherWart", "PlantPlumbiscus", "PlantPotato",
+        "PlantPumpkin", "PlantRedMushroom", "PlantRedwheat", "PlantReed", "PlantRose", "PlantShining",
+        "PlantStagnium", "PlantStickreed", "PlantTerraWart", "PlantTitanium", "PlantTulip",
+        "PlantUranium", "PlantVenomilia", "PlantWeed", "PlantWheat"
+    };
 
     @SubscribeEvent
     public static void onCommonSetup(FMLCommonSetupEvent event) {
-        event.enqueueWork(() -> {
-            // 杂草和小�
-        PlantRegistry.instance.registerPlant(new PlantWeed());
-            PlantRegistry.instance.registerPlant(new PlantWheat());
-
-            // 注册原版种子映射
-            registerBaseSeeds();
-
-            // 基础作物
-            PlantRegistry.instance.registerPlant(new PlantCarrots());
-            PlantRegistry.instance.registerPlant(new PlantPotato());
-            PlantRegistry.instance.registerPlant(new PlantCocoa());
-            PlantRegistry.instance.registerPlant(new PlantCoffee());
-            PlantRegistry.instance.registerPlant(new PlantHops());
-            PlantRegistry.instance.registerPlant(new PlantMelon());
-            PlantRegistry.instance.registerPlant(new PlantPumpkin());
-            PlantRegistry.instance.registerPlant(new PlantBeetroot());
-            PlantRegistry.instance.registerPlant(new PlantFlax());
-
-            // 花朵
-            PlantRegistry.instance.registerPlant(new PlantDandelion());
-            PlantRegistry.instance.registerPlant(new PlantRose());
-            PlantRegistry.instance.registerPlant(new PlantTulip());
-            PlantRegistry.instance.registerPlant(new PlantCyazint());
-
-            // 金属植物
-            PlantRegistry.instance.registerPlant(new PlantFerru());
-            PlantRegistry.instance.registerPlant(new PlantCyprium());
-            PlantRegistry.instance.registerPlant(new PlantStagnium());
-            PlantRegistry.instance.registerPlant(new PlantPlumbiscus());
-            PlantRegistry.instance.registerPlant(new PlantAurelia());
-            PlantRegistry.instance.registerPlant(new PlantShining());
-            PlantRegistry.instance.registerPlant(new PlantTitanium());
-            PlantRegistry.instance.registerPlant(new PlantUranium());
-
-            // 特殊植物
-            PlantRegistry.instance.registerPlant(new PlantRedwheat());
-            PlantRegistry.instance.registerPlant(new PlantNetherWart());
-            PlantRegistry.instance.registerPlant(new PlantTerraWart());
-            PlantRegistry.instance.registerPlant(new PlantRedMushroom());
-            PlantRegistry.instance.registerPlant(new PlantBrownMushroom());
-            PlantRegistry.instance.registerPlant(new PlantReed());
-            PlantRegistry.instance.registerPlant(new PlantStickreed());
-            PlantRegistry.instance.registerPlant(new PlantBlackthorn());
-            PlantRegistry.instance.registerPlant(new PlantVenomilia());
-            PlantRegistry.instance.registerPlant(new PlantEatingPlant());
-
-            // 树苗作物（添加原木作为次要作物）
-            PlantRegistry.instance.registerPlant(new PlantBaseSapling("oak_sapling",
-                    new String[]{"Leaves", "Sapling", "Green"},
-                    new ItemStack(Blocks.OAK_LEAVES), new ItemStack(Blocks.OAK_SAPLING),
-                    new ItemStack(Blocks.OAK_LOG), true));
-            PlantRegistry.instance.registerPlant(new PlantBaseSapling("spruce_sapling",
-                    new String[]{"Leaves", "Sapling", "Green"},
-                    new ItemStack(Blocks.SPRUCE_LEAVES), new ItemStack(Blocks.SPRUCE_SAPLING),
-                    new ItemStack(Blocks.SPRUCE_LOG), false));
-            PlantRegistry.instance.registerPlant(new PlantBaseSapling("birch_sapling",
-                    new String[]{"Leaves", "Sapling", "Green"},
-                    new ItemStack(Blocks.BIRCH_LEAVES), new ItemStack(Blocks.BIRCH_SAPLING),
-                    new ItemStack(Blocks.BIRCH_LOG), false));
-            PlantRegistry.instance.registerPlant(new PlantBaseSapling("jungle_sapling",
-                    new String[]{"Leaves", "Sapling", "Green"},
-                    new ItemStack(Blocks.JUNGLE_LEAVES), new ItemStack(Blocks.JUNGLE_SAPLING),
-                    new ItemStack(Blocks.JUNGLE_LOG), false));
-            PlantRegistry.instance.registerPlant(new PlantBaseSapling("acacia_sapling",
-                    new String[]{"Leaves", "Sapling", "Green"},
-                    new ItemStack(Blocks.ACACIA_LEAVES), new ItemStack(Blocks.ACACIA_SAPLING),
-                    new ItemStack(Blocks.ACACIA_LOG), false));
-            PlantRegistry.instance.registerPlant(new PlantBaseSapling("dark_oak_sapling",
-                    new String[]{"Leaves", "Sapling", "Green"},
-                    new ItemStack(Blocks.DARK_OAK_LEAVES), new ItemStack(Blocks.DARK_OAK_SAPLING),
-                    new ItemStack(Blocks.DARK_OAK_LOG), false));
-
-            // IC2高级作物 (GenericCropCard)
-            PlantRegistry.instance.registerPlant(IC2GenericCrops.blazereed());
-            PlantRegistry.instance.registerPlant(IC2GenericCrops.bobsYerUncle());
-            PlantRegistry.instance.registerPlant(IC2GenericCrops.corium());
-            PlantRegistry.instance.registerPlant(IC2GenericCrops.corpsePlant());
-            PlantRegistry.instance.registerPlant(IC2GenericCrops.creeperWeed());
-            PlantRegistry.instance.registerPlant(IC2GenericCrops.diareed());
-            PlantRegistry.instance.registerPlant(IC2GenericCrops.eggPlant());
-            PlantRegistry.instance.registerPlant(IC2GenericCrops.enderBlossom());
-            PlantRegistry.instance.registerPlant(IC2GenericCrops.meatRose());
-            PlantRegistry.instance.registerPlant(IC2GenericCrops.milkWart());
-            PlantRegistry.instance.registerPlant(IC2GenericCrops.oilBerries());
-            PlantRegistry.instance.registerPlant(IC2GenericCrops.slimePlant());
-            PlantRegistry.instance.registerPlant(IC2GenericCrops.spidernip());
-            PlantRegistry.instance.registerPlant(IC2GenericCrops.tearstalks());
-            PlantRegistry.instance.registerPlant(IC2GenericCrops.withereed());
-
-            Singularity_Iteration.LOGGER.info("Registered {} plant types", PlantRegistry.instance.getAllPlants().size());
-        });
+        event.enqueueWork(CropRegistryEvent::registerAll);
     }
 
-    /**
-     * 注册原版种子映射
-     * 让原版种子可以种在作物架�
- */
-    private static void registerBaseSeeds() {
-        // === IC2原版base seed注册 ===
-        // 以下严格按照IC2 1.12.2的IC2Crops.registerBaseSeeds()对齐
+    private static void registerAll() {
+        PlantRegistry registry = PlantRegistry.instance;
+        for (String name : ZERO_ARG_PLANTS) {
+            try {
+                PlantType plant = (PlantType)Class.forName(PACKAGE + name).getConstructor().newInstance();
+                register(registry, plant);
+            } catch (ReflectiveOperationException exception) {
+                throw new IllegalStateException("Unable to construct public crop class " + name, exception);
+            }
+        }
+        register(registry, new PlantEatingPlant());
+        for (PlantType plant : configuredPlants()) register(registry, plant);
+        registerBaseSeeds(registry);
+    }
 
-        // 小麦种子 -> 小麦 (size=1, 1, 1, 1)
-        PlantRegistry.instance.registerBaseSeed(
-                new ItemStack(Items.WHEAT_SEEDS),
-                new PlantWheat(),
-                1, 1, 1, 1
-        );
+    private static void register(PlantRegistry registry, PlantType plant) {
+        if (registry.getPlant(plant.getModId(), plant.getTypeId()) == null) registry.registerPlant(plant);
+    }
 
-        // 南瓜种子 -> 南瓜 (size=1, 1, 1, 1)
-        PlantRegistry.instance.registerBaseSeed(
-                new ItemStack(Items.PUMPKIN_SEEDS),
-                new PlantPumpkin(),
-                1, 1, 1, 1
+    private static List<PlantType> configuredPlants() {
+        return List.of(
+            generic("blazereed", "Mr. Brain", a("Fire","Blaze","Reed","Sulfur"), s(6,0,4,1,0,0), 4,4,4,1,1200, "minecraft:blaze_rod"),
+            generic("bobs_yer_uncle_ranks_berries", "GenerikB", a("Shiny","Vine","Emerald","Berylium","Crystal"), s(11,4,0,8,2,9), 4,4,4,1,2200, "minecraft:emerald"),
+            generic("corium", "Gregorius Techneticies", a("Cow","Silk","Vine"), s(6,0,2,3,1,0), 4,4,4,1,1200, "minecraft:leather"),
+            generic("corpse_plant", "Mr. Kenny", a("Toxic","Undead","Vine","Edible","Rotten"), s(5,0,2,1,0,3), 4,4,4,1,1000, "minecraft:rotten_flesh"),
+            generic("creeper_weed", "General Spaz", a("Creeper","Vine","Explosive","Fire","Sulfur","Saltpeter","Coal"), s(7,3,0,5,1,3), 4,4,4,1,1400, "minecraft:gunpowder"),
+            generic("diareed", "Diareed", a("Fire","Shiny","Reed","Coal","Diamond","Crystal"), s(12,5,0,10,2,10), 4,4,4,1,2400, "minecraft:diamond"),
+            generic("egg_plant", "Link", a("Chicken","Egg","Edible","Feather","Flower","Addictive"), s(6,0,4,1,0,0), 3,3,3,2,5400, "minecraft:egg"),
+            generic("ender_blossom", "RichardG", a("Ender","Flower","Shiny"), s(10,5,0,2,1,6), 4,4,4,1,2000, "minecraft:ender_pearl"),
+            generic("meat_rose", "VintageBeef", a("Edible","Flower","Cow","Chicken","Pig","Sheep"), s(7,0,4,1,3,0), 4,4,4,1,10500, "minecraft:cooked_porkchop", "minecraft:cooked_beef"),
+            generic("milk_wart", "Mr. Brain", a("Edible","Milk","Cow"), s(6,0,3,0,1,0), 3,3,3,1,5400, "minecraft:milk_bucket"),
+            generic("oil_berries", "Spacetoad", a("Fire","Dark","Reed","Rotten","Coal","Oil"), s(9,6,1,2,1,12), 3,3,3,1,1800, "minecraft:slime_ball"),
+            generic("slime_plant", "Neowulf", a("Slime","Bouncy","Sticky","Bush"), s(6,3,0,0,0,2), 4,4,4,3,1200, "minecraft:slime_ball"),
+            generic("spidernip", "Mr. Kenny", a("Toxic","Silk","Spider","Flower","Ingredient","Addictive"), s(4,2,1,4,1,3), 4,4,4,1,2400, "minecraft:cobweb"),
+            generic("tearstalks", "Neowulf", a("Healing","Nether","Ingredient","Reed","Ghast"), s(8,1,2,0,0,0), 4,4,4,1,1600, "minecraft:ghast_tear"),
+            generic("withereed", "CovertJaguar", a("Fire","Undead","Reed","Coal","Rotten","Wither"), s(8,2,0,4,1,3), 4,4,4,1,1600, "mio_icif:resource/item_coal_dust", "minecraft:wither_skeleton_skull"),
+            sapling("oak_sapling", "minecraft:oak_leaves", "minecraft:oak_sapling", "minecraft:oak_log"),
+            sapling("spruce_sapling", "minecraft:spruce_leaves", "minecraft:spruce_sapling", "minecraft:spruce_log"),
+            sapling("birch_sapling", "minecraft:birch_leaves", "minecraft:birch_sapling", "minecraft:birch_log"),
+            sapling("jungle_sapling", "minecraft:jungle_leaves", "minecraft:jungle_sapling", "minecraft:jungle_log"),
+            sapling("acacia_sapling", "minecraft:acacia_leaves", "minecraft:acacia_sapling", "minecraft:acacia_log"),
+            sapling("dark_oak_sapling", "minecraft:dark_oak_leaves", "minecraft:dark_oak_sapling", "minecraft:dark_oak_log")
         );
+    }
 
-        // 西瓜种子 -> 西瓜 (size=1, 1, 1, 1)
-        PlantRegistry.instance.registerBaseSeed(
-                new ItemStack(Items.MELON_SEEDS),
-                new PlantMelon(),
-                1, 1, 1, 1
-        );
+    private static PlantGenericCrop generic(String id, String foundBy, String[] traits, PlantStats stats,
+            int max, int harvest, int optimal, int after, int growthTime, String... drops) {
+        if (growthTime % Math.max(1, stats.getLevel()) != 0) {
+            throw new IllegalArgumentException("Observed crop growth time is not level-aligned: " + id);
+        }
+        return new PlantGenericCrop(id, foundBy, traits, stats, max, harvest, optimal,
+            java.util.Arrays.stream(drops).map(CropRegistryEvent::stack).toArray(ItemStack[]::new),
+            new ItemStack[0], after, growthTime / Math.max(1, stats.getLevel()));
+    }
 
-        // 地狱�?-> 地狱�?(size=1, 1, 1, 1)
-        PlantRegistry.instance.registerBaseSeed(
-                new ItemStack(Items.NETHER_WART),
-                new PlantNetherWart(),
-                1, 1, 1, 1
-        );
+    private static PlantBaseSapling sapling(String id, String leaves, String sapling, String log) {
+        return new PlantBaseSapling(id, a("Leaves","Sapling","Green"), stack(leaves), stack(sapling),
+            stack(log), "oak_sapling".equals(id));
+    }
 
-        // 大地�?-> 大地�?(size=1, 1, 1, 1)
-        PlantRegistry.instance.registerBaseSeed(
-                new ItemStack(mio_icif_resources.TERRA_WART.get()),
-                new PlantTerraWart(),
-                1, 1, 1, 1
-        );
+    private static String[] a(String... values) { return values; }
+    private static PlantStats s(int... v) { return new PlantStats(v[0],v[1],v[2],v[3],v[4],v[5]); }
+    private static ItemStack stack(String id) {
+        var item = BuiltInRegistries.ITEM.get(ResourceLocation.parse(id));
+        if (BuiltInRegistries.ITEM.getKey(item).equals(ResourceLocation.withDefaultNamespace("air"))) {
+            throw new IllegalStateException("Missing base-seed or crop drop item " + id);
+        }
+        return new ItemStack(item);
+    }
 
-        // 咖啡�?-> 咖啡 (size=1, 1, 1, 1)
-        PlantRegistry.instance.registerBaseSeed(
-                new ItemStack(mio_icif_resources.COFFEE_BEAN.get()),
-                new PlantCoffee(),
-                1, 1, 1, 1
-        );
-
-        // 甘蔗 -> 甘蔗（芦苇）(size=1, 3, 0, 2) - IC2特殊�
-    PlantRegistry.instance.registerBaseSeed(
-                new ItemStack(Items.SUGAR_CANE),
-                new PlantReed(),
-                1, 3, 0, 2
-        );
-
-        // 可可�?-> 可可 (size=1, 0, 0, 0) - IC2特殊�
-    PlantRegistry.instance.registerBaseSeed(
-                new ItemStack(Items.COCOA_BEANS),
-                new PlantCocoa(),
-                1, 0, 0, 0
-        );
-
-        // 红色�?罂粟) -> 玫瑰 (size=4, 1, 1, 1) - IC2用方块形式，数量4
-        PlantRegistry.instance.registerBaseSeed(
-                new ItemStack(Blocks.POPPY),
-                new PlantRose(),
-                4, 1, 1, 1
-        );
-
-        // 黄色�?蒲公�? -> 蒲公�?(size=4, 1, 1, 1) - IC2用方块形式，数量4
-        PlantRegistry.instance.registerBaseSeed(
-                new ItemStack(Blocks.DANDELION),
-                new PlantDandelion(),
-                4, 1, 1, 1
-        );
-
-        // 胡萝�?-> 胡萝�?(size=1, 1, 1, 1)
-        PlantRegistry.instance.registerBaseSeed(
-                new ItemStack(Items.CARROT),
-                new PlantCarrots(),
-                1, 1, 1, 1
-        );
-
-        // 马铃�?-> 马铃�?(size=1, 1, 1, 1)
-        PlantRegistry.instance.registerBaseSeed(
-                new ItemStack(Items.POTATO),
-                new PlantPotato(),
-                1, 1, 1, 1
-        );
-
-        // 棕色蘑菇方块 -> 棕蘑�?(size=1, 1, 1, 1) - IC2用方块形态
-    PlantRegistry.instance.registerBaseSeed(
-                new ItemStack(Blocks.BROWN_MUSHROOM),
-                new PlantBrownMushroom(),
-                1, 1, 1, 1
-        );
-
-        // 红色蘑菇方块 -> 红蘑�?(size=1, 1, 1, 1) - IC2用方块形态
-    PlantRegistry.instance.registerBaseSeed(
-                new ItemStack(Blocks.RED_MUSHROOM),
-                new PlantRedMushroom(),
-                1, 1, 1, 1
-        );
-
-        // 仙人�?-> 食人�?(size=1, 1, 1, 1)
-        PlantRegistry.instance.registerBaseSeed(
-                new ItemStack(Items.CACTUS),
-                new PlantEatingPlant(),
-                1, 1, 1, 1
-        );
-
-        // 甜菜种子 -> 甜菜 (size=1, 1, 1, 1)
-        PlantRegistry.instance.registerBaseSeed(
-                new ItemStack(Items.BEETROOT_SEEDS),
-                new PlantBeetroot(),
-                1, 1, 1, 1
-        );
-
-        // === 树苗 (IC2用sapling方块，meta 0-5，添加原木作为次要作物) ===
-        PlantRegistry.instance.registerBaseSeed(
-                new ItemStack(Blocks.OAK_SAPLING),
-                new PlantBaseSapling("oak_sapling", new String[]{"Leaves", "Sapling", "Green"},
-                        new ItemStack(Blocks.OAK_LEAVES), new ItemStack(Blocks.OAK_SAPLING),
-                        new ItemStack(Blocks.OAK_LOG), true),
-                1, 1, 1, 1
-        );
-        PlantRegistry.instance.registerBaseSeed(
-                new ItemStack(Blocks.SPRUCE_SAPLING),
-                new PlantBaseSapling("spruce_sapling", new String[]{"Leaves", "Sapling", "Green"},
-                        new ItemStack(Blocks.SPRUCE_LEAVES), new ItemStack(Blocks.SPRUCE_SAPLING),
-                        new ItemStack(Blocks.SPRUCE_LOG), false),
-                1, 1, 1, 1
-        );
-        PlantRegistry.instance.registerBaseSeed(
-                new ItemStack(Blocks.BIRCH_SAPLING),
-                new PlantBaseSapling("birch_sapling", new String[]{"Leaves", "Sapling", "Green"},
-                        new ItemStack(Blocks.BIRCH_LEAVES), new ItemStack(Blocks.BIRCH_SAPLING),
-                        new ItemStack(Blocks.BIRCH_LOG), false),
-                1, 1, 1, 1
-        );
-        PlantRegistry.instance.registerBaseSeed(
-                new ItemStack(Blocks.JUNGLE_SAPLING),
-                new PlantBaseSapling("jungle_sapling", new String[]{"Leaves", "Sapling", "Green"},
-                        new ItemStack(Blocks.JUNGLE_LEAVES), new ItemStack(Blocks.JUNGLE_SAPLING),
-                        new ItemStack(Blocks.JUNGLE_LOG), false),
-                1, 1, 1, 1
-        );
-        PlantRegistry.instance.registerBaseSeed(
-                new ItemStack(Blocks.ACACIA_SAPLING),
-                new PlantBaseSapling("acacia_sapling", new String[]{"Leaves", "Sapling", "Green"},
-                        new ItemStack(Blocks.ACACIA_LEAVES), new ItemStack(Blocks.ACACIA_SAPLING),
-                        new ItemStack(Blocks.ACACIA_LOG), false),
-                1, 1, 1, 1
-        );
-        PlantRegistry.instance.registerBaseSeed(
-                new ItemStack(Blocks.DARK_OAK_SAPLING),
-                new PlantBaseSapling("dark_oak_sapling", new String[]{"Leaves", "Sapling", "Green"},
-                        new ItemStack(Blocks.DARK_OAK_LEAVES), new ItemStack(Blocks.DARK_OAK_SAPLING),
-                        new ItemStack(Blocks.DARK_OAK_LOG), false),
-                1, 1, 1, 1
-        );
-
-        // === 以下作物在IC2中无base seed，只能通过杂交获得 ===
-        // 亚麻(Flax), 啤酒花(Hops), 红小麦(Redwheat), 粘性芦苇(Stickreed),
-        // 黑刺(BlackThorn), 毒花(Venomilia), 郁金香(Tulip), 缤纷花(Cyazint),
-        // 所有金属作物(Ferru/Cyprium/Stagnium/Plumbiscus/Aurelia/Shining),
-        // 所有高级作物(Blazereed/BobsYerUncle/Corium/CorpsePlant/CreeperWeed/
-        //   Diareed/EggPlant/EnderBlossom/MeatRose/OilBerries/SlimePlant/
-        //   Spidernip/Tearstalks/Withereed)
-
-        // === 富集作物种子注册 (可在作物架上种植) ===
-        PlantRegistry.instance.registerBaseSeed(
-                new ItemStack(com.singularity_iteration.mio_icif.Items.Normal.mio_icif_normal.SEED_IRON_RICH.get()),
-                new PlantFerru(),
-                1, 1, 1, 1
-        );
-        PlantRegistry.instance.registerBaseSeed(
-                new ItemStack(com.singularity_iteration.mio_icif.Items.Normal.mio_icif_normal.SEED_COPPER_RICH.get()),
-                new PlantCyprium(),
-                1, 1, 1, 1
-        );
-        PlantRegistry.instance.registerBaseSeed(
-                new ItemStack(com.singularity_iteration.mio_icif.Items.Normal.mio_icif_normal.SEED_TIN_RICH.get()),
-                new PlantStagnium(),
-                1, 1, 1, 1
-        );
-        PlantRegistry.instance.registerBaseSeed(
-                new ItemStack(com.singularity_iteration.mio_icif.Items.Normal.mio_icif_normal.SEED_TITANIUM_RICH.get()),
-                new PlantTitanium(),
-                1, 1, 1, 1
-        );
-        PlantRegistry.instance.registerBaseSeed(
-                new ItemStack(com.singularity_iteration.mio_icif.Items.Normal.mio_icif_normal.SEED_LEAD_RICH.get()),
-                new PlantPlumbiscus(),
-                1, 1, 1, 1
-        );
-        PlantRegistry.instance.registerBaseSeed(
-                new ItemStack(com.singularity_iteration.mio_icif.Items.Normal.mio_icif_normal.SEED_URANIUM_RICH.get()),
-                new PlantUranium(),
-                1, 1, 1, 1
-        );
-
-        Singularity_Iteration.LOGGER.info("Registered base seeds (aligned with IC2)");
+    private static void registerBaseSeeds(PlantRegistry registry) {
+        Object[][] rows = {
+            {"minecraft:wheat_seeds","wheat",1,1,1,1,0}, {"minecraft:pumpkin_seeds","pumpkin",1,1,1,1,0},
+            {"minecraft:melon_seeds","melon",1,1,1,1,0}, {"minecraft:nether_wart","netherwart",1,1,1,1,0},
+            {"mio_icif:resource/item_terra_wart","terrawart",1,1,1,1,0}, {"mio_icif:resource/item_coffee_bean","coffee",1,1,1,1,0},
+            {"minecraft:sugar_cane","reed",1,3,0,2,0}, {"minecraft:cocoa_beans","cocoa",1,0,0,0,0},
+            {"minecraft:poppy","rose",4,1,1,1,0}, {"minecraft:dandelion","dandelion",4,1,1,1,0},
+            {"minecraft:carrot","carrots",1,1,1,1,0}, {"minecraft:potato","potato",1,1,1,1,0},
+            {"minecraft:brown_mushroom","brownMushroom",1,1,1,1,0}, {"minecraft:red_mushroom","redMushroom",1,1,1,1,0},
+            {"minecraft:cactus","eatingplant",1,1,1,1,0}, {"minecraft:beetroot_seeds","beetroot",1,1,1,1,0},
+            {"minecraft:oak_sapling","oak_sapling",1,1,1,1,0}, {"minecraft:spruce_sapling","spruce_sapling",1,1,1,1,0},
+            {"minecraft:birch_sapling","birch_sapling",1,1,1,1,0}, {"minecraft:jungle_sapling","jungle_sapling",1,1,1,1,0},
+            {"minecraft:acacia_sapling","acacia_sapling",1,1,1,1,0}, {"minecraft:dark_oak_sapling","dark_oak_sapling",1,1,1,1,0},
+            {"mio_icif:crop/iron_rich_seed","ferru",1,1,1,1,0}, {"mio_icif:crop/copper_rich_seed","cyprium",1,1,1,1,0},
+            {"mio_icif:crop/tin_rich_seed","stagnium",1,1,1,1,0}, {"mio_icif:crop/titanium_rich_seed","titanium",1,1,1,1,0},
+            {"mio_icif:crop/lead_rich_seed","plumbiscus",1,1,1,1,0}, {"mio_icif:crop/uranium_rich_seed","uranium",1,1,1,1,0}
+        };
+        for (Object[] row : rows) {
+            PlantType plant = registry.getPlant("mio_icif", (String)row[1]);
+            if (plant == null) throw new IllegalStateException("Missing registered plant " + row[1]);
+            registry.registerBaseSeed(stack((String)row[0]), plant,
+                (int)row[2], (int)row[3], (int)row[4], (int)row[5], (int)row[6]);
+        }
     }
 }

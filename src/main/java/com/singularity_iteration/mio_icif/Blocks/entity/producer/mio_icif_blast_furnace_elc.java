@@ -106,26 +106,43 @@ public class mio_icif_blast_furnace_elc extends GenericMachineBlockEntity {
     }
 
     private void handleWork(GenericMachineBlockEntity machine, ItemStack[] inputs) {
-        if (level == null || level.isClientSide) return;
-        if (inputs.length == 0 || inputs[0].isEmpty()) return;
+        if (!scexLiveWorkOwner() || inputs.length == 0 || inputs[0].isEmpty()) return;
+        ItemStack input = itemHandler.getStackInSlot(inputSlot).copy();
+        ItemStack existing = itemHandler.getStackInSlot(outputSlot).copy();
+        if (!ItemStack.matches(input, inputs[0])) return;
 
         IRecipeAPI recipeAPI = MioIcifAPI.instance().getRecipeAPI();
-        Optional<? extends RecipeHolder<?>> recipe = recipeAPI.findBlastFurnaceRecipe(inputs[0], level);
+        Optional<? extends RecipeHolder<?>> recipe = recipeAPI.findBlastFurnaceRecipe(input, level);
         if (recipe.isEmpty()) return;
-
-        ItemStack primaryResult = recipeAPI.getRecipeOutput(recipe.get());
-
-        ItemStack existing = itemHandler.getStackInSlot(outputSlot);
-        if (existing.isEmpty()) {
-            itemHandler.setStackInSlot(outputSlot, primaryResult.copy());
-        } else if (ItemStack.isSameItem(existing, primaryResult) && existing.getCount() + primaryResult.getCount() <= existing.getMaxStackSize()) {
-            existing.grow(primaryResult.getCount());
-        } else {
-            return;
-        }
-
         int ingredientCount = recipeAPI.getRecipeIngredientCount(recipe.get());
-        consumeInput(inputSlot, ingredientCount);
+        ItemStack primaryResult = recipeAPI.getRecipeOutput(recipe.get());
+        if (ingredientCount <= 0 || input.getCount() < ingredientCount || !scexCanFitResult(existing, primaryResult)
+                || !scexLiveWorkOwner()) return;
+
+        ItemStack nextInput = input.copy();
+        nextInput.shrink(ingredientCount);
+        ItemStack nextOutput = existing.isEmpty() ? primaryResult.copy() : existing.copy();
+        if (!existing.isEmpty()) nextOutput.grow(primaryResult.getCount());
+        // Publish both slots together only if every snapshot still matches.
+        // A completion callback may have changed the input before this handler;
+        // never create output first and then accept only a partial debit.
+        if (itemHandler.scexCommitSlots(new int[]{inputSlot, outputSlot},
+                new ItemStack[]{input, existing}, new ItemStack[]{nextInput, nextOutput})) setChanged();
+    }
+
+    private boolean scexCanFitResult(ItemStack existing, ItemStack result) {
+        if (result.isEmpty()) return false;
+        int limit = Math.min(itemHandler.getSlotLimit(outputSlot), result.getMaxStackSize());
+        if (result.getCount() > limit) return false;
+        return existing.isEmpty() || ItemStack.isSameItemSameComponents(existing, result)
+            && existing.getCount() <= Math.min(limit, existing.getMaxStackSize()) - result.getCount();
+    }
+
+    @Override
+    protected void updateProgress() {
+        // Generic.doWork already owns this machine's single paid increment.
+        // Keep the parent behavior for neutron-polymerizer and other subclasses.
+        if (isWorking) setChanged();
     }
 
     @Override
@@ -186,14 +203,8 @@ public class mio_icif_blast_furnace_elc extends GenericMachineBlockEntity {
         IRecipeAPI recipeAPI = MioIcifAPI.instance().getRecipeAPI();
         ItemStack primaryResult = recipeAPI.getRecipeOutput(recipe.get());
         int ingredientCount = recipeAPI.getRecipeIngredientCount(recipe.get());
-        if (input.getCount() < ingredientCount) return false;
-
-        ItemStack existing = itemHandler.getStackInSlot(outputSlot);
-        if (!existing.isEmpty() && (!ItemStack.isSameItem(existing, primaryResult) || existing.getCount() + primaryResult.getCount() > existing.getMaxStackSize())) {
-            return false;
-        }
-
-        return true;
+        if (ingredientCount <= 0 || input.getCount() < ingredientCount) return false;
+        return scexCanFitResult(itemHandler.getStackInSlot(outputSlot), primaryResult);
     }
 
     public ItemStack getPrimaryResultItem() {
@@ -211,11 +222,12 @@ public class mio_icif_blast_furnace_elc extends GenericMachineBlockEntity {
     }
 
     public static void tick(Level level, BlockPos pos, BlockState state, mio_icif_blast_furnace_elc blockEntity) {
-        if (level.isClientSide()) return;
+        if (level.isClientSide() || !blockEntity.scexLiveWorkOwner()) return;
         if (blockEntity instanceof IProducerBlock producer) {
             producer.serverTick();
         }
-        blockEntity.setLit(blockEntity.isWorking());
+        // A public completion callback may have removed or replaced this owner.
+        if (blockEntity.scexLiveWorkOwner()) blockEntity.setLit(blockEntity.isWorking());
     }
 
     @Override

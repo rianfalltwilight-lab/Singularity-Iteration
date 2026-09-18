@@ -25,6 +25,11 @@ public class PlantWheat extends PlantType {
     }
 
     @Override
+    public String getFoundBy() {
+        return "unknown";
+    }
+
+    @Override
     public String getFoundBy(String playerName) {
         return playerName != null ? playerName : super.getFoundBy(playerName);
     }

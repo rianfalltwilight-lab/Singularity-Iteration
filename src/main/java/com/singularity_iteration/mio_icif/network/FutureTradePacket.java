@@ -1,16 +1,14 @@
 // SCEX 2026-09-12: repaired malformed UTF-8 bytes in comments only.
 package com.singularity_iteration.mio_icif.network;
 
-import com.singularity_iteration.mio_icif.Blocks.entity.producer.mio_icif_future_elc;
 import com.singularity_iteration.mio_icif.Singularity_Iteration;
+import com.singularity_iteration.mio_icif.Menu.Producer.FutureElcMenu;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.network.chat.Component;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.level.block.entity.BlockEntity;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
 
 /**
@@ -54,38 +52,25 @@ public record FutureTradePacket(BlockPos pos, int action, int commodityIndex, in
      * 处理数据???     */
     public static void handle(FutureTradePacket packet, IPayloadContext context) {
         context.enqueueWork(() -> {
-            if (context.player() instanceof ServerPlayer serverPlayer) {
-                Singularity_Iteration.LOGGER.info("FutureTradePacket received: action={}, pos={}, commodityIndex={}",
-                    packet.action, packet.pos, packet.commodityIndex);
-                BlockEntity be = serverPlayer.level().getBlockEntity(packet.pos);
-                if (be instanceof mio_icif_future_elc futureElc) {
-                    Singularity_Iteration.LOGGER.info("BlockEntity found, processing action...");
-                    switch (packet.action) {
-                        case ACTION_SELECT:
-                            futureElc.setSelectedCommodity(packet.commodityIndex);
-                            serverPlayer.sendSystemMessage(Component.literal("Selected commodity: " + packet.commodityIndex));
-                            break;
-                        case ACTION_INCREASE:
-                            futureElc.increaseTradeQuantity();
-                            serverPlayer.sendSystemMessage(Component.literal("Quantity increased to: " + futureElc.getTradeQuantity()));
-                            break;
-                        case ACTION_DECREASE:
-                            futureElc.decreaseTradeQuantity();
-                            serverPlayer.sendSystemMessage(Component.literal("Quantity decreased to: " + futureElc.getTradeQuantity()));
-                            break;
-                        case ACTION_BUY:
-                            futureElc.executeBuy(serverPlayer);
-                            break;
-                        case ACTION_SELL:
-                            futureElc.executeSell(serverPlayer);
-                            break;
-                        case ACTION_SET_QUANTITY:
-                            futureElc.setTradeQuantity(packet.quantity);
-                            break;
-                    }
-                } else {
-                    Singularity_Iteration.LOGGER.warn("BlockEntity not found at pos: {}", packet.pos);
+            if (!(context.player() instanceof ServerPlayer player)
+                    || !player.serverLevel().getServer().isSameThread()
+                    || !(player.containerMenu instanceof FutureElcMenu menu) || !menu.stillValid(player)) return;
+            var future = menu.getBlockEntity();
+            if (future == null || !future.getBlockPos().equals(packet.pos)) return;
+            // Resolve only the open menu's live owner. A packet position never loads a chunk.
+            switch (packet.action) {
+                case ACTION_SELECT -> {
+                    if (packet.commodityIndex >= 0 && packet.commodityIndex < future.getCurrentPageCommodities().size())
+                        future.setSelectedCommodity(packet.commodityIndex);
                 }
+                case ACTION_INCREASE -> future.increaseTradeQuantity();
+                case ACTION_DECREASE -> future.decreaseTradeQuantity();
+                case ACTION_BUY -> future.executeBuy(player);
+                case ACTION_SELL -> future.executeSell(player);
+                case ACTION_SET_QUANTITY -> {
+                    if (packet.quantity >= 1 && packet.quantity <= 64) future.setTradeQuantity(packet.quantity);
+                }
+                default -> { }
             }
         });
     }

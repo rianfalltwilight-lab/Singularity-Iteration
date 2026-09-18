@@ -19,12 +19,29 @@ public final class SolarHelmetCharging {
     private static final int[] ARMOR_SLOTS = {Inventory.INVENTORY_SIZE + EquipmentSlot.CHEST.getIndex(),
         Inventory.INVENTORY_SIZE + EquipmentSlot.LEGS.getIndex(), Inventory.INVENTORY_SIZE + EquipmentSlot.FEET.getIndex()};
     private static final WeakHashMap<Player, Cursor> PLAYERS = new WeakHashMap<>();
+    private static final WeakHashMap<Player, Long> CHEST_TICKS = new WeakHashMap<>();
     private SolarHelmetCharging() { }
 
     public static void tick(ItemStack source, IBatteryItem battery, Level level, Player player, int generation, int limit) {
         if (!(level instanceof ServerLevel server) || !server.getServer().isSameThread()
                 || player.level() != level || player.getItemBySlot(EquipmentSlot.HEAD) != source || source.getCount() != 1) return;
         PLAYERS.computeIfAbsent(player, ignored -> new Cursor()).step(player.getInventory(), source, battery, level.getGameTime(), generation, limit);
+    }
+
+    /** Base helmet policy measured through ordinary 1.12.2 gameplay: generate into, then offer only to the worn chest item. */
+    public static long tickChestOnly(ItemStack source, IBatteryItem battery, Level level, Player player, int generation, int limit) {
+        if (!(level instanceof ServerLevel server) || !server.getServer().isSameThread()
+                || player.level() != level || player.getItemBySlot(EquipmentSlot.HEAD) != source
+                || source.isEmpty() || source.getCount() != 1) return 0;
+        long tick = level.getGameTime();
+        Long previous = CHEST_TICKS.put(player, tick);
+        if (previous != null && previous == tick) return 0;
+        if (generation > 0) battery.addEnergy(source, generation);
+        long offered = Math.min(Math.max(0, limit), battery.getEnergy(source));
+        if (offered <= 0) return 0;
+        ItemStack target = player.getItemBySlot(EquipmentSlot.CHEST);
+        if (!(target.getItem() instanceof IBatteryItem receiver)) return 0;
+        return BatteryTransfer.move(source, battery, target, receiver, offered);
     }
 
     public static final class Cursor {

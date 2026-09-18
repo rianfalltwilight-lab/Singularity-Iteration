@@ -26,6 +26,8 @@ import dev.scex.si.energy.PlatformHeatStorage;
 import dev.scex.si.reactor.ReactorCycle;
 import dev.scex.si.reactor.ReactorInventory;
 import dev.scex.si.reactor.FluidReactorCycle;
+import dev.scex.si.reactor.ReactorAccidentLatch;
+import com.singularity_iteration.mio_icif.Singularity_Iteration_Config;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.core.BlockPos;
@@ -57,14 +59,16 @@ public class mio_icif_nuclear_reactor_generator extends mio_icif_Energy_Generato
     public static final float HEAT_LOSS_FACTOR=0;
     public static final long ENERGY_GENERATION_RATE=0,ENERGY_CAPACITY=1000000,MAX_RECEIVE=0,MAX_EXTRACT=8192;
     private final PlatformHeatStorage heat=new PlatformHeatStorage(10000,0,1000,20,5000,0);
-    private final dev.scex.si.reactor.GuardedReactorHeat heatPort=new dev.scex.si.reactor.GuardedReactorHeat(heat,()->live()&&this.ready&&this.hold.isEmpty(),this::dirty);
+    private final dev.scex.si.reactor.GuardedReactorHeat heatPort=new dev.scex.si.reactor.GuardedReactorHeat(heat,this::operational,this::dirty);
     private final mio_icif_fluid_reactor_handler fluid=new mio_icif_fluid_reactor_handler(this::fluidAvailable,this::dirty);
     private mio_icif_multiblock_manager<mio_icif_fluid_reactor_validator> structure;
     private mio_icif_reactor_mode mode=mio_icif_reactor_mode.GENERATOR;
     private int cycleRemaining=19,lastHeat;
     private EnergyAmount rate=EnergyAmount.ZERO,frameUsed=EnergyAmount.ZERO;
     private long frameAt=Long.MIN_VALUE;
-    private boolean ready;
+    private boolean ready,cycleVerified;
+    private ReactorAccidentLatch accident=new ReactorAccidentLatch();
+    private static final String LEGACY_ACCIDENT_FAILURE="Reactor heat reached capacity; accident integration pending";
     private CompoundTag hold=new CompoundTag();
     private String failure="";
     private final IItemHandler automation=new Automation();
@@ -72,6 +76,7 @@ public class mio_icif_nuclear_reactor_generator extends mio_icif_Energy_Generato
     public mio_icif_nuclear_reactor_generator(BlockPos pos,BlockState state,BlockEntityType<?> type){
         super(pos,state,type,SlotLayout.builder().extra(54).build(),0,ENERGY_CAPACITY,0,MAX_EXTRACT,CableTier.EV);
         setAsPowerSource(MAX_EXTRACT);
+        energyStorage.setOutputEnabled(false);
     }
     @Override protected MachineItemHandler createItemHandler(SlotLayout layout){return new ReactorItems(layout);}
     private final class ReactorItems extends MachineItemHandler {
@@ -88,6 +93,24 @@ public class mio_icif_nuclear_reactor_generator extends mio_icif_Energy_Generato
             &&chunk.getBlockEntity(worldPosition,LevelChunk.EntityCreationType.CHECK)==this;
     }
     private void dirty(){setChanged();if(level!=null&&!level.isClientSide)ContainerToTank.markUnsaved(this);}
+    private boolean operational(){return live()&&ready&&hold.isEmpty()&&accident.mayOperateOrExport();}
+    private boolean exportAllowed(){return operational()&&cycleVerified&&mode==mio_icif_reactor_mode.GENERATOR;}
+    private void syncOutputGate(){energyStorage.setOutputEnabled(exportAllowed());}
+    private void closeAccess(){ready=false;cycleVerified=false;rate=EnergyAmount.ZERO;lastHeat=0;frameUsed=EnergyAmount.ZERO;energyStorage.setOutputEnabled(false);}
+    private String accidentFailure(){return "Reactor accident "+accident.state().name().toLowerCase(java.util.Locale.ROOT)
+        +": "+(accident.trigger().effect()==ReactorAccidentLatch.Effect.LOCAL_MACHINE?"local machine":"nuclear terrain");}
+    public boolean hasReactorAccident(){return !accident.mayOperateOrExport();}
+    public String getAccidentState(){return accident.state().name();}
+    private void updateActive(){
+        if(!live())return;
+        var server=(ServerLevel)level;
+        var chunk=server.getChunkSource().getChunkNow(worldPosition.getX()>>4,worldPosition.getZ()>>4);
+        if(chunk==null||chunk.getBlockEntity(worldPosition,LevelChunk.EntityCreationType.CHECK)!=this)return;
+        var current=chunk.getBlockState(worldPosition);boolean running=operational()&&cycleVerified&&isRunning();
+        if(current.hasProperty(mio_icif_Block_Nuclear_Reactor_Generator.ACTIVE)
+            &&current.getValue(mio_icif_Block_Nuclear_Reactor_Generator.ACTIVE)!=running)
+            server.setBlock(worldPosition,current.setValue(mio_icif_Block_Nuclear_Reactor_Generator.ACTIVE,running),3);
+    }
     private void frame(){long now=level.getGameTime();if(frameAt!=now){frameAt=now;frameUsed=EnergyAmount.ZERO;}}
     private boolean enabled(){
         if(level.hasNeighborSignal(worldPosition))return true;
@@ -107,7 +130,7 @@ public class mio_icif_nuclear_reactor_generator extends mio_icif_Energy_Generato
         if(!live())return List.of();var out=new ArrayList<BlockPos>();out.add(worldPosition);
         for(var side:Direction.values()){var at=worldPosition.relative(side);if(isChamber(at))out.add(at);}return List.copyOf(out);
     }
-    private boolean fluidAvailable(){return live()&&ready&&hold.isEmpty()&&mode==mio_icif_reactor_mode.FLUID&&isValidFluidReactorStructure();}
+    private boolean fluidAvailable(){return operational()&&mode==mio_icif_reactor_mode.FLUID&&isValidFluidReactorStructure();}
     private void refreshStructure(){
         var validator=new mio_icif_fluid_reactor_validator();boolean valid=validator.validate(level,worldPosition).isValid();
         if(structure!=null&&structure.isValid()){
@@ -116,19 +139,23 @@ public class mio_icif_nuclear_reactor_generator extends mio_icif_Energy_Generato
         else if(mode==mio_icif_reactor_mode.FLUID)setReactorMode(mio_icif_reactor_mode.GENERATOR);
     }
     public static void tick(Level world,BlockPos pos,BlockState state,mio_icif_nuclear_reactor_generator m){
-        if(!m.live())return;m.ready=true;m.frame();
+        if(!m.live())return;m.ready=true;
+        if(!m.operational()){m.dispatchAccident();if(m.live()){m.syncOutputGate();m.updateActive();}return;}
+        m.frame();
         if(m.cycleRemaining==19)m.refreshStructure();
+        if(!m.operational())return;
         if(m.fluidAvailable())m.fluid.processContainers();
+        if(!m.operational())return;
         if(--m.cycleRemaining<0){m.cycleRemaining=19;m.operate();}
-        var current=m.getBlockState();boolean running=m.isRunning();
-        if(current.getValue(mio_icif_Block_Nuclear_Reactor_Generator.ACTIVE)!=running)
-            world.setBlock(pos,current.setValue(mio_icif_Block_Nuclear_Reactor_Generator.ACTIVE,running),3);
-        m.dirty();
+        if(!m.live())return;
+        m.syncOutputGate();m.updateActive();
+        if(m.live())m.dirty();
     }
     private void operate(){
-        rate=EnergyAmount.ZERO;lastHeat=0;
-        if(!hold.isEmpty()){failure="Saved reactor state requires recovery";return;}
+        if(!operational())return;
+        rate=EnergyAmount.ZERO;lastHeat=0;cycleVerified=false;syncOutputGate();
         refreshStructure();
+        if(!operational())return;
         boolean liquid=mode==mio_icif_reactor_mode.FLUID;
         if(liquid&&!fluid.canConvert()){failure="Saved fluid state requires recovery";return;}
         int columns=getAvailableColumns();ItemStack[] expected=new ItemStack[54],replacement=new ItemStack[54];int[] slots=new int[54];
@@ -139,29 +166,68 @@ public class mio_icif_nuclear_reactor_generator extends mio_icif_Energy_Generato
             ReactorCycle.Result result=liquid?converted.cycle():ReactorCycle.step(parts,columns,heat.getHeatStored(),enabled());
             var next=result.parts();var depleted=result.depletedFuel();
             for(int i=0;i<54;i++)replacement[i]=i%9<columns?ReactorInventory.write(expected[i],parts[i],next[i],depleted[i]):expected[i].copy();
+            // Decide from the final fluid-adjusted result. Never reject the pre-cooling input heat.
+            int explosiveCells=0,containmentPlates=0;
+            for(var part:parts)if(part!=null&&part.profile().kind()==ReactorCycle.Kind.FUEL&&part.remaining()>0)
+                explosiveCells=Math.addExact(explosiveCells,part.profile().cells());
+            else if(part!=null&&part.profile().kind()==ReactorCycle.Kind.PLATING&&part.profile().extraHull()==500)
+                containmentPlates=Math.incrementExact(containmentPlates);
+            var trigger=ReactorAccidentLatch.decide(result.hullHeat(),result.maxHullHeat(),level.getGameTime(),
+                Singularity_Iteration_Config.ENABLE_NUCLEAR_EXPLOSION.get(),explosiveCells,containmentPlates);
+            int committedHeat=Math.toIntExact(result.generatedHeat());
+            var committedRate=trigger==null?EnergyAmount.fromDouble(result.euPerTick()):EnergyAmount.ZERO;
+            if(!operational())return;
             if(!itemHandler.scexCommitSlots(slots,expected,replacement,()->{
-                heat.setCapacity(result.maxHullHeat());heat.setHeat(result.hullHeat());lastHeat=Math.toIntExact(result.generatedHeat());
-                rate=EnergyAmount.fromDouble(result.euPerTick());failure="";
+                heat.setCapacity(result.maxHullHeat());heat.setHeat(result.hullHeat());lastHeat=committedHeat;
                 if(converted!=null)fluid.commitCycle(converted.coolant(),converted.hotCoolant(),converted.converted());
-            }))throw new IllegalStateException("Reactor inventory changed during cycle");
-            // Accident behavior will be enabled only with a separately observed and validated effect profile.
-            if(heat.getHeatStored()>=heat.getMaxHeatStored()){rate=EnergyAmount.ZERO;failure="Reactor heat reached capacity; accident integration pending";}
-        }catch(IllegalArgumentException|ArithmeticException error){failure=error.getMessage();rate=EnergyAmount.ZERO;}
-        dirty();
+                accident.armAfterCommit(trigger);cycleVerified=true;rate=committedRate;
+                if(hasReactorAccident())frameUsed=EnergyAmount.ZERO;
+                failure=hasReactorAccident()?accidentFailure():"";syncOutputGate();
+            })){failure="Reactor inventory changed during cycle";rate=EnergyAmount.ZERO;cycleVerified=false;syncOutputGate();}
+            if(hasReactorAccident()&&live())IndependentSiEnergy.changed(this);
+        }catch(IllegalArgumentException|ArithmeticException error){failure=error.getMessage();rate=EnergyAmount.ZERO;cycleVerified=false;syncOutputGate();}
+        if(live())dirty();
+    }
+    private void dispatchAccident(){
+        if(accident.state()!=ReactorAccidentLatch.State.PENDING||!live())return;
+        var trigger=accident.trigger();var server=(ServerLevel)level;
+        float power=trigger.effect()==ReactorAccidentLatch.Effect.LOCAL_MACHINE?1.5F:trigger.terrainPower();
+        if(trigger.effect()==ReactorAccidentLatch.Effect.NUCLEAR_TERRAIN&&!loadedBlastWindow(server,power))return;
+        if(!accident.claimEffect())return;
+        failure=accidentFailure();rate=EnergyAmount.ZERO;frameUsed=EnergyAmount.ZERO;cycleVerified=false;syncOutputGate();dirty();
+        try{
+            var interaction=trigger.effect()==ReactorAccidentLatch.Effect.LOCAL_MACHINE
+                ?Level.ExplosionInteraction.NONE:Level.ExplosionInteraction.BLOCK;
+            server.explode(null,worldPosition.getX()+0.5,worldPosition.getY()+0.5,worldPosition.getZ()+0.5,power,interaction);
+            if(trigger.effect()==ReactorAccidentLatch.Effect.LOCAL_MACHINE&&live())server.removeBlock(worldPosition,false);
+            accident.closeEffect();
+            if(live()){failure=accidentFailure();dirty();}
+        }catch(RuntimeException|Error effectFailure){
+            accident.markUncertain();
+            if(live()){failure=accidentFailure()+": "+effectFailure.getClass().getSimpleName();dirty();}
+        }
+    }
+    private boolean loadedBlastWindow(ServerLevel server,float power){
+        int radius=(int)Math.ceil(power*2.0F);
+        int minX=(worldPosition.getX()-radius)>>4,maxX=(worldPosition.getX()+radius)>>4;
+        int minZ=(worldPosition.getZ()-radius)>>4,maxZ=(worldPosition.getZ()+radius)>>4;
+        for(int x=minX;x<=maxX;x++)for(int z=minZ;z<=maxZ;z++)if(server.getChunkSource().getChunkNow(x,z)==null)return false;
+        return true;
     }
     @Override public CustomEUEnergyStorage ownedEnergy(){return energyStorage;}
-    @Override public int outputFaces(){return live()&&ready&&hold.isEmpty()&&mode==mio_icif_reactor_mode.GENERATOR?63:0;}
-    private EnergyAmount allowance(){if(!live()||!ready||!hold.isEmpty()||mode!=mio_icif_reactor_mode.GENERATOR)return EnergyAmount.ZERO;frame();return frameUsed.compareTo(rate)>=0?EnergyAmount.ZERO:rate.subtract(frameUsed);}
-    @Override public EnergyAmount potentialEnergy(){var balance=energyStorage.scexExactAmount();return balance.add(allowance().min(balance.roomBelow(ENERGY_CAPACITY)));}
+    @Override public int outputFaces(){return exportAllowed()?63:0;}
+    private EnergyAmount allowance(){if(!exportAllowed())return EnergyAmount.ZERO;frame();return frameUsed.compareTo(rate)>=0?EnergyAmount.ZERO:rate.subtract(frameUsed);}
+    @Override public EnergyAmount potentialEnergy(){if(!exportAllowed())return EnergyAmount.ZERO;var balance=energyStorage.scexExactAmount();return balance.add(allowance().min(balance.roomBelow(ENERGY_CAPACITY)));}
     @Override public void prepareEnergy(EnergyAmount requested){
-        if(!energyStorage.scexNetworkControlled())return;var available=allowance();var balance=energyStorage.scexExactAmount();
+        if(!exportAllowed()||!energyStorage.scexNetworkControlled())return;var available=allowance();var balance=energyStorage.scexExactAmount();
         if(requested.compareTo(balance)<=0||available.isZero())return;
         var credit=requested.subtract(balance).min(available).min(balance.roomBelow(ENERGY_CAPACITY));
         var accepted=energyStorage.scexGenerateEnergy(credit,false);frameUsed=frameUsed.add(accepted);if(!accepted.isZero())dirty();
     }
-    @Override public void onLoad(){super.onLoad();IndependentSiEnergy.changed(this);}
-    @Override public void setRemoved(){ready=false;super.setRemoved();IndependentSiEnergy.changed(this);}
-    @Override public void clearRemoved(){ready=false;super.clearRemoved();IndependentSiEnergy.changed(this);}
+    @Override public void onLoad(){ready=false;cycleVerified=false;energyStorage.setOutputEnabled(false);super.onLoad();IndependentSiEnergy.changed(this);}
+    @Override public void setRemoved(){closeAccess();super.setRemoved();IndependentSiEnergy.changed(this);}
+    @Override public void clearRemoved(){ready=false;cycleVerified=false;energyStorage.setOutputEnabled(false);super.clearRemoved();IndependentSiEnergy.changed(this);}
+    @Override public void onChunkUnloaded(){closeAccess();super.onChunkUnloaded();IndependentSiEnergy.changed(this);}
     @Override public double getOfferedEnergy(){return 0;}
     @Override public void drawEnergy(double amount){}
     @Override public boolean emitsEnergyTo(IEnergyAcceptor acceptor,Direction side){return false;}
@@ -180,7 +246,7 @@ public class mio_icif_nuclear_reactor_generator extends mio_icif_Energy_Generato
     public double getExactEnergyGeneration(){return rate.toDouble();}
     public int getCurrentOutput(){return (int)Math.min(Integer.MAX_VALUE,rate.whole());}
     @Override public boolean isBurning(){return isRunning();}
-    public boolean isRunning(){return (!rate.isZero()||mode==mio_icif_reactor_mode.FLUID&&lastHeat>0)&&failure.isEmpty();}
+    public boolean isRunning(){return !hasReactorAccident()&&!isRemoved()&&(!rate.isZero()||mode==mio_icif_reactor_mode.FLUID&&lastHeat>0)&&failure.isEmpty();}
     public String getReactorFailure(){return failure;}
     public boolean hasLegacyHold(){return !hold.isEmpty();}
     @Override public int getAvailableColumns(){int n=3;for(var side:Direction.values())if(isChamber(worldPosition.relative(side)))n++;return n;}
@@ -192,24 +258,24 @@ public class mio_icif_nuclear_reactor_generator extends mio_icif_Energy_Generato
     public NonNullList<ItemStack> getReactorItems(){return ((ReactorItems)itemHandler).contents();}
     @Override public int getMaxStackSize(){return 1;}
     @Override public int[] getSlotsForFace(Direction side){return java.util.stream.IntStream.range(0,54).toArray();}
-    @Override public boolean canPlaceItemThroughFace(int slot,ItemStack stack,Direction side){return live()&&itemHandler.isItemValid(slot,stack);}
-    @Override public boolean canTakeItemThroughFace(int slot,ItemStack stack,Direction side){return live();}
+    @Override public boolean canPlaceItemThroughFace(int slot,ItemStack stack,Direction side){return operational()&&itemHandler.isItemValid(slot,stack);}
+    @Override public boolean canTakeItemThroughFace(int slot,ItemStack stack,Direction side){return operational();}
     @Override public IItemHandler getItemHandlerCapability(Direction side){return automation;}
     public IItemHandler getReactorItemHandler(){return itemHandler;}
     private final class Automation implements IItemHandler {
         @Override public int getSlots(){return 54;}
         @Override public ItemStack getStackInSlot(int slot){return itemHandler.getStackInSlot(slot).copy();}
-        @Override public ItemStack insertItem(int slot,ItemStack stack,boolean simulate){return live()?itemHandler.insertItem(slot,stack,simulate):stack;}
-        @Override public ItemStack extractItem(int slot,int amount,boolean simulate){return live()?itemHandler.extractItem(slot,amount,simulate):ItemStack.EMPTY;}
+        @Override public ItemStack insertItem(int slot,ItemStack stack,boolean simulate){return operational()?itemHandler.insertItem(slot,stack,simulate):stack;}
+        @Override public ItemStack extractItem(int slot,int amount,boolean simulate){return operational()?itemHandler.extractItem(slot,amount,simulate):ItemStack.EMPTY;}
         @Override public int getSlotLimit(int slot){return 1;}
-        @Override public boolean isItemValid(int slot,ItemStack stack){return live()&&itemHandler.isItemValid(slot,stack);}
+        @Override public boolean isItemValid(int slot,ItemStack stack){return operational()&&itemHandler.isItemValid(slot,stack);}
     }
     public void setFluidReactorMultiblock(mio_icif_multiblock_manager<mio_icif_fluid_reactor_validator> manager){structure=manager;setReactorMode(manager!=null&&manager.isValid()?mio_icif_reactor_mode.FLUID:mio_icif_reactor_mode.GENERATOR);}
     public void onMultiblockBroken(){structure=null;setReactorMode(mio_icif_reactor_mode.GENERATOR);}
     public mio_icif_multiblock_manager<mio_icif_fluid_reactor_validator> getFluidReactorMultiblock(){return structure;}
     public mio_icif_reactor_mode getReactorMode(){return mode;}
     @Override public IReactorAPI.ReactorMode getApiReactorMode(){return mode==mio_icif_reactor_mode.FLUID?IReactorAPI.ReactorMode.FLUID:IReactorAPI.ReactorMode.GENERATOR;}
-    public void setReactorMode(mio_icif_reactor_mode next){mode=java.util.Objects.requireNonNull(next);rate=EnergyAmount.ZERO;dirty();}
+    public void setReactorMode(mio_icif_reactor_mode next){mode=java.util.Objects.requireNonNull(next);rate=EnergyAmount.ZERO;syncOutputGate();dirty();}
     @Override public boolean isValidFluidReactorStructure(){return structure!=null&&structure.isValid()&&level!=null&&new mio_icif_fluid_reactor_validator().validate(level,worldPosition).isValid();}
     @Override public mio_icif_fluid_reactor_handler getFluidHandler(){return fluid;}
     public IFluidHandler getFluidHandlerCapability(Direction side){return fluidAvailable()?fluid:null;}
@@ -234,10 +300,10 @@ public class mio_icif_nuclear_reactor_generator extends mio_icif_Energy_Generato
         tag.putInt("CurrentHeatGeneration",lastHeat);tag.putLong("CurrentEnergyGeneration",rate.whole());tag.putBoolean("IsRunning",isRunning());tag.putInt("ReactorCycleTicks",cycleRemaining);tag.putString("ReactorMode",mode.getName());
         ListTag legacy=new ListTag();for(int i=0;i<54;i++)if(!getItem(i).isEmpty()){CompoundTag item=(CompoundTag)getItem(i).save(provider);item.putByte("Slot",(byte)i);legacy.add(item);}tag.put("ReactorItems",legacy);
         CompoundTag fluidTag=new CompoundTag();fluid.saveToNBT(fluidTag,provider);tag.put("FluidHandler",fluidTag);
-        CompoundTag saved=new CompoundTag();saved.putInt("version",1);saved.putLong("rate",rate.whole());saved.putLong("rate_fraction",rate.fraction());saved.put("hold",hold.copy());saved.putString("failure",failure);tag.put("scex_reactor",saved);
+        CompoundTag saved=new CompoundTag();saved.putInt("version",2);saved.putLong("rate",rate.whole());saved.putLong("rate_fraction",rate.fraction());saved.put("hold",hold.copy());saved.putString("failure",failure);saved.put("accident",saveAccident());tag.put("scex_reactor",saved);
     }
     @Override public void loadAdditional(CompoundTag tag,HolderLookup.Provider provider){
-        super.loadAdditional(tag,provider);hold=new CompoundTag();failure="";rate=EnergyAmount.ZERO;ready=false;frameAt=Long.MIN_VALUE;frameUsed=EnergyAmount.ZERO;
+        super.loadAdditional(tag,provider);hold=new CompoundTag();failure="";lastHeat=0;accident=new ReactorAccidentLatch();closeAccess();frameAt=Long.MIN_VALUE;
         long stored=tag.getLong("HeatStored");if(stored<0){hold.put("invalid_heat",tag.get("HeatStored").copy());stored=0;}heat.setHeat(stored);
         long max=tag.getLong("MaxHeatStored");heat.setCapacity(max>0?max:10000);
         cycleRemaining=tag.contains("ReactorCycleTicks")?tag.getInt("ReactorCycleTicks"):19;
@@ -266,13 +332,57 @@ public class mio_icif_nuclear_reactor_generator extends mio_icif_Energy_Generato
         }
         if(tag.contains("scex_reactor",Tag.TAG_COMPOUND)){
             CompoundTag own=tag.getCompound("scex_reactor");
-            if(own.getInt("version")==1){
+            int version=own.getInt("version");
+            if(version==1||version==2){
                 hold.merge(own.getCompound("hold").copy());failure=own.getString("failure");
                 try{rate=new EnergyAmount(own.getLong("rate"),own.getLong("rate_fraction"));if(rate.whole()>8192)throw new IllegalArgumentException("Invalid saved rate");}
                 catch(IllegalArgumentException error){hold.put("invalid_rate",own.copy());rate=EnergyAmount.ZERO;}
+                if(version==2){
+                    if(!own.getAllKeys().equals(java.util.Set.of("version","rate","rate_fraction","hold","failure","accident")))hold.put("unknown_reactor_fields",own.copy());
+                    if(!own.contains("version",Tag.TAG_INT)||!own.contains("rate",Tag.TAG_LONG)||!own.contains("rate_fraction",Tag.TAG_LONG)
+                        ||!own.contains("hold",Tag.TAG_COMPOUND)||!own.contains("failure",Tag.TAG_STRING))hold.put("invalid_reactor_fields",own.copy());
+                    try{
+                        if(!own.contains("accident",Tag.TAG_COMPOUND))throw new IllegalArgumentException("Missing accident state");
+                        accident=loadAccident(own.getCompound("accident"));
+                        var trigger=accident.trigger();
+                        if(trigger!=null&&(trigger.finalHeat()!=stored||trigger.finalCapacity()!=heat.getMaxHeatStored()))throw new IllegalArgumentException("Conflicting accident thermal state");
+                    }catch(IllegalArgumentException error){hold.put("invalid_accident",own.copy());accident=new ReactorAccidentLatch();}
+                }else if(LEGACY_ACCIDENT_FAILURE.equals(failure)){
+                    if(hold.isEmpty()&&rate.isZero()&&max>0&&stored>=max){
+                        accident.armAfterCommit(ReactorAccidentLatch.decide(stored,max,0,Singularity_Iteration_Config.ENABLE_NUCLEAR_EXPLOSION.get()));
+                    }else hold.put("inconsistent_legacy_accident",own.copy());
+                }
             }else hold.put("future_reactor",own.copy());
+        }else if(tag.contains("scex_reactor"))hold.put("invalid_reactor_tag",tag.get("scex_reactor").copy());
+        if(hasReactorAccident()){rate=EnergyAmount.ZERO;failure=accidentFailure();}
+        if(!hold.isEmpty()){rate=EnergyAmount.ZERO;failure="Saved reactor state requires recovery";}
+        setAsPowerSource(MAX_EXTRACT);energyStorage.setOutputEnabled(false);
+    }
+    private CompoundTag saveAccident(){
+        CompoundTag tag=new CompoundTag();tag.putInt("version",2);tag.putString("state",accident.state().name());
+        var trigger=accident.trigger();
+        if(trigger!=null){tag.putLong("final_heat",trigger.finalHeat());tag.putLong("final_capacity",trigger.finalCapacity());
+            tag.putLong("game_time",trigger.gameTime());tag.putString("effect",trigger.effect().name());
+            tag.putInt("explosive_cells",trigger.explosiveCells());tag.putInt("containment_plates",trigger.containmentPlates());}
+        return tag;
+    }
+    private static ReactorAccidentLatch loadAccident(CompoundTag tag){
+        if(!tag.contains("version",Tag.TAG_INT)||(tag.getInt("version")!=1&&tag.getInt("version")!=2)||!tag.contains("state",Tag.TAG_STRING))throw new IllegalArgumentException("Invalid accident schema");
+        int version=tag.getInt("version");
+        var state=ReactorAccidentLatch.State.valueOf(tag.getString("state"));
+        if(state==ReactorAccidentLatch.State.OPEN){
+            if(!tag.getAllKeys().equals(java.util.Set.of("version","state")))throw new IllegalArgumentException("Unexpected open accident payload");
+            return new ReactorAccidentLatch();
         }
-        if(!hold.isEmpty())rate=EnergyAmount.ZERO;setAsPowerSource(MAX_EXTRACT);
+        var expected=version==1?java.util.Set.of("version","state","final_heat","final_capacity","game_time","effect")
+            :java.util.Set.of("version","state","final_heat","final_capacity","game_time","effect","explosive_cells","containment_plates");
+        if(!tag.getAllKeys().equals(expected)
+            ||!tag.contains("final_heat",Tag.TAG_LONG)||!tag.contains("final_capacity",Tag.TAG_LONG)
+            ||!tag.contains("game_time",Tag.TAG_LONG)||!tag.contains("effect",Tag.TAG_STRING))throw new IllegalArgumentException("Invalid accident trigger payload");
+        if(version==2&&(!tag.contains("explosive_cells",Tag.TAG_INT)||!tag.contains("containment_plates",Tag.TAG_INT)))throw new IllegalArgumentException("Invalid accident profile payload");
+        var trigger=new ReactorAccidentLatch.Trigger(tag.getLong("final_heat"),tag.getLong("final_capacity"),tag.getLong("game_time"),ReactorAccidentLatch.Effect.valueOf(tag.getString("effect")),
+            version==2?tag.getInt("explosive_cells"):0,version==2?tag.getInt("containment_plates"):0);
+        return ReactorAccidentLatch.restore(new ReactorAccidentLatch.Saved(state,trigger));
     }
     @Override public CompoundTag getUpdateTag(HolderLookup.Provider provider){return saveWithoutMetadata(provider);}
     @Override public void handleUpdateTag(CompoundTag tag,HolderLookup.Provider provider){loadAdditional(tag,provider);}

@@ -18,36 +18,6 @@
       "basis": "R60 SI metadata names internal quantum/jetpack/tool/entity classes, methods or implementation correspondence. Bodies remain unread. Comment snippets are not behavior specifications. Conservative exclusion, not a copying finding."
     },
     {
-      "id": "item-energy-and-equipment-mapping",
-      "prefixes": [],
-      "paths": [
-        "src/main/java/com/singularity_iteration/mio_icif/Items/Armor/mio_icif_solar_helmet.java",
-        "src/main/java/com/singularity_iteration/mio_icif/Items/Armor/mio_icif_chestplate_energy_pack.java",
-        "src/main/java/com/singularity_iteration/mio_icif/api/item/BatteryElectricAdapter.java",
-        "src/main/java/com/singularity_iteration/mio_icif/api/item/electric/ISpecialElectricItem.java",
-        "src/main/java/com/singularity_iteration/mio_icif/api/item/electric/IElectricItemManager.java",
-        "src/main/java/com/singularity_iteration/mio_icif/api/item/electric/IElectricItem.java",
-        "src/main/java/com/singularity_iteration/mio_icif/api/item/electric/IBackupElectricItemManager.java"
-      ],
-      "basis": "R59 metadata names IC2 electric item API counterparts, armor absorption methods, solar internal methods and backpack classes. Bodies remain unread and conservatively excluded pending independent replacement or removal of unused legacy APIs. Not a copying finding."
-    },
-    {
-      "id": "crop-method-and-class-mapping",
-      "prefixes": [],
-      "paths": [
-        "src/main/java/com/singularity_iteration/mio_icif/Items/Tools/CropAnalyzerItem.java",
-        "src/main/java/com/singularity_iteration/mio_icif/api/internal/crop/PlantHybridization.java",
-        "src/main/java/com/singularity_iteration/mio_icif/Blocks/entity/crop/mio_icif_crop_entity.java",
-        "src/main/java/com/singularity_iteration/mio_icif/api/crop/PlantType.java",
-        "src/main/java/com/singularity_iteration/mio_icif/api/crop/PlantStats.java",
-        "src/main/java/com/singularity_iteration/mio_icif/Blocks/Crop/mio_icif_crop_stick.java",
-        "src/main/java/com/singularity_iteration/mio_icif/Blocks/Crop/mio_icif_crop_stick_upgraded.java",
-        "src/main/java/com/singularity_iteration/mio_icif/event/CropRegistryEvent.java",
-        "src/main/java/com/singularity_iteration/mio_icif/crop/PlantEatingPlant.java"
-      ],
-      "basis": "R56 comment-only inspection names IC2 internal crop classes/methods and algorithm correspondence. Bodies were not opened. Conservative exclusion pending independent gameplay-based replacement, not a copying finding."
-    },
-    {
       "id": "grid",
       "prefixes": [
         "src/main/java/com/singularity_iteration/mio_icif/energy/grid/"
@@ -62,22 +32,6 @@
       ],
       "paths": [],
       "basis": "Legacy electrical implementation remains unreviewed and excluded from algorithm inspection."
-    },
-    {
-      "id": "flight-input",
-      "prefixes": [],
-      "paths": [
-        "src/main/java/com/singularity_iteration/mio_icif/Items/Armor/mio_icif_chestplate_jetpack_elc.java",
-        "src/main/java/com/singularity_iteration/mio_icif/Items/Armor/mio_icif_chestplate_advanced_jetpack.java",
-        "src/main/java/com/singularity_iteration/mio_icif/network/mio_icif_KeyboardManager.java",
-        "src/main/java/com/singularity_iteration/mio_icif/network/JetpackKeyStatePacket.java",
-        "src/main/java/com/singularity_iteration/mio_icif/network/JetpackModeSwitchPacket.java",
-        "src/main/java/com/singularity_iteration/mio_icif/util/JetpackKeyHandler.java",
-        "src/main/java/com/singularity_iteration/mio_icif/util/JetpackKeyHandlerClient.java",
-        "src/main/java/com/singularity_iteration/mio_icif/integration/curios/JetpackCuriosAdapter.java",
-        "src/main/java/com/singularity_iteration/mio_icif/api/item/IJetpackItem.java"
-      ],
-      "basis": "Existing audit records IC2 internal-class/method correspondence for flight and keyboard input. Supporting adapters are a conservative review boundary, not a copying finding."
     },
     {
       "id": "energy-api",

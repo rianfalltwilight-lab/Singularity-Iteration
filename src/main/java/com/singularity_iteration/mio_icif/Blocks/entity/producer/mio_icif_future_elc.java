@@ -5,6 +5,12 @@ import com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_block_entities;
 import com.singularity_iteration.mio_icif.Singularity_Iteration_Config;
 import com.singularity_iteration.mio_icif.Items.Normal.mio_icif_normal;
 import com.singularity_iteration.mio_icif.energy.EnergyUnit.CableTier;
+import com.singularity_iteration.mio_icif.energy.CustomEUEnergyStorage;
+import com.singularity_iteration.mio_icif.Menu.Producer.FutureElcMenu;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Items;
 import com.singularity_iteration.mio_icif.future.CommodityCategory;
 import com.singularity_iteration.mio_icif.future.FutureCommodity;
 import com.singularity_iteration.mio_icif.future.FutureCommodityManager;
@@ -44,6 +50,12 @@ import java.util.List;
  */
 @SuppressWarnings("null")
 public class mio_icif_future_elc extends mio_icif_Energy_Block {
+
+    /** This inventory-free consumer uses the same guarded FE input ledger as processing machines. */
+    @Override
+    public net.neoforged.neoforge.energy.IEnergyStorage scexFeCapability(@org.jetbrains.annotations.Nullable Direction side) {
+        return scexFeBridge().port(side);
+    }
 
     // 数据槽位定义
     public static final int DATA_COUNT = 121;  // 增加槽位数量以支持更多商品
@@ -86,6 +98,11 @@ public static final int DATA_CURRENT_CATEGORY = 7;
     
     /** 今日已交易量 */
     private int dailyTradeVolume = 0;
+
+    // One synchronous trade per machine and per player, including calls into another machine.
+    private boolean tradeInProgress;
+    private static final java.util.Set<ServerPlayer> TRADING_PLAYERS =
+        java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
     
  /** 玩家货币存储（用于显示） */
     private long cachedPlayerCoins = 0;
@@ -407,6 +424,7 @@ public static final int DATA_CURRENT_CATEGORY = 7;
      * 更新所有货品价格（新的一天）
      */
     public void updateAllPrices() {
+        if (tradeInProgress) return;
         if (level == null || level.isClientSide) return;
         
         for (FutureCommodity commodity : FutureCommodityManager.getCommodities()) {
@@ -476,6 +494,7 @@ public static final int DATA_CURRENT_CATEGORY = 7;
      * 在游戏每天第 1 tick 调用
      */
     public void checkDayUpdate(Level level) {
+        if (tradeInProgress) return;
         if (level.isClientSide) return;
         
         long gameDay = level.getDayTime() / 24000L;
@@ -573,107 +592,207 @@ public static final int DATA_CURRENT_CATEGORY = 7;
      * @return 是否成功
      */
     public boolean executeBuy(Player player) {
-        if (level == null || level.isClientSide) return false;
-        
-        FutureCommodity commodity = getSelectedCommodity();
-        if (commodity == null) return false;
-        
-        // 检查每日限制
-    if (dailyTradeVolume + tradeQuantity > Singularity_Iteration_Config.FUTURE_DAILY_LIMIT.get()) {
-            return false;
-        }
-        
-        // 检查能量
-    if (!hasEnoughEnergy()) return false;
-        
-        int price = getCurrentPrice(commodity);
-        int totalCost = price * tradeQuantity;
-        
-        // 检查货物
-    int playerCoins = countPlayerCoins(player);
-        if (playerCoins < totalCost) return false;
-        
-        // 扣除货币
-        if (!consumeCoins(player, totalCost)) return false;
-        
-        // 给予物品
-        ItemStack itemStack = new ItemStack(commodity.getItem(), tradeQuantity);
-        if (!player.getInventory().add(itemStack)) {
-            player.drop(itemStack, false);
-        }
-        
-        // 消耗能量
-    consumeEnergyForTrade();
-        
-        // 7. 刷新交易量和缓存
-        dailyTradeVolume += tradeQuantity;
-        cachedPlayerCoins = countPlayerCoins(player);
-        
-        setChanged();
-        syncToClient();
-        
-        return true;
+        return executeTrade(player, true);
     }
-    
-    /**
-     * 执行出售
-     * @param player 玩家
-     * @return 是否成功
-     */
+
     public boolean executeSell(Player player) {
-        if (level == null || level.isClientSide) return false;
-        
-        FutureCommodity commodity = getSelectedCommodity();
-        if (commodity == null) return false;
-        
-        // 检查每日限制
-    if (dailyTradeVolume + tradeQuantity > Singularity_Iteration_Config.FUTURE_DAILY_LIMIT.get()) {
-            return false;
-        }
-        
-        // 检查能量
-    if (!hasEnoughEnergy()) return false;
-        
-        // 检查物品
-    if (!hasEnoughItems(player, commodity.getItem(), tradeQuantity)) {
-            return false;
-        }
-        
-        // 扣除物品
-        if (!consumeItems(player, commodity.getItem(), tradeQuantity)) {
-            return false;
-        }
-        
-        // 给予货币
-        int price = getCurrentPrice(commodity);
-        int totalValue = price * tradeQuantity;
-        giveCoins(player, totalValue);
-        
-        // 消耗能量
-    consumeEnergyForTrade();
-        
-        // 7. 刷新交易量和缓存
-        dailyTradeVolume += tradeQuantity;
-        cachedPlayerCoins = countPlayerCoins(player);
-        
-        setChanged();
-        syncToClient();
-        
-        return true;
+        return executeTrade(player, false);
     }
-    
+
+    private boolean liveTradeOwner(ServerLevel world) {
+        if (level != world || isRemoved() || !world.getServer().isSameThread()) return false;
+        var chunk = world.getChunkSource().getChunkNow(worldPosition.getX() >> 4, worldPosition.getZ() >> 4);
+        return chunk != null && chunk.getBlockEntities().get(worldPosition) == this
+            && chunk.getBlockState(worldPosition).getBlock() == getBlockState().getBlock()
+            && world.shouldTickBlocksAt(net.minecraft.world.level.ChunkPos.asLong(worldPosition));
+    }
+
+    private boolean authorized(ServerLevel world, ServerPlayer player, FutureElcMenu menu) {
+        return liveTradeOwner(world) && player.level() == world && player.isAlive() && !player.isSpectator()
+            && player.containerMenu == menu && menu.getBlockEntity() == this && menu.stillValid(player)
+            && player.distanceToSqr(worldPosition.getX() + 0.5, worldPosition.getY() + 0.5,
+                worldPosition.getZ() + 0.5) <= 64.0;
+    }
+
+    private boolean executeTrade(Player player, boolean buying) {
+        if (!(level instanceof ServerLevel world) || !world.getServer().isSameThread()
+                || !(player instanceof ServerPlayer customer) || tradeInProgress
+                || !TRADING_PLAYERS.add(customer)) return false;
+        tradeInProgress = true;
+        CustomEUEnergyStorage.InternalPayment payment = null;
+        boolean committed = false;
+        try {
+            if (!(customer.containerMenu instanceof FutureElcMenu menu) || !authorized(world, customer, menu)) return false;
+            final int quantity = tradeQuantity;
+            final int volume = dailyTradeVolume;
+            final long day = currentDay;
+            final CommodityCategory category = currentCategory;
+            final int page = currentPage, selected = selectedCommodityIndex;
+            final int fee = Singularity_Iteration_Config.FUTURE_ENERGY_PER_TRADE.get();
+            final int limit = Singularity_Iteration_Config.FUTURE_DAILY_LIMIT.get();
+            if (quantity < 1 || quantity > 64 || volume < 0 || (long) volume + quantity > limit
+                    || fee < 0 || fee > 10000) return false;
+            FutureCommodity commodity = getSelectedCommodity();
+            if (commodity == null || commodity.getItem() == Items.AIR) return false;
+            final int price = getCurrentPrice(commodity);
+            if (price <= 0) return false;
+            final long coins = (long) price * quantity;
+            final Inventory inventory = customer.getInventory();
+            final TradeInventory plan = new TradeInventory(inventory, menu);
+            // Zero is explicitly free. Positive action fees bypass public transfer-rate limits.
+            if (fee > 0) {
+                payment = energyStorage.scexReserveInternal(fee);
+                if (payment == null) return false;
+            }
+            Item currency = mio_icif_normal.COIN.get();
+            if (!plan.removeMain(buying ? currency : commodity.getItem(), buying ? coins : quantity)) return false;
+            if (!plan.insert(buying ? commodity.getItem() : currency, buying ? quantity : coins)) return false;
+            long nextCoins = plan.countMain(currency);
+            // Every item stack limit query and component comparison precedes the commit.
+            if (!authorized(world, customer, menu) || getSelectedCommodity() != commodity
+                    || getCurrentPrice(commodity) != price || currentDay != day || dailyTradeVolume != volume
+                    || tradeQuantity != quantity || currentCategory != category || currentPage != page
+                    || selectedCommodityIndex != selected || Singularity_Iteration_Config.FUTURE_ENERGY_PER_TRADE.get() != fee
+                    || Singularity_Iteration_Config.FUTURE_DAILY_LIMIT.get() != limit
+                    || customer.getInventory() != inventory || !plan.unchanged(menu)) return false;
+            // Component equality may be supplied by a dependency; recheck ownership after it.
+            if (!authorized(world, customer, menu) || currentDay != day || dailyTradeVolume != volume
+                    || tradeQuantity != quantity || currentCategory != category || currentPage != page
+                    || selectedCommodityIndex != selected || getSelectedCommodity() != commodity
+                    || getCurrentPrice(commodity) != price || Singularity_Iteration_Config.FUTURE_ENERGY_PER_TRADE.get() != fee
+                    || Singularity_Iteration_Config.FUTURE_DAILY_LIMIT.get() != limit) return false;
+            // No external call is made between settling this exact token and fixed-list assignment.
+            // Lists have fixed sizes, and every staged replacement is already non-null.
+            if (payment != null && !payment.commit()) throw new IllegalStateException("Future payment settled twice");
+            plan.commit();
+            dailyTradeVolume = volume + quantity;
+            cachedPlayerCoins = nextCoins;
+            committed = true;
+            // Notification failures cannot turn a completed trade into a retryable failure or refund.
+            inventory.setChanged();
+            setChanged();
+            customer.inventoryMenu.broadcastChanges();
+            menu.broadcastChanges();
+            syncToClient();
+            return true;
+        } catch (RuntimeException failure) {
+            com.singularity_iteration.mio_icif.Singularity_Iteration.LOGGER.warn(
+                "Future trade {} at {}: {}", committed ? "committed; notification failed" : "aborted before inventory commit",
+                worldPosition, failure.toString());
+            return committed;
+        } finally {
+            try {
+                if (payment != null && payment.isPending()) payment.cancel();
+            } finally {
+                tradeInProgress = false;
+                TRADING_PLAYERS.remove(customer);
+            }
+        }
+    }
+
+    /** An isolated inventory plan; prepare may call item queries, commit only assigns vanilla fixed lists. */
+    private static final class TradeInventory {
+        private final Inventory inventory;
+        private final ItemStack[] references = new ItemStack[41];
+        private final ItemStack[] before = new ItemStack[41];
+        private final ItemStack[] after = new ItemStack[41];
+        private final boolean[] changed = new boolean[41];
+        private final int selected;
+        private final int revision;
+        private final ItemStack carriedReference, carried;
+
+        private TradeInventory(Inventory inventory, FutureElcMenu menu) {
+            if (inventory.items.size() != 36 || inventory.armor.size() != 4 || inventory.offhand.size() != 1)
+                throw new IllegalStateException("Unsupported player inventory layout");
+            this.inventory = inventory;
+            this.selected = inventory.selected;
+            this.revision = inventory.getTimesChanged();
+            this.carriedReference = menu.getCarried();
+            this.carried = carriedReference.copy();
+            for (int i = 0; i < 41; i++) {
+                references[i] = actual(i);
+                before[i] = references[i].copy();
+                after[i] = before[i].copy();
+            }
+        }
+
+        private ItemStack actual(int slot) {
+            return slot < 36 ? inventory.items.get(slot)
+                : slot < 40 ? inventory.armor.get(slot - 36) : inventory.offhand.get(0);
+        }
+
+        private boolean removeMain(Item item, long amount) {
+            long remaining = amount;
+            for (int i = 0; i < 36 && remaining > 0; i++) {
+                ItemStack stack = after[i];
+                // Retain existing trade policy: sale/payment inputs match registered item, including custom components.
+                if (!stack.isEmpty() && stack.is(item)) {
+                    int take = (int) Math.min(remaining, stack.getCount());
+                    stack.shrink(take); changed[i] = true; remaining -= take;
+                    if (stack.isEmpty()) after[i] = ItemStack.EMPTY;
+                }
+            }
+            return remaining == 0;
+        }
+
+        private boolean insert(Item item, long amount) {
+            ItemStack template = new ItemStack(item);
+            long remaining = amount;
+            // Preserve vanilla's merge preference: selected hotbar, existing offhand, then main slots.
+            if (selected >= 0 && selected < 9) remaining = merge(selected, template, remaining);
+            remaining = merge(40, template, remaining);
+            for (int i = 0; i < 36 && remaining > 0; i++) remaining = merge(i, template, remaining);
+            for (int i = 0; i < 36 && remaining > 0; i++) {
+                if (!after[i].isEmpty()) continue;
+                int maximum = inventory.getMaxStackSize(template);
+                if (maximum <= 0) return false;
+                int add = (int) Math.min(remaining, maximum);
+                after[i] = template.copyWithCount(add);
+                after[i].setPopTime(5); changed[i] = true; remaining -= add;
+            }
+            // No overflow entities: their spawn/drop callbacks cannot join this atomic inventory commit.
+            return remaining == 0;
+        }
+
+        private long merge(int slot, ItemStack template, long remaining) {
+            if (remaining <= 0) return 0;
+            ItemStack target = after[slot];
+            if (target.isEmpty() || !ItemStack.isSameItemSameComponents(target, template) || !target.isStackable())
+                return remaining;
+            int maximum = inventory.getMaxStackSize(target);
+            long room = (long) maximum - target.getCount();
+            if (room <= 0) return remaining;
+            int add = (int) Math.min(remaining, room);
+            target.grow(add); target.setPopTime(5); changed[slot] = true;
+            return remaining - add;
+        }
+
+        private long countMain(Item item) {
+            long result = 0;
+            for (int i = 0; i < 36; i++) if (after[i].is(item)) result += after[i].getCount();
+            return result;
+        }
+
+        private boolean unchanged(FutureElcMenu menu) {
+            if (inventory.items.size() != 36 || inventory.armor.size() != 4 || inventory.offhand.size() != 1
+                    || inventory.selected != selected || inventory.getTimesChanged() != revision
+                    || menu.getCarried() != carriedReference || !ItemStack.matches(carried, menu.getCarried())) return false;
+            for (int i = 0; i < 41; i++)
+                if (actual(i) != references[i] || !ItemStack.matches(before[i], actual(i))) return false;
+            return true;
+        }
+
+        private void commit() {
+            for (int i = 0; i < 36; i++) if (changed[i]) inventory.items.set(i, after[i]);
+            if (changed[40]) inventory.offhand.set(0, after[40]);
+        }
+    }
+
     /**
      * 检查是否有足够能量进行交易
      */
     public boolean hasEnoughEnergy() {
         return energyStorage.getAmount() >= Singularity_Iteration_Config.FUTURE_ENERGY_PER_TRADE.get();
-    }
-    
-    /**
-     * 消耗交易能量
- */
-    private void consumeEnergyForTrade() {
-        energyStorage.extract(Singularity_Iteration_Config.FUTURE_ENERGY_PER_TRADE.get(), false);
     }
     
     // ========== 业务逻辑 - 玩家货币 ==========
@@ -682,83 +801,20 @@ public static final int DATA_CURRENT_CATEGORY = 7;
      * 计算玩家拥有的货币数据
  */
     public int countPlayerCoins(Player player) {
-        int count = 0;
+        long count = 0;
         for (ItemStack stack : player.getInventory().items) {
             if (stack.is(mio_icif_normal.COIN.get())) {
                 count += stack.getCount();
             }
         }
-        return count;
-    }
-    
-    /**
-     * 扣除玩家货币
-     */
-    private boolean consumeCoins(Player player, int amount) {
-        int remaining = amount;
-        
-        for (int i = 0; i < player.getInventory().items.size(); i++) {
-            ItemStack stack = player.getInventory().items.get(i);
-            if (stack.is(mio_icif_normal.COIN.get())) {
-                int toRemove = Math.min(stack.getCount(), remaining);
-                stack.shrink(toRemove);
-                remaining -= toRemove;
-                
-                if (remaining <= 0) return true;
-            }
-        }
-        
-        return false;
-    }
-    
-    /**
-     * 给予玩家货币
-     */
-    private void giveCoins(Player player, int amount) {
-        ItemStack coinStack = new ItemStack(mio_icif_normal.COIN.get(), amount);
-        if (!player.getInventory().add(coinStack)) {
-            player.drop(coinStack, false);
-        }
-    }
-    
-    /**
-     * 检查玩家是否有足够物品
-     */
-    private boolean hasEnoughItems(Player player, net.minecraft.world.item.Item item, int count) {
-        int found = 0;
-        for (ItemStack stack : player.getInventory().items) {
-            if (stack.is(item)) {
-                found += stack.getCount();
-                if (found >= count) return true;
-            }
-        }
-        return false;
-    }
-    
-    /**
-     * 扣除玩家物品
-     */
-    private boolean consumeItems(Player player, net.minecraft.world.item.Item item, int count) {
-        int remaining = count;
-        
-        for (int i = 0; i < player.getInventory().items.size(); i++) {
-            ItemStack stack = player.getInventory().items.get(i);
-            if (stack.is(item)) {
-                int toRemove = Math.min(stack.getCount(), remaining);
-                stack.shrink(toRemove);
-                remaining -= toRemove;
-                
-                if (remaining <= 0) return true;
-            }
-        }
-        
-        return false;
+        return (int) Math.min(Integer.MAX_VALUE, count);
     }
     
     /**
  * 更新玩家货币存（用于显示）
      */
     public void updatePlayerCoinsCache(Player player) {
+        if (tradeInProgress) return;
         this.cachedPlayerCoins = countPlayerCoins(player);
         setChanged();
         syncToClient();
@@ -779,8 +835,10 @@ public static final int DATA_CURRENT_CATEGORY = 7;
     public List<FutureCommodity> getCurrentPageCommodities() {
         List<FutureCommodity> all = getCurrentCategoryCommodities();
         int itemsPerPage = Singularity_Iteration_Config.FUTURE_ITEMS_PER_PAGE.get();
-        int startIndex = currentPage * itemsPerPage;
-        int endIndex = Math.min(startIndex + itemsPerPage, all.size());
+        long start = (long) currentPage * itemsPerPage;
+        if (start < 0 || start >= all.size()) return List.of();
+        int startIndex = (int) start;
+        int endIndex = (int) Math.min(start + itemsPerPage, all.size());
         
         if (startIndex >= all.size()) {
             return new ArrayList<>();
@@ -803,6 +861,7 @@ public static final int DATA_CURRENT_CATEGORY = 7;
      * 设置选中的货品索引
  */
     public void setSelectedCommodity(int index) {
+        if (tradeInProgress) return;
         this.selectedCommodityIndex = index;
         updatePriceHistoryCache();
         setChanged();
@@ -820,6 +879,7 @@ public static final int DATA_CURRENT_CATEGORY = 7;
      * 设置交易数量
      */
     public void setTradeQuantity(int quantity) {
+        if (tradeInProgress) return;
         this.tradeQuantity = Math.max(1, Math.min(quantity, 64));
         setChanged();
         syncToClient();
@@ -829,6 +889,8 @@ public static final int DATA_CURRENT_CATEGORY = 7;
      * 切换分类
      */
     public void setCategory(CommodityCategory category) {
+        if (tradeInProgress) return;
+        if (category == null) return;
         this.currentCategory = category;
         this.currentPage = 0;
         this.selectedCommodityIndex = -1;
@@ -841,6 +903,7 @@ public static final int DATA_CURRENT_CATEGORY = 7;
      * 上一页
  */
     public void previousPage() {
+        if (tradeInProgress) return;
         if (currentPage > 0) {
             currentPage--;
             selectedCommodityIndex = -1;
@@ -853,6 +916,7 @@ public static final int DATA_CURRENT_CATEGORY = 7;
      * 下一页
  */
     public void nextPage() {
+        if (tradeInProgress) return;
         int maxPage = (getCurrentCategoryCommodities().size() - 1) / Singularity_Iteration_Config.FUTURE_ITEMS_PER_PAGE.get();
         if (currentPage < maxPage) {
             currentPage++;
@@ -887,6 +951,7 @@ public static final int DATA_CURRENT_CATEGORY = 7;
      * 增加交易数量
      */
     public void increaseTradeQuantity() {
+        if (tradeInProgress) return;
         tradeQuantity = Math.min(tradeQuantity + 1, 64);
         setChanged();
         syncToClient();
@@ -896,6 +961,7 @@ public static final int DATA_CURRENT_CATEGORY = 7;
      * 减少交易数量
      */
     public void decreaseTradeQuantity() {
+        if (tradeInProgress) return;
         tradeQuantity = Math.max(tradeQuantity - 1, 1);
         setChanged();
         syncToClient();
@@ -922,12 +988,11 @@ public static final int DATA_CURRENT_CATEGORY = 7;
         } catch (IllegalArgumentException e) {
             currentCategory = CommodityCategory.MINERAL;
         }
-        currentPage = tag.getInt("Page");
+        currentPage = Math.max(0, tag.getInt("Page"));
         selectedCommodityIndex = tag.getInt("SelectedIndex");
-        tradeQuantity = tag.getInt("TradeQuantity");
-        if (tradeQuantity < 1) tradeQuantity = 1;
+        tradeQuantity = Math.max(1, Math.min(64, tag.getInt("TradeQuantity")));
         currentDay = tag.getLong("CurrentDay");
-        dailyTradeVolume = tag.getInt("DailyVolume");
+        dailyTradeVolume = Math.max(0, tag.getInt("DailyVolume"));
     }
 
     @Override
@@ -950,12 +1015,11 @@ public static final int DATA_CURRENT_CATEGORY = 7;
         } catch (IllegalArgumentException e) {
             currentCategory = CommodityCategory.MINERAL;
         }
-        currentPage = tag.getInt("Page");
+        currentPage = Math.max(0, tag.getInt("Page"));
         selectedCommodityIndex = tag.getInt("SelectedIndex");
-        tradeQuantity = tag.getInt("TradeQuantity");
-        if (tradeQuantity < 1) tradeQuantity = 1;
+        tradeQuantity = Math.max(1, Math.min(64, tag.getInt("TradeQuantity")));
         currentDay = tag.getLong("CurrentDay");
-        dailyTradeVolume = tag.getInt("DailyVolume");
+        dailyTradeVolume = Math.max(0, tag.getInt("DailyVolume"));
     }
     
     // ========== 工具方法 ==========

@@ -1,98 +1,48 @@
+// SPDX-License-Identifier: Apache-2.0
 package com.singularity_iteration.mio_icif.crop;
 
-import com.singularity_iteration.mio_icif.Singularity_Iteration;
 import com.singularity_iteration.mio_icif.api.crop.IPlanter;
 import com.singularity_iteration.mio_icif.api.crop.PlantStats;
 import com.singularity_iteration.mio_icif.api.crop.PlantType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 
-/**
- * 食人花 - IC2 CropEating
- * maxSize=6, harvestSize=4, optimalHarvestSize=4
- * stage<3: 仅需光照>10
- * stage>=3: 需光照>10 + 下方岩浆
- * stage 4-5可收获产物:仙人掌, stage 6过熟不可收获
- * stage>=2: 吞噬靠近的生物拉扯+伤害+药效+加速生长
- */
-@SuppressWarnings("null")
+/** Independent catalog implementation of the SI eating plant. */
 public class PlantEatingPlant extends PlantType {
+    private static final PlantStats STATS = new PlantStats(6, 1, 1, 3, 1, 4);
 
-    @Override
-    public String getTypeId() {
-        return "eatingplant";
-    }
-
-    @Override
-    public String getModId() {
-        return Singularity_Iteration.MOD_ID;
-    }
-
-    @Override
-    public String getFoundBy() {
-        return "Hasudako";
-    }
-
-    @Override
-    public String[] getTraits() {
-        return new String[]{"Bad", "Food"};
-    }
-
-    @Override
-    public PlantStats getStats() {
-        return new PlantStats(6, 1, 1, 3, 1, 4);
-    }
-
-    @Override
-    public int getMaxGrowthStage() {
-        return 6;
-    }
-
-    @Override
-    public int getHarvestStage() {
-        return 4;
-    }
-
-    @Override
-    public int getOptimalHarvestStage() {
-        return 4;
-    }
-
-    @Override
-    public int getStageAfterHarvest() {
-        return 1;
-    }
-
+    @Override public String getTypeId() { return "eatingplant"; }
+    @Override public String getModId() { return "mio_icif"; }
+    @Override public String getFoundBy() { return "Hasudako"; }
+    @Override public String[] getTraits() { return new String[]{"Bad", "Food"}; }
+    @Override public PlantStats getStats() { return STATS; }
+    @Override public int getMaxGrowthStage() { return 6; }
+    @Override public int getHarvestStage() { return 4; }
+    @Override public int getOptimalHarvestStage() { return 4; }
+    @Override public int getStageAfterHarvest() { return 1; }
     @Override
     public ItemStack[] getHarvest(IPlanter planter) {
-        int stage = planter.getGrowthStage();
-        if (stage >= 4 && stage < 6) {
-            return new ItemStack[]{new ItemStack(Items.CACTUS, 1)};
-        }
-        return new ItemStack[0];
+        return planter != null && planter.getGrowthStage() == getHarvestStage()
+            ? new ItemStack[]{new ItemStack(Items.CACTUS)} : new ItemStack[0];
+    }
+
+    @Override
+    public int getGrowthTime(IPlanter planter) {
+        int stage = planter == null ? 0 : Math.max(0, Math.min(getMaxGrowthStage(), planter.getGrowthStage()));
+        return 74_400 + stage * 14_400;
     }
 
     @Override
     public String getTexture(int stage) {
-        if (stage < 1 || stage > getMaxGrowthStage()) {
-            stage = 1;
-        }
-        return "mio_icif:block/crop/eatingplant_" + stage;
+        int frame = Math.max(1, Math.min(6, stage));
+        return "mio_icif:block/crop/eatingplant_" + frame;
     }
 
-    @Override
-    public boolean canGrow(IPlanter planter) {
-        int stage = planter.getGrowthStage();
-        if (stage < 3) {
-            return planter.getLightLevel() > 10;
-        }
-        return planter.getLightLevel() > 10
-                && planter.isBlockBelow(net.minecraft.world.level.block.Blocks.LAVA);
-    }
-
-    @Override
-    public boolean isHarvestable(IPlanter planter) {
-        int stage = planter.getGrowthStage();
-        return stage >= 4 && stage < 6;
-    }
+    @Override public boolean canGrow(IPlanter planter) { return super.canGrow(planter); }
+    @Override public boolean isHarvestable(IPlanter planter) { return planter != null && planter.getGrowthStage() == getHarvestStage(); }
+    @Override public boolean canBeHarvested(IPlanter planter) { return isHarvestable(planter); }
+    @Override public double dropGainChance() { return Math.pow(0.95D, STATS.getLevel()); }
+    @Override public float dropSeedChance(IPlanter planter) { return 0.13107201F; }
+    @Override public int calculateDropCount(IPlanter planter) { return 1; }
+    @Override public int getRootDepth(IPlanter planter) { return 5; }
 }

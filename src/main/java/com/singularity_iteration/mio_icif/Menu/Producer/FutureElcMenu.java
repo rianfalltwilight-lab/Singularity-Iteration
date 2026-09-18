@@ -9,6 +9,8 @@ import com.singularity_iteration.mio_icif.future.FutureCommodity;
 import com.singularity_iteration.mio_icif.future.FutureCommodityManager;
 import com.singularity_iteration.mio_icif.future.FutureMarketData;
 import net.minecraft.world.SimpleContainer;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.ContainerData;
@@ -48,6 +50,20 @@ import java.util.List;
     }
 
     @Override
+    public boolean stillValid(Player player) {
+        var future = getBlockEntity();
+        if (future == null) return player.level().isClientSide;
+        if (!(player instanceof ServerPlayer) || !(future.getLevel() instanceof ServerLevel world)
+                || !world.getServer().isSameThread() || player.level() != world || !player.isAlive()
+                || player.isSpectator() || future.isRemoved()) return false;
+        var pos = future.getBlockPos();
+        var chunk = world.getChunkSource().getChunkNow(pos.getX() >> 4, pos.getZ() >> 4);
+        return chunk != null && chunk.getBlockEntities().get(pos) == future
+            && chunk.getBlockState(pos).getBlock() == future.getBlockState().getBlock()
+            && player.distanceToSqr(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5) <= 64.0;
+    }
+
+    @Override
     protected boolean shouldAddPlayerInventory() { return false; }
 
     @Override
@@ -82,7 +98,7 @@ import java.util.List;
 
     public void updatePlayerCoins(Player player) {
         var future = getBlockEntity();
-        if (future != null && player != null) {
+        if (future != null && player != null && player.containerMenu == this && stillValid(player)) {
             future.updatePlayerCoinsCache(player);
         }
     }
@@ -110,12 +126,10 @@ import java.util.List;
         List<FutureCommodity> all = getCurrentCategoryCommodities();
         int currentPage = getCurrentPage();
         int itemsPerPage = Singularity_Iteration_Config.FUTURE_ITEMS_PER_PAGE.get();
-        int start = currentPage * itemsPerPage;
-        int end = Math.min(start + itemsPerPage, all.size());
-        if (start < all.size()) {
-            return all.subList(start, end);
-        }
-        return List.of();
+        long start = (long) currentPage * itemsPerPage;
+        if (start < 0 || start >= all.size()) return List.of();
+        int end = (int) Math.min(start + itemsPerPage, all.size());
+        return all.subList((int) start, end);
     }
 
     public FutureCommodity getSelectedCommodity() {
@@ -164,7 +178,7 @@ import java.util.List;
     @Override
     public boolean clickMenuButton(Player player, int id) {
         var future = getBlockEntity();
-        if (future == null) return false;
+        if (future == null || player.containerMenu != this || !stillValid(player)) return false;
 
         if (id >= BUTTON_CATEGORY_BASE) {
             int categoryIndex = id - BUTTON_CATEGORY_BASE;
@@ -177,6 +191,7 @@ import java.util.List;
 
         if (id >= BUTTON_COMMODITY_BASE && id < BUTTON_DECREASE) {
             int index = id - BUTTON_COMMODITY_BASE;
+            if (index >= future.getCurrentPageCommodities().size()) return false;
             future.setSelectedCommodity(index);
             return true;
         }
@@ -196,11 +211,9 @@ import java.util.List;
                 return true;
             case BUTTON_BUY:
                 boolean buyResult = future.executeBuy(player);
-                if (buyResult) future.updatePlayerCoinsCache(player);
                 return buyResult;
             case BUTTON_SELL:
                 boolean sellResult = future.executeSell(player);
-                if (sellResult) future.updatePlayerCoinsCache(player);
                 return sellResult;
             default:
                 return false;
@@ -211,9 +224,9 @@ import java.util.List;
     public void broadcastChanges() {
         super.broadcastChanges();
         var future = getBlockEntity();
-        if (future != null) {
-            for (Player player : future.getLevel().players()) {
-                if (player.containerMenu == this) {
+        if (future != null && future.getLevel() instanceof ServerLevel world && world.getServer().isSameThread()) {
+            for (Player player : world.players()) {
+                if (player.containerMenu == this && stillValid(player)) {
                     future.updatePlayerCoinsCache(player);
                     break;
                 }

@@ -1,11 +1,8 @@
+// SPDX-License-Identifier: Apache-2.0
 package com.singularity_iteration.mio_icif.api.crop;
 
-/**
- * 植物属性类
- * 包含植物的基本属性：等级、化学性、食物性、颜色性、医学性、杂草 * 对标IC2的CropCard.stat(n)五属性系  * stat(0)=chemistry, stat(1)=nutrition, stat(2)=color, stat(3)=medicinal, stat(4)=danger(weediness)
- */
+/** Immutable crop metadata matching the frozen public SI contract. */
 public class PlantStats {
-
     private final int level;
     private final int chemistry;
     private final int nutrition;
@@ -22,32 +19,15 @@ public class PlantStats {
         this.danger = danger;
     }
 
-    public int getLevel() {
-        return level;
-    }
+    public int getLevel() { return level; }
+    public int getChemistry() { return chemistry; }
+    public int getNutrition() { return nutrition; }
+    public int getColor() { return color; }
+    public int getMedicinal() { return medicinal; }
+    public int getDanger() { return danger; }
 
-    public int getChemistry() {
-        return chemistry;
-    }
-
-    public int getNutrition() {
-        return nutrition;
-    }
-
-    public int getColor() {
-        return color;
-    }
-
-    public int getMedicinal() {
-        return medicinal;
-    }
-
-    public int getDanger() {
-        return danger;
-    }
-
-    public int stat(int n) {
-        return switch (n) {
+    public int stat(int index) {
+        return switch (index) {
             case 0 -> chemistry;
             case 1 -> nutrition;
             case 2 -> color;
@@ -59,14 +39,7 @@ public class PlantStats {
 
     @Override
     public String toString() {
-        return "PlantStats{" +
-                "level=" + level +
-                ", chemistry=" + chemistry +
-                ", nutrition=" + nutrition +
-                ", color=" + color +
-                ", medicinal=" + medicinal +
-                ", danger=" + danger +
-                '}';
+        return "PlantStats{level=" + level + ", chemistry=" + chemistry + ", nutrition=" + nutrition
+            + ", color=" + color + ", medicinal=" + medicinal + ", danger=" + danger + "}";
     }
 }
-
