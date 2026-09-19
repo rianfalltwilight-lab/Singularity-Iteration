@@ -39,11 +39,14 @@ public final class WorldScenarioProbe {
     private final CropBaselineWorldProbe cropBaseline;
     private final CropReplacementWorldProbe cropReplacement;
     private final CropLifecycleWorldProbe cropLifecycle;
+    private final ConnectedClientWorldProbe connectedClient;
+    private final DualClientWorldProbe dualClient;
     private final PumpProductWorldProbe pumpProduct;
     private final SolarProductWorldProbe solarProduct;
     private final SolarHeadgearWorldProbe solarHeadgear;
     private final MiningProductWorldProbe miningProduct;
     private final F04LifecyclePerformanceWorldProbe f04LifecyclePerformance;
+    private final String f04LifecyclePerformanceKind;
     private final F04ColdJvmWorldProbe f04ColdJvm;
     private final MachineOwnerWorldProbe machineOwner;
     private final MatronHydrationWorldProbe matronHydration;
@@ -157,11 +160,19 @@ public final class WorldScenarioProbe {
         cropBaseline=Files.exists(Path.of("crop-baseline-r151.json")) ? new CropBaselineWorldProbe() : null;
         cropReplacement=Files.exists(Path.of("crop-replacement-r156.json")) ? new CropReplacementWorldProbe() : null;
         cropLifecycle=Files.exists(Path.of("crop-lifecycle-r174.json")) ? new CropLifecycleWorldProbe() : null;
+        connectedClient=Files.exists(Path.of("connected-client-r201.json")) ? new ConnectedClientWorldProbe(server) : null;
+        dualClient=Files.exists(Path.of("dual-client-r202.json")) ? new DualClientWorldProbe(server) : null;
         pumpProduct=Files.exists(Path.of("pump-product-r158.json")) ? new PumpProductWorldProbe() : null;
         solarProduct=Files.exists(Path.of("extended-solar-product-r159.json")) ? new SolarProductWorldProbe() : null;
         solarHeadgear=Files.exists(Path.of("solar-headgear-r178.json")) ? new SolarHeadgearWorldProbe() : null;
         miningProduct=Files.exists(Path.of("mining-product-r168.json")) ? new MiningProductWorldProbe() : null;
-        f04LifecyclePerformance=Files.exists(Path.of("f04-lifecycle-performance-r172.json")) ? new F04LifecyclePerformanceWorldProbe(server) : null;
+        if(Files.exists(Path.of("f04-performance-r198.json"))){
+            f04LifecyclePerformance=new F04LifecyclePerformanceWorldProbe(server,"R198",Path.of("f04-performance-r198.json"),
+                Path.of("f04-performance-r198-result.json"),Path.of("f04-performance-r198-samples.json"),"scex-f04-r198");
+            f04LifecyclePerformanceKind="f04-performance-r198";
+        }else if(Files.exists(Path.of("f04-lifecycle-performance-r172.json"))){
+            f04LifecyclePerformance=new F04LifecyclePerformanceWorldProbe(server);f04LifecyclePerformanceKind="f04-lifecycle-performance-r172";
+        }else{f04LifecyclePerformance=null;f04LifecyclePerformanceKind=null;}
         f04ColdJvm=Files.exists(Path.of("f04-cold-r173.json")) ? new F04ColdJvmWorldProbe() : null;
         machineOwner=Files.exists(Path.of("machine-owner-f05.json")) ? new MachineOwnerWorldProbe() : null;
         matronHydration=Files.exists(Path.of("matron-hydration-world.json")) ? new MatronHydrationWorldProbe() : null;
@@ -458,6 +469,14 @@ public final class WorldScenarioProbe {
                 var result=cropLifecycle.inspect(world,tick);
                 if(result!=null)record("crop-lifecycle-r174",result);
             }
+            if(connectedClient!=null) {
+                var result=connectedClient.inspect(world,tick);
+                if(result!=null)record("connected-client-r201",result);
+            }
+            if(dualClient!=null) {
+                var result=dualClient.inspect(world,tick);
+                if(result!=null)record("dual-client-r202",result);
+            }
             if(pumpProduct!=null) {
                 var result=pumpProduct.inspect(world,tick);
                 if(result!=null)record("pump-product-r158",result);
@@ -476,7 +495,7 @@ public final class WorldScenarioProbe {
             }
             if(f04LifecyclePerformance!=null) {
                 var result=f04LifecyclePerformance.inspect(world,tick);
-                if(result!=null)record("f04-lifecycle-performance-r172",result);
+                if(result!=null)record(f04LifecyclePerformanceKind,result);
             }
             if(f04ColdJvm!=null) {
                 var result=f04ColdJvm.inspect(world,tick);
@@ -587,7 +606,10 @@ public final class WorldScenarioProbe {
                 if(result[0]<0) throw new IllegalStateException("Scenario command failed: "+command);
             }
             output.flush();
-            if(++tick>=Integer.getInteger("scex.scenario.ticks",150)) finish(true);
+            tick++;
+            if(connectedClient!=null && connectedClient.isComplete()) finish(true);
+            else if(dualClient!=null && dualClient.isComplete()) finish(true);
+            else if(tick>=Integer.getInteger("scex.scenario.ticks",150)) finish(true);
         }catch(Throwable error){error.printStackTrace();finish(false);}
     }
     private void finish(boolean passed) {

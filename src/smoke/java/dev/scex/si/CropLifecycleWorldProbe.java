@@ -412,18 +412,19 @@ public final class CropLifecycleWorldProbe {
         for (int i = 0; i < GROWTH.size(); i++) {
             Map<String, Object> before = restartBaseline.get(i), after = snapshot(world, GROWTH.get(i));
             // The first three restart observations occur before the re-added
-            // forceload ticket makes the crop block-ticking.  The tick-1200
-            // observation therefore contains 1197 entity ticks, not 1200
-            // server ticks; assert the measured active interval explicitly.
+            // forceload ticket makes the crop block-ticking.  The first active
+            // entity tick is observed at tick 3, while finishRestart itself
+            // runs after the entity tick at tick 1200.  The inclusive active
+            // interval is therefore 1198 entity ticks (3..1200).
             int[] expected = advance((String)before.get("plant"), ((Number)before.get("stage")).intValue(),
-                ((Number)before.get("progress")).intValue(), ((Number)before.get("growth")).intValue(), 1197);
-            check(((Number)after.get("stage")).intValue() == expected[0], "1197-active-tick cold stage " + i);
-            check(((Number)after.get("progress")).intValue() == expected[1], "1197-active-tick cold progress " + i);
-            check(((Number)after.get("age")).intValue() == expected[0], "1197-active-tick cold age " + i);
+                ((Number)before.get("progress")).intValue(), ((Number)before.get("growth")).intValue(), 1198);
+            check(((Number)after.get("stage")).intValue() == expected[0], "1198-active-tick cold stage " + i);
+            check(((Number)after.get("progress")).intValue() == expected[1], "1198-active-tick cold progress " + i);
+            check(((Number)after.get("age")).intValue() == expected[0], "1198-active-tick cold age " + i);
             int expectedCooldown = Math.max(0,
-                ((Number)before.get("fertilizer_cooldown")).intValue() - 1200);
+                ((Number)before.get("fertilizer_cooldown")).intValue() - 1198);
             check(((Number)after.get("fertilizer_cooldown")).intValue() == expectedCooldown,
-                "1197-active-tick cold cooldown " + i);
+                "1198-active-tick cold cooldown " + i);
         }
         JsonArray checkpointNatural = checkpoint.getAsJsonArray("final_observed_natural");
         for (int i = 0; i < NATURAL.size(); i++) {

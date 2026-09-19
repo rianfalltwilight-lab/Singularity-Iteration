@@ -352,9 +352,18 @@ if (project.hasProperty('withSmoke')) {
         smokeClient {
             client()
             sourceSet = sourceSets.smoke
-            gameDirectory = file('../runs/client-audio/run/client')
+            gameDirectory = file(project.findProperty('smokeClientDirectory') ?: '../runs/client-audio/run/client')
             jvmArguments.set(['-Xms256m', '-Xmx2G', '-XX:ActiveProcessorCount=2'])
-            systemProperty 'scex.client.audio', 'true'
+            def smokeClientMode = (project.findProperty('smokeClientMode') ?: 'audio').toString()
+            if (smokeClientMode == 'audio') {
+                systemProperty 'scex.client.audio', 'true'
+            } else if (smokeClientMode == 'connected') {
+                systemProperty 'scex.client.connected', 'true'
+            } else if (smokeClientMode == 'dual-connected') {
+                systemProperty 'scex.client.dual', 'true'
+            } else {
+                throw new GradleException("Unsupported smokeClientMode: ${smokeClientMode}")
+            }
             systemProperty 'scex.smoke.result', 'probe-result.json'
             systemProperty 'scex.smoke.mode', 'scenario'
         }

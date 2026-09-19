@@ -1,4 +1,4 @@
-> 当前公开快照已推进至 R196，最新状态见 [PUBLIC-SNAPSHOT.md](PUBLIC-SNAPSHOT.md)。以下保留早期路线记录，不作为当前完成清单。
+> 当前公开快照为 2026-09-19 R202 输入加 R253 审核修复，最新状态见 [PUBLIC-SNAPSHOT.md](PUBLIC-SNAPSHOT.md)。以下保留早期路线记录，不作为当前完成清单。
 
 # SCEX 独立实现与行为对齐路线图
 

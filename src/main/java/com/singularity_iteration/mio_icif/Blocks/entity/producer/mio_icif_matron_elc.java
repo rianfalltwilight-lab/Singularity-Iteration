@@ -2,6 +2,7 @@ package com.singularity_iteration.mio_icif.Blocks.entity.producer;
 
 import com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_block_entities;
 import com.singularity_iteration.mio_icif.Items.Cell.mio_icif_cells;
+import com.singularity_iteration.mio_icif.Items.Resource.mio_icif_resources;
 import com.singularity_iteration.mio_icif.Blocks.entity.mio_icif_producer;
 import com.singularity_iteration.mio_icif.Blocks.entity.slot.SlotLayout;
 import com.singularity_iteration.mio_icif.energy.EnergyUnit.CableTier;
@@ -168,17 +169,21 @@ public class mio_icif_matron_elc extends mio_icif_producer {
     }
 
     /**
-     * 检查物品否带有#c:fertilizers 标签或者是骨粉
+     * 检查物品是否为产品内建肥料或带有 #c:fertilizers 标签。
+     *
+     * <p>外部数据包的无效同名标签可能让 vanilla 在本次重载中省略整个标签。
+     * 产品自己的三种核心肥料不能因此被 Matron 拒绝；标签仍作为第三方扩展点。</p>
      */
     private boolean isFertilizerItem(ItemStack stack) {
         if (stack.isEmpty()) {
             return false;
         }
-        // 检查是否是骨粉
-        if (stack.is(net.minecraft.world.item.Items.BONE_MEAL)) {
+        if (stack.is(net.minecraft.world.item.Items.BONE_MEAL)
+            || stack.is(mio_icif_resources.FERTILIZER.get())
+            || stack.is(mio_icif_resources.FERTILIZER_MATRON.get())) {
             return true;
         }
-        // 检查是否带有#c:fertilizers 标签
+        // 保留对其他模组和数据包贡献肥料的正常扩展支持。
         return stack.is(FERTILIZERS_TAG);
     }
 

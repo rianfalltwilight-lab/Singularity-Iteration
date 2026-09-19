@@ -34,14 +34,15 @@ import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.neoforge.fluids.capability.IFluidHandler;
 
 /**
- * Real F04 chain plus a frozen-load baseline. Timings are observations, not a
- * performance acceptance threshold and never replace connected-client evidence.
+ * Real F04 chain plus a frozen load. The probe records raw samples after the
+ * measurement window; batch-specific tooling owns any acceptance thresholds.
  */
 public final class F04LifecyclePerformanceWorldProbe {
     private static final double STONE=.00015,CHANGED_STONE=.0003;
     private static final int MACHINES=64,QUERIES_PER_TICK=1024;
     private final MinecraftServer server;
-    private final Path pack=Path.of("world/datapacks/scex-f04-r172");
+    private final String revision;
+    private final Path pack,resultPath,samplesPath;
     private final BlockPos scannerPos=new BlockPos(25,80,24),chainPos=new BlockPos(27,80,24);
     private final List<BlockPos> machines=new ArrayList<>();
     private final List<Long> tickNanos=new ArrayList<>(),tickAllocated=new ArrayList<>(),queryNanos=new ArrayList<>();
@@ -54,8 +55,15 @@ public final class F04LifecyclePerformanceWorldProbe {
     private String catalog;
 
     public F04LifecyclePerformanceWorldProbe(MinecraftServer server)throws Exception{
+        this(server,"R172",Path.of("f04-lifecycle-performance-r172.json"),
+            Path.of("f04-lifecycle-performance-r172-result.json"),null,"scex-f04-r172");
+    }
+    public F04LifecyclePerformanceWorldProbe(MinecraftServer server,String revision,Path fixturePath,
+            Path resultPath,Path samplesPath,String packName)throws Exception{
         this.server=server;
-        var fixture=JsonParser.parseString(Files.readString(Path.of("f04-lifecycle-performance-r172.json"))).getAsJsonObject();
+        this.revision=revision;this.resultPath=resultPath;this.samplesPath=samplesPath;
+        this.pack=Path.of("world/datapacks").resolve(packName);
+        var fixture=JsonParser.parseString(Files.readString(fixturePath)).getAsJsonObject();
         check(fixture.get("machines").getAsInt()==MACHINES&&fixture.get("queries_per_tick").getAsInt()==QUERIES_PER_TICK,
             "frozen load profile");
         var bean=ManagementFactory.getThreadMXBean();
@@ -66,7 +74,7 @@ public final class F04LifecyclePerformanceWorldProbe {
         NeoForge.EVENT_BUS.addListener(EventPriority.HIGHEST,this::afterTick);
     }
 
-    private void check(boolean value,String why){assertions++;if(!value)throw new AssertionError("R172 F04: "+why);}
+    private void check(boolean value,String why){assertions++;if(!value)throw new AssertionError(revision+" F04: "+why);}
     private static long heap(){var runtime=Runtime.getRuntime();return runtime.totalMemory()-runtime.freeMemory();}
     private static long gcCount(){long sum=0;for(var bean:ManagementFactory.getGarbageCollectorMXBeans())if(bean.getCollectionCount()>0)sum+=bean.getCollectionCount();return sum;}
     private static long gcMillis(){long sum=0;for(var bean:ManagementFactory.getGarbageCollectorMXBeans())if(bean.getCollectionTime()>0)sum+=bean.getCollectionTime();return sum;}
@@ -134,15 +142,17 @@ public final class F04LifecyclePerformanceWorldProbe {
             check(input!=null,"catalog resource present");catalog=new String(input.readAllBytes(),StandardCharsets.UTF_8);
         }
         var data=pack.resolve("data/mio_icif/uu/observed_1122.json");Files.createDirectories(data.getParent());Files.writeString(data,catalog);
-        Files.writeString(pack.resolve("pack.mcmeta"),"{\"pack\":{\"pack_format\":48,\"description\":\"F04 R172 frozen lifecycle load\"}}");
+        Files.writeString(pack.resolve("pack.mcmeta"),"{\"pack\":{\"pack_format\":48,\"description\":\"F04 "+revision+" frozen lifecycle load\"}}");
         heapBefore=heap();gcCountBefore=gcCount();gcMillisBefore=gcMillis();sampling=true;
     }
     private void queryBatch(ServerLevel world){
         var stone=new ItemStack(Items.STONE);var iron=new ItemStack(Items.IRON_INGOT);long started=System.nanoTime();
         for(int i=0;i<QUERIES_PER_TICK;i++){
             var stack=(i&1)==0?stone:iron;var quote=UuQuoteBook.quote(world.getServer(),stack);var assessment=UuQuoteBook.classify(world.getServer(),stack);
-            if(quote==null||assessment.finite()==null)throw new AssertionError("R172 F04: finite query disappeared");
-            queryChecksum=Long.rotateLeft(queryChecksum,1)^Double.doubleToRawLongBits(quote.buckets())^quote.generation();
+            if(quote==null||assessment.finite()==null)throw new AssertionError(revision+" F04: finite query disappeared");
+            long ordinal=(long)queryNanos.size()*QUERIES_PER_TICK+i+1;
+            long word=Double.doubleToRawLongBits(quote.buckets())^quote.generation()^(ordinal*0x9E3779B97F4A7C15L);
+            queryChecksum=(Long.rotateLeft(queryChecksum^word,11)*0xD6E8FEB86659FD93L)+0xA0761D6478BD642FL;
         }
         queryNanos.add(System.nanoTime()-started);
     }
@@ -161,6 +171,25 @@ public final class F04LifecyclePerformanceWorldProbe {
         if(raw.isEmpty())return Map.of();var values=new ArrayList<>(raw);Collections.sort(values);long sum=0;for(long value:values)sum=Math.addExact(sum,value);
         return Map.of("samples",(long)values.size(),"mean",sum/values.size(),"p50",values.get((values.size()-1)*50/100),
             "p95",values.get((values.size()-1)*95/100),"p99",values.get((values.size()-1)*99/100),"max",values.getLast());
+    }
+    private Map<String,Object> runtimeFingerprint(){
+        var value=new LinkedHashMap<String,Object>();
+        value.put("java_version",System.getProperty("java.version"));
+        value.put("java_vm_name",System.getProperty("java.vm.name"));
+        value.put("java_vm_vendor",System.getProperty("java.vm.vendor"));
+        value.put("available_processors",Runtime.getRuntime().availableProcessors());
+        value.put("max_memory",Runtime.getRuntime().maxMemory());
+        value.put("garbage_collectors",ManagementFactory.getGarbageCollectorMXBeans().stream().map(bean->bean.getName()).toList());
+        return value;
+    }
+    private void writeRawSamples()throws Exception{
+        if(samplesPath==null)return;
+        var value=new LinkedHashMap<String,Object>();
+        value.put("revision",revision);value.put("active_prefix_samples",Math.min(128,tickNanos.size()));
+        value.put("tick_nanos",tickNanos);value.put("query_nanos",queryNanos);
+        value.put("server_thread_allocated_bytes",tickAllocated);value.put("query_checksum",queryChecksum);
+        value.put("runtime_fingerprint",runtimeFingerprint());
+        Files.writeString(samplesPath,new Gson().toJson(value));
     }
     private void verifyLoad(ServerLevel world){
         double expected=MACHINES*64*STONE;long expectedEu=2_000_000L-64L*1024L;
@@ -217,9 +246,10 @@ public final class F04LifecyclePerformanceWorldProbe {
             performance.put("heap_used_delta",heapAfter-heapBefore);performance.put("gc_count_delta",gcCountAfter-gcCountBefore);
             performance.put("gc_millis_delta",gcMillisAfter-gcMillisBefore);performance.put("query_checksum",queryChecksum);
             var result=new LinkedHashMap<String,Object>();result.put("passed",true);result.put("assertions",assertions);
-            result.put("generations",reports);result.put("performance_baseline",performance);
-            result.put("scope","Real scanner-catalog-replicator chain, four reloads, 64 machines and frozen query load; mixed lifecycle baseline separates the 128-tick active prefix from the output-full settled tail; scenario tick wall time includes the query batch and machine ticks but ends before scenario evidence serialization; baseline only, no performance acceptance, client or multiplayer claim");
-            Files.writeString(Path.of("f04-lifecycle-performance-r172-result.json"),new Gson().toJson(result));return result;
+            result.put("revision",revision);result.put("generations",reports);result.put("performance_baseline",performance);
+            result.put("runtime_fingerprint",runtimeFingerprint());
+            result.put("scope","Real scanner-catalog-replicator chain, four reloads, 64 machines and frozen query load; mixed lifecycle measurement separates the 128-tick active prefix from the output-full settled tail; scenario tick wall time includes the query batch and machine ticks but ends before evidence serialization; thresholds are evaluated outside the measured JVM and do not establish client or multiplayer performance");
+            writeRawSamples();Files.writeString(resultPath,new Gson().toJson(result));return result;
         }
         return null;
     }
