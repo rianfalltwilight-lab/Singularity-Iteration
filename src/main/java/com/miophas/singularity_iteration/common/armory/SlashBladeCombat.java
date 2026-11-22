@@ -18,7 +18,7 @@ import net.neoforged.neoforge.attachment.AttachmentType;
 /**
  * Server bridge to <b>SlashBlade: Resharped</b> for non-player wielders (0.1.8.4, Armory Wingman).
  * Only this fork is supported (mod id {@code slashblade}, display name with "Resharp"; checked
- * against 2.1.9). No compile dependency: the handles are looked up once; if a lookup fails the
+ * against 2.1.9 and 2.2.1). No compile dependency: the handles are looked up once; if a lookup fails the
  * bridge turns off, writes one log line, and the Wingman fights with the blade as a plain sword.
  *
  * <p>How Resharped runs a blade (from its 2.1.9 bytecode):

@@ -32,7 +32,7 @@ import org.jetbrains.annotations.Nullable;
  * restarts it at the combo's tick when the combo changes, ticks it with the Wingman, and copies its rotations of the arms
  * and legs onto the Wingman model.
  *
- * <p>No compile dependency: the classes of SlashBlade: Resharped (checked against 2.1.9) and PlayerAnimator (2.0.4) are
+ * <p>No compile dependency: the classes of SlashBlade: Resharped (checked against 2.1.9 and 2.2.1) and PlayerAnimator (2.0.4) are
  * looked up once. Without PlayerAnimator, with another SlashBlade build, or after any error the bridge turns off with one
  * log line and the Wingman uses its own key frames ({@code WingmanPose#slash}).
  */

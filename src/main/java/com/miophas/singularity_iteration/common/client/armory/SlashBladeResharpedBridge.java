@@ -17,7 +17,7 @@ import net.neoforged.fml.ModList;
 /**
  * Client bridge to <b>SlashBlade: Resharped</b> (0.1.8.0). Only this fork is supported: mod id
  * {@code slashblade} with the display name "Slash Blade:Resharpened" (2.x for 1.21.1, checked
- * against 2.1.9). Other SlashBlade builds that use the same mod id do not match.
+ * against 2.1.9 and 2.2.1). Other SlashBlade builds that use the same mod id do not match.
  *
  * <p>Resharped draws nothing for the hand display contexts: a held blade comes from its own
  * player layer. The Armory flight therefore draws the "blade" part of the blade OBJ model
