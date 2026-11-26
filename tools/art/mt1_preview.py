@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render docs/art/previews/MT1.png from the exported models and item sprites.
+"""Render docs/art/previews/MT1.png from the exported block and item models.
 
 Requires NumPy, Pillow and a Chinese font (pass --font if needed).
 """
@@ -20,12 +20,18 @@ ASSETS = ROOT / "src/main/resources/assets/mio_icif"
 MODELS = ASSETS / "models/block/producer"
 VARIANTS = (ASSETS / "textures", ROOT / "docs/art/mt1/variant_b")
 OUTPUT = ROOT / "docs/art/previews/MT1.png"
-ICON = "item/producer/item_molecular_transformer.png"
 MACHINE = "block_molecular_transformer"
 COMPRESSOR = "block_compressor_elc"
+ITEM_MODEL = ASSETS / "models/item/producer" / (MACHINE + ".json")
+# Minecraft 1.21.1 assets/minecraft/models/block/block.json, display.gui.
+BLOCK_GUI = {"rotation": (30, 225, 0), "translation": (0, 0, 0), "scale": (.625, .625, .625)}
+# Lighting.setupFor3DItems -> GlStateManager.setupGui3DDiffuseLighting.
+# These are the two normalized shader directions in camera space, Y up.
+GUI_LIGHTS = np.array([[-.9334393, .2626947, -.2443002], [-.1035714, .9766068, .1884464]])
+SLOT_GRAY = "#8b8b8b"
 
 ISO = (-0.57, 0.39, -1.0)
-LOADED_VIEW = (-0.39, 0.23, -1.0)
+LOADED_VIEW = (-0.27, 0.18, -1.0)
 VIEWS = ((0, 0, -1), (-1, 0, 0), (0, 1, 0), ISO)
 PAPER, WHITE, LINE = "#f2f3f0", "#fafbf8", "#d9deda"
 INK, MUTED = "#202c30", "#566365"
@@ -51,11 +57,12 @@ def texture(path):
 
 
 @lru_cache(maxsize=None)
-def faces(model_name, bank):
+def faces(model_name, bank, *, item=False):
     model = json.loads((MODELS / (model_name + ".json")).read_text(encoding="utf8"))
     result = []
-    children = model.get("children", {}).values()
-    for part in (model, *children):
+    children = model.get("children", {})
+    order = model.get("item_render_order", children) if item else children
+    for part in (model, *(children[name] for name in order)):
         names = {**model.get("textures", {}), **part.get("textures", {})}
         translucent = part.get("render_type") == "minecraft:translucent"
         for element in part.get("elements", []):
@@ -87,7 +94,7 @@ def faces(model_name, bank):
 
 def sample_ingot():
     """Preview-only solid: a clipped casting with a top bevel and a darker foot."""
-    centre = np.array([8, 8, 6])
+    centre = np.array([8, 8, 8])
     sections = []
     for y, half_x, half_z, end_cut in (
         (-.82, 2.27, 1.03, .36), (-.58, 2.62, 1.25, .46),
@@ -118,7 +125,7 @@ def sample_ingot():
         normal /= np.linalg.norm(normal)
         if np.dot(normal, np.mean(vertices, axis=0)) < 0:
             normal = -normal
-        points = np.array([pose(v) for v in vertices]) + centre
+        points = np.array([pose(v * .86) for v in vertices]) + centre
         uv = np.zeros((len(vertices), 2))
         if pixels is None:
             pixels = np.array([[(*bytes.fromhex(hex_color), 255)]], dtype=np.uint8)
@@ -126,9 +133,10 @@ def sample_ingot():
             plane = vertices[:, axes]
             uv = (plane - plane.min(axis=0)) / np.ptp(plane, axis=0)
             uv[:, 1] = 1 - uv[:, 1]
+        posed_normal = pose(normal)
         for i in range(1, len(points) - 1):
             idx = [0, i, i + 1]
-            triangles.append((points[idx], uv[idx], pose(normal), pixels, False, False))
+            triangles.append((points[idx], uv[idx], posed_normal, pixels, False, False))
 
     surface(sections[0], "747d89")
     surface(sections[-1], None, top, [0, 2])
@@ -146,9 +154,9 @@ def sample_ingot():
     return triangles
 
 
-def render(quads, eye, scale, size, background):
+def render(quads, eye, scale, size, background, *, item_gui=False):
     """Textured quads and triangles, opaque depth first and glass sorted per pixel."""
-    sampling = 2
+    sampling = 1 if item_gui else 2
     w, h = (n * sampling for n in size)
     eye = np.array(eye, dtype=float)
     eye /= np.linalg.norm(eye)
@@ -185,11 +193,15 @@ def render(quads, eye, scale, size, background):
         th, tw = pixels.shape[:2]
         indices = np.clip((texel * [tw, th]).astype(int), 0, [tw - 1, th - 1])
         rgba = pixels[indices[:, :, 1], indices[:, :, 0]]
-        # Vanilla face lighting: up 1.0, sides north/south .8, west/east .6, down .5.
-        nx, ny, nz = normal
-        shade = 1 if unlit else .6 * nx ** 2 + (1 if ny > 0 else .5) * ny ** 2 + .8 * nz ** 2
+        if item_gui:
+            # Entity item shaders use minecraft_mix_light, even at full GUI lightmap.
+            shade = min(1., .4 + .6 * np.maximum(GUI_LIGHTS @ normal, 0.).sum())
+        else:
+            nx, ny, nz = normal
+            shade = 1 if unlit else .6 * nx ** 2 + (1 if ny > 0 else .5) * ny ** 2 + .8 * nz ** 2
         color = np.rint(rgba[:, :, :3] * shade).astype(np.uint8)
-        mask = inside & (rgba[:, :, 3] > 0)
+        # The layered cutout and translucent entity shaders discard alpha < 0.1.
+        mask = inside & (rgba[:, :, 3] >= (26 if item_gui else 1))
         region = np.s_[y0:y1, x0:x1]
         if transparent:
             glass.append((region, z, mask, color, rgba[:, :, 3]))
@@ -240,12 +252,39 @@ def find_font(override, bold):
     raise SystemExit("Install a Chinese font or pass --font /path/to/font.otf")
 
 
+def inventory_projection(bank):
+    """Bake the actual item parent, then apply the 1.21.1 GUI pose at one pixel per GUI unit."""
+    item = json.loads(ITEM_MODEL.read_text(encoding="utf8"))
+    namespace, ref = item["parent"].split(":")
+    model_path = ASSETS / "models" / (ref + ".json")
+    model = json.loads(model_path.read_text(encoding="utf8"))
+    if namespace != "mio_icif" or model_path.parent != MODELS or model["parent"] != "minecraft:block/block":
+        raise ValueError(f"Unexpected machine item parent chain: {item['parent']} / {model['parent']}")
+    gui = item.get("display", {}).get("gui", model.get("display", {}).get("gui", BLOCK_GUI))
+    rx, ry, rz = gui.get("rotation", (0, 0, 0))
+    scale = np.array(gui.get("scale", (1, 1, 1)))
+    translation = np.array(gui.get("translation", (0, 0, 0)))
+    # ItemTransform.apply uses JOML rotationXYZ (Z, then Y, then X on a point).
+    basis = []
+    for unit in np.eye(3):
+        for axis, angle in (("z", rz), ("y", ry), ("x", rx)):
+            unit = rot(unit, axis, angle, (0, 0, 0))
+        basis.append(unit)
+    rotation = np.array(basis)
+    projected = []
+    for corners, uv, normal, pixels, translucent, light in faces(model_path.stem, bank, item=True):
+        vertices = ((corners - 8) * scale) @ rotation + translation + 8
+        norm = (normal / scale) @ rotation
+        projected.append((vertices, uv, norm / np.linalg.norm(norm), pixels, translucent, light))
+    return render(projected, (0, 0, 1), 1., (16, 16), SLOT_GRAY, item_gui=True)
+
+
 def inventory_slot(sheet, icon, xy, magnification):
-    slot = Image.new("RGB", (18, 18), "#8b8b8b")
+    slot = Image.new("RGB", (18, 18), SLOT_GRAY)
     pen = ImageDraw.Draw(slot)
     pen.line([(0, 17), (0, 0), (17, 0)], fill="#373737")
     pen.line([(1, 17), (17, 17), (17, 1)], fill="#ffffff")
-    slot.paste(icon, (1, 1), icon)
+    slot.paste(icon, (1, 1))
     size = 18 * magnification
     sheet.paste(slot.resize((size, size), Image.Resampling.NEAREST), xy)
 
@@ -263,7 +302,7 @@ def make_sheet(font_path=None):
         draw.text((x, y), string, font=font(size, bold), fill=color, anchor=anchor)
 
     label(42, 50, "分子重组仪", 43, bold=True)
-    label(300, 56, "铁锭装料示意 · 客户端接入效果", 22, MUTED)
+    label(300, 56, "装料示意与物品栏投影", 22, MUTED)
     label(1396, 56, "奇点迭代   /   机器美术", 20, MUTED, anchor="rm")
 
     width, hero_y = 669, 98
@@ -276,12 +315,11 @@ def make_sheet(font_path=None):
         draw.rounded_rectangle((left, hero_y, left + width, 478), 10, fill=STAGE)
         draw.rectangle((left + 23, 120, left + 27, 149), fill=ACCENTS[version])
         label(left + 39, 134, LABELS[version], 26, "#fbfcf9", True)
-        label(left + width - 24, 135, "工作态 · 铁锭装料", 18, PALE, anchor="rm")
+        label(left + width - 24, 135, "工作态 · 铁锭样品示意", 18, PALE, anchor="rm")
         sheet.paste(render(active + ingot, LOADED_VIEW, 15.0, (415, 311), STAGE), (left + 9, 161))
         draw.line((left + 427, 178, left + 427, 443), fill="#455157")
-        label(left + 473, 188, "物品栏图标", 20, "#ecf1f0", True)
-        with Image.open(bank / ICON) as source:
-            icon = source.convert("RGBA")
+        label(left + 473, 188, "物品栏 · 待机", 20, "#ecf1f0", True)
+        icon = inventory_projection(bank)
         inventory_slot(sheet, icon, (left + 473, 219), 8)
         label(left + 473, 385, "8×", 15, PALE)
         inventory_slot(sheet, icon, (left + 473, 415), 1)

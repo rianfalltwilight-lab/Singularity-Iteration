@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""Check batch MT1 (molecular transformer: Blockbench block model and flat item icon), docs/art/batches/MT1.md.
+"""Check batch MT1 (molecular transformer block and its inventory model), docs/art/batches/MT1.md.
 
 Block models (block_molecular_transformer.json and _on.json, a neoforge:composite model's children counted together):
   - at most 40 elements and 160 faces each;
   - no hidden face (flat against another opaque element's facing face, or inside an opaque closed box);
   - every face on the block's outer boundary carries "cullface";
   - every solid box is at least 1 unit along each axis (a 0-thick plane is allowed);
-  - rotations on one axis, by a multiple of 22.5 degrees;
+  - rotations supported by the Minecraft 1.21.1 block model loader;
   - the two models have the same elements by name and position (the working model only changes textures and light);
   - every texture a model uses exists under textures/block/producer/molecular_transformer/.
 Textures: 8-bit RGBA, not interlaced, no pure black; alpha only 0 or 255, except files whose name contains "glass";
-  the item icon is 16x16 with a transparent 1px border; variant B has the same file set as variant A.
+  variant B has the same block textures as variant A. The inventory item inherits the idle block.
 The blockstate, the item model and the Java code are not part of the batch; the script checks that they are unchanged in
 the parts the batch relies on.
 
@@ -29,7 +29,7 @@ MODELS = [os.path.join(ASSETS, "models/block/producer", n)
           for n in ("block_molecular_transformer.json", "block_molecular_transformer_on.json")]
 TEX_DIR = os.path.join(ASSETS, "textures/block/producer/molecular_transformer")
 TEX_PREFIX = "mio_icif:block/producer/molecular_transformer/"
-ICON = os.path.join(ASSETS, "textures/item/producer/item_molecular_transformer.png")
+ITEM_MODEL = os.path.join(ASSETS, "models/item/producer/block_molecular_transformer.json")
 VARIANT_B = os.path.join(ROOT, "docs/art/mt1/variant_b")
 BBMODELS = [os.path.join(ROOT, "tools/models", n)
             for n in ("molecular_transformer.bbmodel", "molecular_transformer_on.bbmodel")]
@@ -106,8 +106,8 @@ def check_model(path, listing):
         if thin and 0 not in size:
             problems.append(f"{label}: thinner than 1 unit {size} (use a 0-thick plane or a texture)")
         rot = e.get("rotation")
-        if rot and rot.get("angle", 0) % 22.5 != 0:
-            problems.append(f"{label}: rotation {rot.get('angle')} is not a multiple of 22.5")
+        if rot and rot.get("angle") not in (-45, -22.5, 0, 22.5, 45):
+            problems.append(f"{label}: unsupported block rotation {rot.get('angle')}")
         for face, data in e.get("faces", {}).items():
             faces += 1
             if hidden(face, e, found):
@@ -133,7 +133,7 @@ def check_model(path, listing):
     return problems, [(e.get("name"), e["from"], e["to"]) for e, _ in found]
 
 
-def check_png(path, icon=False):
+def check_png(path):
     rel = os.path.relpath(path, ROOT)
     problems = []
     im = Image.open(path)
@@ -143,8 +143,6 @@ def check_png(path, icon=False):
     if im.info.get("interlace"):
         problems.append(f"{rel}: interlaced PNG")
     w, h = im.size
-    if icon and (w, h) != (16, 16):
-        problems.append(f"{rel}: size {w}x{h}, expected 16x16")
     glass = "glass" in os.path.basename(path)
     px = im.load()
     for y in range(h):
@@ -154,8 +152,6 @@ def check_png(path, icon=False):
                 problems.append(f"{rel}: partial alpha {a} at ({x},{y})")
             if a and (r, g, b) == (0, 0, 0):
                 problems.append(f"{rel}: pure black at ({x},{y})")
-            if icon and a and (x in (0, w - 1) or y in (0, h - 1)):
-                problems.append(f"{rel}: opaque pixel on the 1px border at ({x},{y})")
     seen, short = set(), []
     for p in problems:
         kind = p.split(" at ")[0]
@@ -179,6 +175,14 @@ def check_fixed():
     want = {f"lit={l},facing={f}" for l in ("false", "true") for f in ("north", "south", "east", "west")}
     if set(bs.get("variants", {})) != want:
         problems.append("blockstate: variants changed (the batch must not touch the blockstate)")
+    if not os.path.isfile(ITEM_MODEL):
+        problems.append("item model is missing")
+    else:
+        with open(ITEM_MODEL, encoding="utf-8") as stream:
+            item = json.load(stream)
+        if (item.get("parent") != "mio_icif:block/producer/block_molecular_transformer"
+                or "loader" in item or "elements" in item or item.get("overrides")):
+            problems.append("inventory must directly inherit the idle block model")
     return problems
 
 
@@ -197,18 +201,13 @@ def main():
     else:
         for f in pngs(TEX_DIR):
             problems += check_png(os.path.join(TEX_DIR, f))
-    if os.path.exists(ICON):
-        problems += check_png(ICON, icon=True)
-    else:
-        problems.append(f"{os.path.relpath(ICON, ROOT)}: missing")
-    # variant B mirrors the texture folder and the icon
-    want = sorted([os.path.join("block/producer/molecular_transformer", f) for f in pngs(TEX_DIR)]
-                  + ["item/producer/item_molecular_transformer.png"]) if os.path.isdir(TEX_DIR) else []
+    # Compare native relative paths on both Windows and POSIX.
+    want = [os.path.join("block", "producer", "molecular_transformer", f) for f in pngs(TEX_DIR)]
     have = pngs(VARIANT_B) if os.path.isdir(VARIANT_B) else []
     if want and have != want:
         problems.append(f"docs/art/mt1/variant_b: files {have} differ from variant A {want}")
     for f in have:
-        problems += check_png(os.path.join(VARIANT_B, f), icon=f.startswith("item/"))
+        problems += check_png(os.path.join(VARIANT_B, f))
     for path in BBMODELS + [PREVIEW]:
         if not os.path.exists(path):
             problems.append(f"{os.path.relpath(path, ROOT)}: missing")
