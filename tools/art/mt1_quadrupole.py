@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from mt1_model import GRAPHITE, PALETTES, PORCELAIN, SIDES, STEEL, canvas
 
@@ -13,20 +13,13 @@ TRIAL = ROOT / "docs/art/mt1/quadrupole"
 ASSETS = TRIAL / "pack/assets/mio_icif"
 PARTS = Path("block/producer/mt1_quadrupole")
 REF = "mio_icif:" + PARTS.as_posix() + "/"
+INLAY_TIPS = {"a": "#72DADE", "b": "#D4A4EB"}
 
 
 def neutral_parts():
     # The vertical ceramic returns need a darker glaze than the top. With
     # the same white, one lit side disappears into the vanilla inventory slot.
     result = {"porcelain": Image.new("RGBA", (16, 16), "#D0D0D0")}
-    # World-plan UVs keep the stamped relief continuous across each L's elbow.
-    img, d = canvas(PORCELAIN)
-    for right in (False, True):
-        for back in (False, True):
-            marks = [(2, 5), (2, 2), (5, 2)]
-            d.line([(15 - x if right else x, 15 - z if back else z)
-                    for x, z in marks], fill="#DDE0DF", width=1)
-    result["ceramic_corner"] = img
 
     # Separate UV islands for the closed access lid, the four internal pole
     # seats and the vertical edge of the metal closure.
@@ -57,7 +50,29 @@ def neutral_parts():
                         (13, 1, (155, 174, 181, 117))):
         d.point((x, y), fill=color)
     result["smoked_glass"] = img
+    # The north window has a one-pixel-deep notch from each edge seal. Row 4
+    # of its nine texels sits at the sample centre (model Y=8).
+    front = img.copy()
+    marks = ImageDraw.Draw(front)
+    for edge, inner in ((0, 1), (7, 6)):
+        marks.point((edge, 4), fill=(196, 207, 207, 184))
+        marks.point((inner, 4), fill=(215, 225, 222, 193))
+    result["front_glass"] = front
     return result
+
+
+def ceramic_inlay(tip):
+    # Whole-block UVs join the two legs across separate ceramic cuboids. Each
+    # 7x7 corner stops at the open slot; the working texture changes both tips.
+    img, d = canvas(PORCELAIN)
+    for elbow_x, sign_x in ((2, 1), (13, -1)):
+        for elbow_z, sign_z in ((2, 1), (13, -1)):
+            end_x, end_z = elbow_x + 4 * sign_x, elbow_z + 4 * sign_z
+            d.line([(elbow_x, end_z), (elbow_x, elbow_z), (end_x, elbow_z)], fill="#BEAE98")
+            d.point((elbow_x, elbow_z), fill="#CEBFA9")
+            d.point((end_x, elbow_z), fill=tip)
+            d.point((elbow_x, end_z), fill=tip)
+    return img
 
 
 def field_marks(palette):
@@ -76,6 +91,7 @@ def field_marks(palette):
 
 def model(working):
     layers = {"solid": [], "cutout": [], "translucent": []}
+    corner = "ceramic_corner_on" if working else "ceramic_corner"
 
     def box(name, lo, hi, surfaces, layer="solid"):
         dx, dy, dz = (b - a for a, b in zip(lo, hi))
@@ -110,7 +126,7 @@ def model(working):
                     if back:
                         z, Z = 16 - Z, 16 - z
                     surfaces = dict.fromkeys(walls, ("porcelain", 0, 0))
-                    surfaces.update(up=("ceramic_corner", x, z), down=("porcelain", 0, 0))
+                    surfaces.update(up=(corner, x, z), down=("porcelain", 0, 0))
                     box(f"{level}_{ns}_{ew}_{segment}", [x, y, z], [X, y + 3, Z], surfaces)
 
     # The closures slightly overhang the inner ends vertically, exposing
@@ -132,7 +148,7 @@ def model(working):
     # A single glass surface on each side closes the full square work column.
     # Both end faces are closed by the solid plates above.
     box("vertical_chamber_glass", [4, 3.5, 4], [12, 12.5, 12], {
-        "north": ("smoked_glass", 0, 0), "south": ("smoked_glass", 0, 0),
+        "north": ("front_glass", 0, 0), "south": ("smoked_glass", 0, 0),
         "east": ("smoked_glass", 8, 0), "west": ("smoked_glass", 8, 0)},
         layer="translucent")
 
@@ -149,10 +165,13 @@ def model(working):
 
 def main():
     neutral = neutral_parts()
+    neutral["ceramic_corner"] = ceramic_inlay("#A69E90")
     for directory, variant in ((ASSETS / "textures", "a"), (TRIAL / "variant_b", "b")):
         target = directory / PARTS
         target.mkdir(parents=True, exist_ok=True)
-        for name, img in {**neutral, **field_marks(PALETTES[variant])}.items():
+        textures = {**neutral, **field_marks(PALETTES[variant]),
+                    "ceramic_corner_on": ceramic_inlay(INLAY_TIPS[variant])}
+        for name, img in textures.items():
             img.save(target / (name + ".png"), optimize=True)
     target = ASSETS / "models/block/producer"
     target.mkdir(parents=True, exist_ok=True)

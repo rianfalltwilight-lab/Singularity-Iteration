@@ -1181,6 +1181,7 @@
       "parent": "minecraft:block/block",
       "render_type": "minecraft:translucent",
       "textures": {
+        "front_glass": "mio_icif:block/producer/mt1_quadrupole/front_glass",
         "smoked_glass": "mio_icif:block/producer/mt1_quadrupole/smoked_glass"
       },
       "elements": [
@@ -1198,7 +1199,7 @@
           ],
           "faces": {
             "north": {
-              "texture": "#smoked_glass",
+              "texture": "#front_glass",
               "uv": [
                 0,
                 0,

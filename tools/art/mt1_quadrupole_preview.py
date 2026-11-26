@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Render the four-corner MT1 candidate and its orthographic review sheet."""
 import argparse
+from pathlib import Path
+
+from PIL import Image
 
 import mt1_beamline_preview as beamline
 from mt1_preview import (
-    ACCENTS, INK, LABELS, LINE, MACHINE, MUTED, PALE, PAPER, ROOT, STAGE,
-    VARIANTS as RETAINED_TEXTURES, VIEW_SURFACE, faces, render, sample_ingot,
+    ACCENTS, INK, LABELS, MACHINE, MUTED, PALE, PAPER, ROOT, STAGE,
+    faces, render, sample_ingot,
 )
 
 
@@ -15,12 +18,28 @@ MODELS = ASSETS / "models/block/producer"
 TEXTURES = (ASSETS / "textures", BASE / "variant_b")
 OUTPUT = ROOT / "docs/art/previews/MT1-quadrupole.png"
 VIEWS_OUTPUT = ROOT / "docs/art/previews/MT1-quadrupole-views.png"
+REFERENCE = BASE / "reference/c3ff6228-detail.png"
 CAMERA = (-.68, .43, -1.)
 SAMPLE = (8, 8, 8)
 
 
+def detail_plate(models, textures, *, working=False):
+    """The same north-west ceramic corner and north window in every comparison."""
+    geometry = faces(MACHINE + ("_on" if working else ""), textures, models=models)
+    plate = Image.new("RGB", (250, 341), PAPER)
+    # Isolate one complete L (x,z = 0..7) including its two inward terminals.
+    corner = render(geometry, (0, 1, 0), 21., (202, 174), STAGE, centre=(3.5, 16, 3.5))
+    top = Image.new("RGB", (250, 174), STAGE)
+    top.paste(corner, (24, 0))
+    plate.paste(top)
+    # The 8×9 glass face fills this crop vertically; the aim marks sit at y=8.
+    pane = render(geometry, (0, 0, -1), 16., (250, 155), STAGE, centre=(8, 8, 4))
+    plate.paste(pane, (0, 186))
+    return plate
+
+
 def make_sheet(font_path=None):
-    sheet, draw, label = beamline.page((1440, 910), font_path)
+    sheet, draw, label = beamline.page((1440, 1060), font_path)
     label(40, 53, "分子重组仪", 40, bold=True)
     label(276, 57, "四角立式方案", 27, MUTED)
     label(1399, 57, "工作态的铁锭仅作装料示意", 18, MUTED, anchor="rm")
@@ -36,24 +55,24 @@ def make_sheet(font_path=None):
         draw.line((left + 455, 161, left + 455, 511), fill="#495559")
         beamline.inventory_panel(sheet, label, left + 485, 193, textures, ASSETS)
 
-    label(40, 607, "上下端部", 25, bold=True)
-    label(632, 607, "三种轮廓", 25, bold=True)
-    label(1398, 610, "同一视角与比例 · 青蓝工作态", 17, MUTED, anchor="rm")
-    draw.rounded_rectangle((40, 646, 589, 870), 8, fill=VIEW_SURFACE)
-    draw.line((314, 665, 314, 850), fill=LINE)
-    current = faces(MACHINE + "_on", TEXTURES[0], models=MODELS)
-    for mid, eye, caption in ((177, (0, 1, 0), "顶视"), (451, (0, -1, 0), "底视")):
-        sheet.paste(render(current, eye, 9.7, (183, 173), VIEW_SURFACE), (mid - 92, 651))
-        label(mid, 843, caption, 17, INK, anchor="mm")
+    label(40, 605, "细节对照", 26, bold=True)
+    label(1399, 607, "同角度 · 同尺度", 17, MUTED, anchor="rm")
+    label(40, 755, "瓷夹顶面", 21, bold=True)
+    label(40, 792, "香槟钛嵌线与端点", 16, MUTED)
+    label(40, 930, "正面玻璃", 21, bold=True)
+    label(40, 967, "两侧雾白对准刻线", 16, MUTED)
+    with Image.open(REFERENCE) as source:
+        baseline = source.convert("RGB")
     comparison = (
-        (faces(MACHINE + "_on", RETAINED_TEXTURES[0]), "立式三向电极"),
-        (faces(MACHINE + "_on", beamline.TEXTURES[0], models=beamline.MODELS), "横向束线"),
-        (current, "四角立式"),
+        ("上一版 · 待机", baseline),
+        ("新版 · 待机", detail_plate(MODELS, TEXTURES[0])),
+        ("青蓝 · 工作", detail_plate(MODELS, TEXTURES[0], working=True)),
+        ("紫粉 · 工作", detail_plate(MODELS, TEXTURES[1], working=True)),
     )
-    for i, (geometry, caption) in enumerate(comparison):
-        mid = 749 + i * 254
-        sheet.paste(render(geometry, CAMERA, 8., (208, 191), PAPER), (mid - 104, 639))
-        label(mid, 848, caption, 18, anchor="mm")
+    for i, (caption, detail) in enumerate(comparison):
+        left = 244 + i * 302
+        label(left + 125, 652, caption, 18, INK, True, anchor="mm")
+        sheet.paste(detail, (left, 681))
     return sheet
 
 
@@ -65,8 +84,17 @@ def make_views_sheet(font_path=None):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--font", help="path to a Chinese TrueType/OpenType font")
+    parser.add_argument("--reference-assets", type=Path, metavar="ASSETS",
+                        help="capture the baseline once using the c3ff6228 pack's assets/mio_icif directory")
     options = parser.parse_args()
-    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    for make, path in ((make_sheet, OUTPUT), (make_views_sheet, VIEWS_OUTPUT)):
-        make(options.font).save(path, optimize=True)
-        print(path.relative_to(ROOT))
+    if options.reference_assets:
+        if not REFERENCE.exists():
+            old = options.reference_assets
+            REFERENCE.parent.mkdir(parents=True, exist_ok=True)
+            detail_plate(old / "models/block/producer", old / "textures").save(REFERENCE, optimize=True)
+        print(REFERENCE.relative_to(ROOT))
+    else:
+        OUTPUT.parent.mkdir(parents=True, exist_ok=True)
+        for make, path in ((make_sheet, OUTPUT), (make_views_sheet, VIEWS_OUTPUT)):
+            make(options.font).save(path, optimize=True)
+            print(path.relative_to(ROOT))

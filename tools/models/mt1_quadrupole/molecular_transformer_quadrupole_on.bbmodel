@@ -1385,7 +1385,7 @@
           ]
         },
         "east": {
-          "texture": 4,
+          "texture": 5,
           "uv": [
             8,
             0,
@@ -1394,7 +1394,7 @@
           ]
         },
         "south": {
-          "texture": 4,
+          "texture": 5,
           "uv": [
             0,
             0,
@@ -1403,7 +1403,7 @@
           ]
         },
         "west": {
-          "texture": 4,
+          "texture": 5,
           "uv": [
             8,
             0,
@@ -1503,15 +1503,15 @@
       "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAHklEQVR42mO8cOHCfwYKABMDhWDUgFEDRg0YLAYAAC/2A4/AThV+AAAAAElFTkSuQmCC"
     },
     {
-      "id": "ceramic_corner",
-      "uuid": "5c0f73b5-014b-5835-b733-9e86fdb81ec5",
-      "name": "ceramic_corner.png",
+      "id": "ceramic_corner_on",
+      "uuid": "13884488-43d5-57e9-8e5c-9f34e0b7422c",
+      "name": "ceramic_corner_on.png",
       "namespace": "mio_icif",
       "folder": "block/producer/mt1_quadrupole",
       "internal": true,
       "particle": false,
       "render_sides": "front",
-      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAASElEQVR42mP8+PHjfwYKABMDhYAFxnjz/h2KhIigEAoflzwLPk245JANo9gLFBvAOOCxMIgMQI9nfGBwRSMLLqcRSsqDJx0AAJ1PICyV+IFwAAAAAElFTkSuQmCC"
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAiUlEQVR42mP8+PHjfwYKABMDhYAFxrh7bgfDh/fv4RJbdNwY6sWFGRgYGBgaX75l8LmyCy4nICjIoGzkgWrAh/fvGYydI+GKjJFsqRcXZmAQR8id3bucel6gngFbdNyI1oSslnHAoxFuQOPLt0RrQlYLNwA5ngkBZLUDH40syMkTOYURSsqDJxoBaw8x9/zwdTYAAAAASUVORK5CYII="
     },
     {
       "id": "metal_closure",
@@ -1534,6 +1534,17 @@
       "particle": false,
       "render_sides": "front",
       "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAANklEQVR42mNgoCbQunf5v9a9y/8Z6A6YLn7+T4wYVr0MgwoMXCAOHuA/df5//6nzR3QYDAgAALlkFflNZ9AVAAAAAElFTkSuQmCC"
+    },
+    {
+      "id": "front_glass",
+      "uuid": "16af62af-3d27-50e0-8738-dedce8907864",
+      "name": "front_glass.png",
+      "namespace": "mio_icif",
+      "folder": "block/producer/mt1_quadrupole",
+      "internal": true,
+      "particle": false,
+      "render_sides": "front",
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA0klEQVR42mN0CopZwEABYNEy0HnAwsAswsDAwKCrrXnn8tXrKjDJy5ev/9TUVfvMx8nFj6xJUVn52f27d6VOnrrwjwkm6Ghn+R5ZMy4gLCH74P7du1IwPhMDAwODgYHes/2HjgsS4+S3Lx4roHghwtfdQliIn/PChUuXkSXS44N13777+H3F5p0n8BnIzCWtqHL+4o0v6BJnL15/tXLt1uei4sK/2FlZObBpfvr0xX8mBgoBxQawXD1/WRKPPOvV85d58Bqgb2jwe0C9MGoAFQwAAPmGRNKIL7OxAAAAAElFTkSuQmCC"
     },
     {
       "id": "smoked_glass",

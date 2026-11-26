@@ -9,7 +9,7 @@
       "parent": "minecraft:block/block",
       "render_type": "minecraft:solid",
       "textures": {
-        "ceramic_corner": "mio_icif:block/producer/mt1_quadrupole/ceramic_corner",
+        "ceramic_corner_on": "mio_icif:block/producer/mt1_quadrupole/ceramic_corner_on",
         "metal_closure": "mio_icif:block/producer/mt1_quadrupole/metal_closure",
         "porcelain": "mio_icif:block/producer/mt1_quadrupole/porcelain"
       },
@@ -57,7 +57,7 @@
               ]
             },
             "up": {
-              "texture": "#ceramic_corner",
+              "texture": "#ceramic_corner_on",
               "uv": [
                 0,
                 0,
@@ -110,7 +110,7 @@
               ]
             },
             "up": {
-              "texture": "#ceramic_corner",
+              "texture": "#ceramic_corner_on",
               "uv": [
                 0,
                 4,
@@ -173,7 +173,7 @@
               ]
             },
             "up": {
-              "texture": "#ceramic_corner",
+              "texture": "#ceramic_corner_on",
               "uv": [
                 0,
                 12,
@@ -226,7 +226,7 @@
               ]
             },
             "up": {
-              "texture": "#ceramic_corner",
+              "texture": "#ceramic_corner_on",
               "uv": [
                 0,
                 9,
@@ -289,7 +289,7 @@
               ]
             },
             "up": {
-              "texture": "#ceramic_corner",
+              "texture": "#ceramic_corner_on",
               "uv": [
                 9,
                 0,
@@ -342,7 +342,7 @@
               ]
             },
             "up": {
-              "texture": "#ceramic_corner",
+              "texture": "#ceramic_corner_on",
               "uv": [
                 12,
                 4,
@@ -405,7 +405,7 @@
               ]
             },
             "up": {
-              "texture": "#ceramic_corner",
+              "texture": "#ceramic_corner_on",
               "uv": [
                 9,
                 12,
@@ -458,7 +458,7 @@
               ]
             },
             "up": {
-              "texture": "#ceramic_corner",
+              "texture": "#ceramic_corner_on",
               "uv": [
                 12,
                 9,
@@ -521,7 +521,7 @@
               ]
             },
             "up": {
-              "texture": "#ceramic_corner",
+              "texture": "#ceramic_corner_on",
               "uv": [
                 0,
                 0,
@@ -574,7 +574,7 @@
               ]
             },
             "up": {
-              "texture": "#ceramic_corner",
+              "texture": "#ceramic_corner_on",
               "uv": [
                 0,
                 4,
@@ -637,7 +637,7 @@
               ]
             },
             "up": {
-              "texture": "#ceramic_corner",
+              "texture": "#ceramic_corner_on",
               "uv": [
                 0,
                 12,
@@ -690,7 +690,7 @@
               ]
             },
             "up": {
-              "texture": "#ceramic_corner",
+              "texture": "#ceramic_corner_on",
               "uv": [
                 0,
                 9,
@@ -753,7 +753,7 @@
               ]
             },
             "up": {
-              "texture": "#ceramic_corner",
+              "texture": "#ceramic_corner_on",
               "uv": [
                 9,
                 0,
@@ -806,7 +806,7 @@
               ]
             },
             "up": {
-              "texture": "#ceramic_corner",
+              "texture": "#ceramic_corner_on",
               "uv": [
                 12,
                 4,
@@ -869,7 +869,7 @@
               ]
             },
             "up": {
-              "texture": "#ceramic_corner",
+              "texture": "#ceramic_corner_on",
               "uv": [
                 9,
                 12,
@@ -922,7 +922,7 @@
               ]
             },
             "up": {
-              "texture": "#ceramic_corner",
+              "texture": "#ceramic_corner_on",
               "uv": [
                 12,
                 9,
@@ -1205,6 +1205,7 @@
       "parent": "minecraft:block/block",
       "render_type": "minecraft:translucent",
       "textures": {
+        "front_glass": "mio_icif:block/producer/mt1_quadrupole/front_glass",
         "smoked_glass": "mio_icif:block/producer/mt1_quadrupole/smoked_glass"
       },
       "elements": [
@@ -1222,7 +1223,7 @@
           ],
           "faces": {
             "north": {
-              "texture": "#smoked_glass",
+              "texture": "#front_glass",
               "uv": [
                 0,
                 0,

@@ -1361,7 +1361,7 @@
           ]
         },
         "east": {
-          "texture": 4,
+          "texture": 5,
           "uv": [
             8,
             0,
@@ -1370,7 +1370,7 @@
           ]
         },
         "south": {
-          "texture": 4,
+          "texture": 5,
           "uv": [
             0,
             0,
@@ -1379,7 +1379,7 @@
           ]
         },
         "west": {
-          "texture": 4,
+          "texture": 5,
           "uv": [
             8,
             0,
@@ -1487,7 +1487,7 @@
       "internal": true,
       "particle": false,
       "render_sides": "front",
-      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAASElEQVR42mP8+PHjfwYKABMDhYAFxnjz/h2KhIigEAoflzwLPk245JANo9gLFBvAOOCxMIgMQI9nfGBwRSMLLqcRSsqDJx0AAJ1PICyV+IFwAAAAAElFTkSuQmCC"
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAg0lEQVR42mP8+PHjfwYKABMDhYAFxrh7bgfDh/fv4RIvPvxg8A5OZGBgYGDYunY+g4QAB1xOQFCQQdnIA9WAD+/fMxg7R2K1BWYQDJzdu5x6XqCeAS8+/CBaE7JaxgGPRrgBW9fOJ1oTslq4AcjxTAggqx34aGRBTp7IKYxQUh480QgA+CMw/lvs6rUAAAAASUVORK5CYII="
     },
     {
       "id": "metal_closure",
@@ -1510,6 +1510,17 @@
       "particle": false,
       "render_sides": "front",
       "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAANUlEQVR42mNgoCawjUr4bxuV8J+B7sApMeM/MWLYABPDoAIDF4iDB3iGR//3DI8e0WEwIAAAXokP42Ula8YAAAAASUVORK5CYII="
+    },
+    {
+      "id": "front_glass",
+      "uuid": "16af62af-3d27-50e0-8738-dedce8907864",
+      "name": "front_glass.png",
+      "namespace": "mio_icif",
+      "folder": "block/producer/mt1_quadrupole",
+      "internal": true,
+      "particle": false,
+      "render_sides": "front",
+      "source": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAA0klEQVR42mN0CopZwEABYNEy0HnAwsAswsDAwKCrrXnn8tXrKjDJy5ev/9TUVfvMx8nFj6xJUVn52f27d6VOnrrwjwkm6Ghn+R5ZMy4gLCH74P7du1IwPhMDAwODgYHes/2HjgsS4+S3Lx4roHghwtfdQliIn/PChUuXkSXS44N13777+H3F5p0n8BnIzCWtqHL+4o0v6BJnL15/tXLt1uei4sK/2FlZObBpfvr0xX8mBgoBxQawXD1/WRKPPOvV85d58Bqgb2jwe0C9MGoAFQwAAPmGRNKIL7OxAAAAAElFTkSuQmCC"
     },
     {
       "id": "smoked_glass",
