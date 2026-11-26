@@ -1,6 +1,8 @@
 # 奇点迭代 美术工作说明（给 GPT）
 
-奇点迭代（Singularity Iteration，mod id `mio_icif`，NeoForge 1.21.1）这一轮的套装模块美术由你（GPT）来画，代码和接入由 Claude 负责。本文是你的入口：先读它，再读它点名的文件，然后按“批次”交付。
+奇点迭代（Singularity Iteration，mod id `mio_icif`，NeoForge 1.21.1）的美术由你（GPT）来画，代码和接入由 Claude 负责。本文是你的入口：先读它，再读它点名的文件，然后按“批次”交付。
+
+> **当前批次是 [MT1：分子重组仪](batches/MT1.md)**（Blockbench 机器模型 + 物品图标）。下面第 0 到 4 节是为套装模块批次（MOD1）写的；MT1 和它不同的地方以 MT1 的说明为准：这一批可以改分子重组仪的两个方块模型 JSON，贴图路径、检查脚本（`tools/art/check_mt1.py`）、预览要求和分支都见 MT1 说明与第 5 节。像素规则、净室、先预览后验收这些通用要求不变。
 
 ## 0. 你负责什么
 
@@ -56,4 +58,6 @@
 
 ## 5. 当前批次
 
-[MOD1 第二轮：修改清单](batches/MOD1-r2.md)。第一轮的完整清单见 [MOD1：套装模块图标](batches/MOD1-suit-modules.md)（69 张）。
+[MT1：分子重组仪](batches/MT1.md)。从分支 `art/mt1-brief` 切新分支 `art/mt1`，画完提交并推送 `art/mt1` 到同一个仓库，不开 PR，不改其他分支。交付前运行 `python3 tools/art/check_mt1.py`，要输出 `OK`。
+
+已完成：MOD1 套装模块图标（[第一轮清单](batches/MOD1-suit-modules.md)，69 张；[第二轮修改清单](batches/MOD1-r2.md)），已在 0.1.11.192 接入。
