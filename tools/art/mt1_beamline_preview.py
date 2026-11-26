@@ -40,6 +40,16 @@ def page(size, font_path):
     return sheet, draw, label
 
 
+def inventory_panel(sheet, label, x, y, textures, assets):
+    label(x, y, "待机物品栏", 19, "#fafcfb", True)
+    big = inventory_projection(textures, 8, assets=assets)
+    small = inventory_projection(textures, assets=assets)
+    inventory_slot(sheet, big, (x, y + 31))
+    label(x, y + 198, "GUI 8× · 离线渲染", 15, PALE)
+    inventory_slot(sheet, small, (x, y + 225))
+    label(x + 30, y + 233, "1× · 16 像素", 15, PALE)
+
+
 def make_sheet(font_path=None):
     sheet, draw, label = page((1440, 994), font_path)
     label(40, 55, "分子重组仪", 40, bold=True)
@@ -59,13 +69,7 @@ def make_sheet(font_path=None):
         label(x + 444, 139, "工作态", 17, PALE, anchor="rm")
         sheet.paste(render(working + ingot, LOADED_EYE, 17.8, (443, 298), STAGE, centre=(8, 6.5, 8)), (x + 8, 162))
         draw.line((x + 456, 163, x + 456, 440), fill="#495559")
-        label(x + 488, 175, "待机物品栏", 19, "#fafcfb", True)
-        big = inventory_projection(textures, 8, assets=ASSETS)
-        small = inventory_projection(textures, assets=ASSETS)
-        inventory_slot(sheet, big, (x + 488, 206))
-        label(x + 488, 373, "GUI 8× · 离线渲染", 15, PALE)
-        inventory_slot(sheet, small, (x + 488, 400))
-        label(x + 518, 408, "1× · 16 像素", 15, PALE)
+        inventory_panel(sheet, label, x + 488, 175, textures, ASSETS)
 
     label(40, 521, "空腔状态", 26, bold=True)
     label(1399, 524, "从另一侧看接收面", 17, MUTED, anchor="rm")
@@ -89,34 +93,35 @@ def make_sheet(font_path=None):
     return sheet
 
 
-def make_views_sheet(font_path=None):
+def make_views_sheet(font_path=None, *, design="横向束线", models=MODELS, banks=TEXTURES,
+                     camera=LOADED_EYE, centre=(8, 6.5, 8), view_scale=6.6, compare_scale=10.):
     sheet, draw, label = page((1440, 944), font_path)
-    label(40, 54, "横向束线", 40, bold=True)
+    label(40, 54, design, 40, bold=True)
     label(243, 59, "方块四视图", 27, MUTED)
     label(1399, 57, "分子重组仪 · 空腔", 18, MUTED, anchor="rm")
-    views = (((0, 0, -1), "正面 · 北"), ((-1, 0, 0), "侧面 · 西"), ((0, 1, 0), "顶面"), (LOADED_EYE, "斜视"))
-    for palette, textures in enumerate(TEXTURES):
+    views = (((0, 0, -1), "正面 · 北"), ((-1, 0, 0), "侧面 · 西"), ((0, 1, 0), "顶面"), (camera, "斜视"))
+    for palette, textures in enumerate(banks):
         left = 40 + palette * 686
         for state, title in enumerate(("待机", "工作")):
             top = 100 + state * 239
-            quads = faces(MACHINE + ("_on" if state else ""), textures, models=MODELS)
+            quads = faces(MACHINE + ("_on" if state else ""), textures, models=models)
             draw.rounded_rectangle((left, top, left + 673, top + 222), 8, fill=VIEW_SURFACE)
             label(left + 21, top + 29, f"{LABELS[palette]}  ·  {title}", 22, bold=True)
             for i, (eye, caption) in enumerate(views):
                 mid = left + 85 + i * 167
-                picture = render(quads, eye, 6.6, (151, 137), VIEW_SURFACE, centre=(8, 6.5, 8))
+                picture = render(quads, eye, view_scale, (151, 137), VIEW_SURFACE, centre=centre)
                 sheet.paste(picture, (mid - 75, top + 48))
                 label(mid, top + 199, caption, 16, MUTED, anchor="mm")
 
     draw.line((40, 595, 1399, 595), fill=LINE)
     label(40, 643, "方块尺寸对照", 27, bold=True)
     label(41, 680, "同一视角与比例", 17, MUTED)
-    machines = ((faces(MACHINE + "_on", TEXTURES[0], models=MODELS), "A 青蓝 · 工作"),
+    machines = ((faces(MACHINE + "_on", banks[0], models=models), "A 青蓝 · 工作"),
                 (faces(COMPRESSOR, RETAINED_TEXTURES[0]), "奇点迭代 · 电动压缩机"),
-                (faces(MACHINE + "_on", TEXTURES[1], models=MODELS), "B 紫粉 · 工作"))
+                (faces(MACHINE + "_on", banks[1], models=models), "B 紫粉 · 工作"))
     for i, (quads, caption) in enumerate(machines):
         mid = 483 + i * 345
-        picture = render(quads, LOADED_EYE, 10., (244, 220), PAPER)
+        picture = render(quads, camera, compare_scale, (244, 220), PAPER)
         sheet.paste(picture, (mid - 122, 656))
         label(mid, 900, caption, 18, anchor="mm")
     return sheet
