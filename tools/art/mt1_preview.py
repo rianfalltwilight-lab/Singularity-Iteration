@@ -33,7 +33,7 @@ SLOT_GRAY = "#8b8b8b"
 ISO = (-0.57, 0.39, -1.0)
 LOADED_VIEW = (-0.27, 0.18, -1.0)
 VIEWS = ((0, 0, -1), (-1, 0, 0), (0, 1, 0), ISO)
-PAPER, WHITE, LINE = "#f2f3f0", "#fafbf8", "#d9deda"
+PAPER, VIEW_SURFACE, LINE = "#f2f3f0", "#d9e0de", "#c2cbc8"
 INK, MUTED = "#202c30", "#566365"
 STAGE, PALE = "#283339", "#c3cdd0"
 ACCENTS = ("#5eddd9", "#e7a6ea")
@@ -252,8 +252,7 @@ def find_font(override, bold):
     raise SystemExit("Install a Chinese font or pass --font /path/to/font.otf")
 
 
-def inventory_projection(bank):
-    """Bake the actual item parent, then apply the 1.21.1 GUI pose at one pixel per GUI unit."""
+def inventory_model():
     item = json.loads(ITEM_MODEL.read_text(encoding="utf8"))
     namespace, ref = item["parent"].split(":")
     model_path = ASSETS / "models" / (ref + ".json")
@@ -261,6 +260,13 @@ def inventory_projection(bank):
     if namespace != "mio_icif" or model_path.parent != MODELS or model["parent"] != "minecraft:block/block":
         raise ValueError(f"Unexpected machine item parent chain: {item['parent']} / {model['parent']}")
     gui = item.get("display", {}).get("gui", model.get("display", {}).get("gui", BLOCK_GUI))
+    return model_path.stem, gui
+
+
+def inventory_projection(bank, density=1, *, pose=None):
+    """Render the item parent directly at the selected Minecraft GUI pixel density."""
+    model_name, selected_gui = inventory_model()
+    gui = pose or selected_gui
     rx, ry, rz = gui.get("rotation", (0, 0, 0))
     scale = np.array(gui.get("scale", (1, 1, 1)))
     translation = np.array(gui.get("translation", (0, 0, 0)))
@@ -272,25 +278,28 @@ def inventory_projection(bank):
         basis.append(unit)
     rotation = np.array(basis)
     projected = []
-    for corners, uv, normal, pixels, translucent, light in faces(model_path.stem, bank, item=True):
+    for corners, uv, normal, pixels, translucent, light in faces(model_name, bank, item=True):
         vertices = ((corners - 8) * scale) @ rotation + translation + 8
         norm = (normal / scale) @ rotation
         projected.append((vertices, uv, norm / np.linalg.norm(norm), pixels, translucent, light))
-    return render(projected, (0, 0, 1), 1., (16, 16), SLOT_GRAY, item_gui=True)
+    return render(projected, (0, 0, 1), density, (16 * density, 16 * density), SLOT_GRAY, item_gui=True)
 
 
-def inventory_slot(sheet, icon, xy, magnification):
-    slot = Image.new("RGB", (18, 18), SLOT_GRAY)
+def inventory_slot(sheet, icon, xy):
+    density = icon.width // 16
+    size = 18 * density
+    slot = Image.new("RGB", (size, size), SLOT_GRAY)
     pen = ImageDraw.Draw(slot)
-    pen.line([(0, 17), (0, 0), (17, 0)], fill="#373737")
-    pen.line([(1, 17), (17, 17), (17, 1)], fill="#ffffff")
-    slot.paste(icon, (1, 1))
-    size = 18 * magnification
-    sheet.paste(slot.resize((size, size), Image.Resampling.NEAREST), xy)
+    pen.rectangle((0, 0, size - 1, density - 1), fill="#373737")
+    pen.rectangle((0, density, density - 1, size - 1), fill="#373737")
+    pen.rectangle((density, size - density, size - 1, size - 1), fill="#ffffff")
+    pen.rectangle((size - density, density, size - 1, size - 1), fill="#ffffff")
+    slot.paste(icon, (density, density))
+    sheet.paste(slot, xy)
 
 
 def make_sheet(font_path=None):
-    sheet = Image.new("RGB", (1440, 1150), PAPER)
+    sheet = Image.new("RGB", (1440, 1310), PAPER)
     draw = ImageDraw.Draw(sheet)
     fonts = tuple(find_font(font_path, bold) for bold in (False, True))
 
@@ -319,28 +328,43 @@ def make_sheet(font_path=None):
         sheet.paste(render(active + ingot, LOADED_VIEW, 15.0, (415, 311), STAGE), (left + 9, 161))
         draw.line((left + 427, 178, left + 427, 443), fill="#455157")
         label(left + 473, 188, "物品栏 · 待机", 20, "#ecf1f0", True)
-        icon = inventory_projection(bank)
-        inventory_slot(sheet, icon, (left + 473, 219), 8)
-        label(left + 473, 385, "8×", 15, PALE)
-        inventory_slot(sheet, icon, (left + 473, 415), 1)
-        label(left + 506, 423, "1×   原尺寸", 15, PALE)
+        inventory_slot(sheet, inventory_projection(bank, 8), (left + 473, 219))
+        label(left + 473, 385, "GUI 8× · 离线渲染", 15, PALE)
+        inventory_slot(sheet, inventory_projection(bank), (left + 473, 415))
+        label(left + 504, 423, "GUI 1× · 16 像素", 15, PALE)
 
-    label(42, 524, "方块模型四视图", 27, bold=True)
-    label(1397, 527, "空腔  /  正面朝北", 17, MUTED, anchor="rm")
+    # The middle slot changes just the rotation, showing what the angle contributes
+    # independently of the larger final scale. All three use the same idle assets.
+    _, selected_gui = inventory_model()
+    angle_only = dict(BLOCK_GUI, rotation=selected_gui["rotation"])
+    label(42, 543, "物品栏视角对照", 27, bold=True)
+    label(43, 583, "同一青蓝待机模型 · GUI 5×", 17, MUTED)
+    for i, (caption, gui) in enumerate((("方块默认", BLOCK_GUI), ("只调角度", angle_only), ("最终摆位", selected_gui))):
+        left = 362 + i * 345
+        inventory_slot(sheet, inventory_projection(VARIANTS[0], 5, pose=gui), (left, 512))
+        pitch, yaw, _ = gui["rotation"]
+        side = "北偏东" if yaw >= 180 else "北偏西"
+        label(left + 105, 527, caption, 20, bold=True)
+        label(left + 105, 558, f"俯视 {pitch}° · {side} {abs(yaw-180)}°", 16, MUTED)
+        label(left + 105, 585, f"模型比例 {gui['scale'][0]:g}", 16, MUTED)
+    draw.line((42, 627, 1397, 627), fill=LINE)
+
+    label(42, 684, "方块模型四视图", 27, bold=True)
+    label(1397, 687, "空腔  /  正面朝北", 17, MUTED, anchor="rm")
     for state, state_text in enumerate(("待机", "工作")):
         for version, states in enumerate(variants):
-            left, top = 42 + version * 686, 559 + state * 178
-            draw.rounded_rectangle((left, top, left + width, top + 166), 7, fill=WHITE, outline=LINE)
+            left, top = 42 + version * 686, 719 + state * 178
+            draw.rounded_rectangle((left, top, left + width, top + 166), 7, fill=VIEW_SURFACE, outline=LINE)
             for i, (eye, caption) in enumerate(zip(VIEWS, ("正面", "西侧", "顶部", "斜视"))):
                 mid = left + 84 + i * 166
-                sheet.paste(render(states[state], eye, 4.5, (139, 109), WHITE), (mid - 70, top + 2))
+                sheet.paste(render(states[state], eye, 4.5, (139, 109), VIEW_SURFACE), (mid - 70, top + 2))
                 label(mid, top + 120, caption, 15, MUTED, anchor="mm")
             draw.line((left + 16, top + 135, left + width - 16, top + 135), fill=LINE)
             label(left + 18, top + 150, LABELS[version] + "  ·  " + state_text, 15, INK, True)
 
     # Use the original compressor model and its atlas UVs, at the same world-unit
     # scale, centre and camera as the two candidate machines alongside it.
-    top = 939
+    top = 1099
     draw.line((42, top - 20, 1397, top - 20), fill="#c9d1ce", width=2)
     label(43, top + 61, "方块尺寸对照", 27, bold=True)
     label(44, top + 99, "三台使用同一视角与比例", 17, MUTED)

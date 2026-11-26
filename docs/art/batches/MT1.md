@@ -22,7 +22,7 @@
 | `tools/art/mt1_*.py` | 生成脚本（贴图、模型、预览） |
 | `docs/art/previews/MT1.png`（可加 `MT1-*.png`） | 预览，见第 6 节 |
 
-**不改：** 方块状态 `blockstates/producer/block_molecular_transformer.json`（`facing` 四向 + `lit`，`lit=true` 用 `_on` 模型）、物品模型 `models/item/producer/block_molecular_transformer.json`、Java 代码、语言文件、旧贴图 `block/producer/block_molecular_transformer.png`（接入时由 Claude 删除）。需要代码配合的地方写进报告的“给 Claude 的接入备注”。
+**不改：** 方块状态 `blockstates/producer/block_molecular_transformer.json`（`facing` 四向 + `lit`，`lit=true` 用 `_on` 模型）、Java 代码、语言文件、旧贴图 `block/producer/block_molecular_transformer.png`（接入时由 Claude 删除）。需要代码配合的地方写进报告的“给 Claude 的接入备注”。
 
 ## 3. 方块模型
 
@@ -54,7 +54,7 @@
 
 ## 4. 物品栏模型
 
-物品直接继承待机方块。A、B 两组预览都用各自的待机模型、部件贴图和原版 GUI 变换，展示格内原尺寸及其 8 倍放大。单独的物品 PNG 和手绘图标生成器已退役。
+物品直接继承待机方块。物品模型的 `display.gui` 可单独调节格内的俯角、朝向和缩放。A、B 使用同一视角，预览包含原尺寸格和按较高 GUI 分辨率重绘的格子。单独的物品 PNG 和手绘图标生成器已退役。
 
 ## 5. 配色
 
@@ -82,7 +82,7 @@
 1. A 版：待机、工作两套，每套正面、侧面、顶面、斜视四个视角；
 2. B 版：同上；
 3. 和奇点迭代的电动压缩机（`block/producer/block_compressor_elc.png` 横条做成的立方体）并排，比例一致；
-4. 两版待机方块在物品栏中的投影：放大 8 倍放在原版物品栏格子上（格子 `#8B8B8B`，左上边框 `#373737`，右下边框 `#FFFFFF`），另加一行 1 倍原尺寸；
+4. 两版待机方块在原版物品栏格子里以 1 倍与较高 GUI 缩放展示（格子 `#8B8B8B`，左上边框 `#373737`，右下边框 `#FFFFFF`）；
 5. 每组下面写 A / B 和状态。
 
 可以用仓库里的 `tools/art/item_model_preview.py` 渲染模型（不认组合模型时，自己把子模型合起来再渲染）。

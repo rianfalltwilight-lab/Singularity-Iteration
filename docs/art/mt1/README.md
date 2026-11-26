@@ -1,6 +1,8 @@
 # 分子重组仪 · 三向电极与中央工作筒
 
-[青蓝与紫粉对照图](../previews/MT1.png)。主图的铁锭是客户端装料示意。物品栏格子使用各自的待机方块模型，按原版 GUI 角度、比例和侧光离线投影到 16 像素格，再作 8 倍最邻近放大。两套游戏资源都直接沿用方块物品模型。
+[青蓝与紫粉对照图](../previews/MT1.png)。两套工作模型的石墨嵌槽从电极上表面绕到外侧，顶冠和底脚使用连贯的瓷白外壳。亮色集中在贴近样品的上下作用面。示例铁锭只用于预演客户端装料。
+
+[原版生存背包实机对照](../previews/MT1-inventory-client.png)中依次为青蓝默认视角、青蓝新视角和紫粉新视角。物品栏直接绘制待机方块。图中分别按 16×16 和 128×128 像素离线绘制物品。下方用同一套青蓝材质并排比较默认视角、仅调角度、再调缩放的效果。
 
 外形参照 Minecraft 1.7.10 的 Advanced Solar Panels 3.5.1。原包实际绘制十个部件，中央工作筒上下各有三组相隔约 120° 的端头。三个方向都能看进工作区。旧模型还定义了七段式弓形支臂，实际绘制时跳过了这些中段。本版采用窄筒、分开的端头和露空机腰，用奇点迭代的白灰金属与两种工作色重新绘制。[作者发布的 3.5.1 安装包](https://forum.industrial-craft.net/core/attachment/4316-advancedsolarpanel-1-7-10-3-5-1-jar/) · [1.7.10 版本与文件校验值](https://mcarchive.net/mods/advancedsolarpanels?gvsn=1.7.10)
 
@@ -34,7 +36,7 @@ B 的几何与 A 共用。要在 Blockbench 直接查看紫粉色，从仓库根
 
 **显示输入物。** 样品中心移到 `[8,8,8]`，显示包围盒可收在 `[5.5,5.5,5.5]..[10.5,10.5,10.5]` 内。坐标单位为 1/16 格，随 `facing` 绕方块中心旋转。取输入槽的一件物品，空槽显示空腔。断电时按槽内实物显示。展示铁锭的主图使用预览脚本里的独立模型，随配方显示输入物由客户端接入。[输入槽](../../../src/main/java/com/miophas/singularity_iteration/common/blockentity/producer/mio_icif_molecular_transformer.java#L36) · [已有的物品绘制参考](../../../src/main/java/com/miophas/singularity_iteration/common/client/suit/QuantumModStationRenderer.java#L44)
 
-**工作状态与物品栏。** 方块服务端已按 `isWorking()` 切换 `lit`。物品模型现有的 `parent` 直接指向待机方块。库存、热键栏和创造模式物品列表都沿用这个模型。复核图中 16 像素格的投影参数来自原版 1.21.1 的 `minecraft:block/block`，即旋转 `[30,225,0]`、缩放 `[0.625,0.625,0.625]`、侧光。游戏能在不同 GUI 缩放下重绘几何。[工作状态](../../../src/main/java/com/miophas/singularity_iteration/common/block/producer/mio_icif_block_molecular_transformer.java#L114) · [物品模型](../../../src/main/resources/assets/mio_icif/models/item/producer/block_molecular_transformer.json)
+**工作状态与物品栏。** 方块服务端已按 `isWorking()` 切换 `lit`。物品继续继承待机方块，只有 `display.gui` 指定新摆位。原版俯角 30° 改为 12°，新旋转为 `[12,162,0]`，缩放由 0.625 改为 0.8。两版配色共享这一摆位，手持和掉落物继承原有视角。[工作状态](../../../src/main/java/com/miophas/singularity_iteration/common/block/producer/mio_icif_block_molecular_transformer.java#L114) · [物品模型](../../../src/main/resources/assets/mio_icif/models/item/producer/block_molecular_transformer.json)
 
 **碰撞与遮挡。** 模型各部件按下表布置。设置碰撞时可由这些位置合并出简化外形，机腰两侧和端头之间的开口需要保留。几何精确坐标、端头旋转原点均可从方块 JSON 读取。
 
@@ -47,4 +49,4 @@ B 的几何与 A 共用。要在 Blockbench 直接查看紫粉色，从仓库根
 
 ## 验证与待选
 
-批次检查器现校验物品父模型，以及两版镜像的方块贴图。仓库检查与 Gradle 离线构建通过。已验证 Blockbench 的内嵌贴图、UV、旋转与发给游戏的模型相符。A 青蓝和 B 紫粉均保留供选。
+批次检查器现校验物品父模型，以及两版镜像的方块贴图。仓库检查与 Gradle 离线构建通过。已验证 Blockbench 的内嵌贴图、UV、旋转与发给游戏的模型相符。已在 Minecraft 1.21.1 / NeoForge 21.1.248、GUI 缩放 3 的生存背包核对三组摆位与配色。实机对照图裁自相同槽位并作相同倍数放大。

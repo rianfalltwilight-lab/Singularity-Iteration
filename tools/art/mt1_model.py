@@ -12,17 +12,17 @@ PARTS = Path("block/producer/molecular_transformer")
 TEXTURE_REF = "mio_icif:" + PARTS.as_posix() + "/"
 SIDES = ("north", "east", "south", "west")
 ALL = (*SIDES, "up", "down")
-DARK, IRON, STEEL, MID = "#2A2A2C", "#464648", "#606063", "#8E8E92"
-SHADOW, EDGE, SEAM = "#838383", "#AEAEAE", "#D0D0D0"
-WHITE, PEARL, LIT, GLINT = "#DFDFDF", "#ECEAEB", "#F1F1F1", "#FBFBFB"
+PORCELAIN, SEAM = "#F1F1F1", "#DFDFDF"
+STEEL, GRAPHITE = "#8E8E92", "#464648"
+# Outer electrode, status, field lip, field surface, inner contact, hot spot.
 PALETTES = {
     "a": {
-        "off": ("#26353D", "#304B58", "#386474", "#437B86", "#508F94", "#73AAAA"),
-        "on": ("#145267", "#137F98", "#3DBBE3", "#02D1F3", "#2ADED3", "#B4FFF3"),
+        "off": ("#49575B", "#43575B", "#3D5A60", "#426168", "#47676C", "#4D7072"),
+        "on": ("#4F959F", "#41818A", "#2ADED3", "#02D1F3", "#3DBBE3", "#B4FFF3"),
     },
     "b": {
-        "off": ("#342D3C", "#4C3957", "#62476C", "#765483", "#875D8D", "#AC83A4"),
-        "on": ("#563165", "#86489B", "#B46BD8", "#D673EF", "#ED95D8", "#FFC7F0"),
+        "off": ("#544D59", "#514956", "#594C62", "#64526B", "#6A5671", "#715F77"),
+        "on": ("#8F71A0", "#80658B", "#D673EF", "#E891E8", "#C884D5", "#FFC7F0"),
     },
 }
 
@@ -35,89 +35,26 @@ def canvas(color):
 def neutral_parts():
     textures = {}
 
-    # Packed horizontal strips for the central castings and terminal housings.
-    img, d = canvas(WHITE)
-    for row, tint in enumerate((LIT, WHITE, EDGE, PEARL, SEAM, GLINT, WHITE, EDGE,
-                                IRON, STEEL, MID, "#9F9E9E", PEARL, WHITE, EDGE, SHADOW)):
-        d.line((0, row, 15, row), fill=tint)
-    for x in (1, 14):
-        d.point((x, 1), fill="#9F9E9E")
-    d.line((3, 8, 12, 8), fill=MID)
-    d.line((6, 8, 10, 8), fill=IRON)
-    d.line((3, 9, 12, 9), fill=EDGE)
-    for x in (3, 12):
-        d.point((x, 3), fill=SEAM)
-    d.line((6, 6, 9, 6), fill=PEARL)
-    d.point((1, 6), fill="#9F9E9E")
-    d.point((12, 6), fill="#9F9E9E")
-    textures["shell"] = img
-
-    # White flange and a graphite-lined well under the sample sleeve.
-    img, d = canvas(PEARL)
-    d.rectangle((0, 0, 15, 15), outline=SEAM)
-    d.line((1, 0, 14, 0), fill=LIT)
-    d.line((0, 1, 0, 14), fill=WHITE)
-    d.rectangle((2, 2, 13, 13), fill=EDGE, outline=WHITE)
-    d.rectangle((3, 2, 12, 13), fill=IRON)
-    d.rectangle((2, 4, 13, 11), fill=IRON)
-    d.rectangle((3, 4, 12, 11), fill=STEEL)
-    d.rectangle((4, 4, 11, 11), fill=MID)
-    for x, z in ((1, 1), (14, 1), (1, 14), (14, 14)):
-        d.point((x, z), fill=SHADOW)
+    # All unbroken faces of the castings use the same fired ceramic. Face
+    # lighting supplies the edge contrast at each change of direction.
+    textures["shell"] = Image.new("RGBA", (16, 16), PORCELAIN)
+    img, d = canvas(PORCELAIN)
+    d.rectangle((5, 5, 10, 10), fill=STEEL)
     textures["deck"] = img
 
-    # The EV transformer family has a dark central terminal in a square
-    # insulating seat, flanked by two rows of contacts on the outer casting.
-    img, d = canvas(PEARL)
-    d.rectangle((1, 1, 14, 14), outline=WHITE)
-    d.line((2, 1, 13, 1), fill=GLINT)
-    d.line((1, 2, 1, 13), fill=LIT)
-    d.line((3, 4, 3, 11), fill=SEAM)
-    d.line((12, 4, 12, 11), fill=SEAM)
-    for x in (3, 12):
-        for y in (5, 9):
-            d.line((x, y, x, y + 1), fill=EDGE)
-    d.rectangle((5, 5, 10, 10), fill=WHITE)
-    d.rectangle((6, 6, 9, 9), fill=EDGE)
+    # The removable top contact sits inside a quiet square seat.
+    img, d = canvas(PORCELAIN)
+    d.rectangle((6, 6, 9, 9), fill=SEAM)
     d.rectangle((7, 7, 8, 8), fill=STEEL)
-    d.point((7, 7), fill=MID)
-    for x, y in ((2, 2), (13, 2), (2, 13), (13, 13)):
-        d.point((x, y), fill=EDGE)
     textures["service_hatch"] = img
 
-    # Hardware atlas. The top two rows are winding laminations, the tall panel
-    # below them is the exposed return spine, the bottom rows are the dark lip.
-    img, d = canvas(IRON)
-    d.line((0, 0, 15, 0), fill=MID)
-    d.line((0, 1, 15, 1), fill=STEEL)
-    d.rectangle((0, 2, 15, 3), fill="#9F9E9E")
-    for x in (1, 4, 7, 10, 13):
-        d.line((x, 0, x, 1), fill=IRON)
-        d.point((x, 2), fill=STEEL)
-    for y in range(5, 12, 2):
-        d.line((0, y, 15, y), fill=STEEL)
-    d.line((0, 12, 15, 12), fill=IRON)
-    d.line((0, 13, 15, 13), fill=DARK)
-    d.line((0, 14, 15, 14), fill=STEEL)
-    d.line((0, 15, 15, 15), fill=SHADOW)
+    # Steel on the sleeve seal and tip fittings; a graphite sole is visible
+    # below the ceramic base. Keep the undersides of the radial arms plain.
+    img, d = canvas(STEEL)
+    d.line((0, 13, 15, 13), fill=GRAPHITE)
     textures["hardware"] = img
-
     textures["return_housing"] = terminals()
-
-    # Dark, thick, segmented reflector plates with exposed clamp jaws. UV
-    # islands occupy the first 8 columns (surface) and strips at rows 9..12.
-    img, d = canvas(IRON)
-    d.rectangle((0, 0, 7, 6), fill=STEEL, outline=IRON)
-    for x in (1, 4):
-        d.rectangle((x, 1, x + 2, 4), fill=MID)
-        d.line((x, 1, x + 2, 1), fill="#9F9E9E")
-        d.line((x, 3, x + 2, 3), fill=STEEL)
-    d.line((0, 9, 15, 9), fill=MID)
-    d.line((0, 10, 15, 10), fill=IRON)
-    d.line((0, 11, 15, 11), fill=STEEL)
-    for x in (0, 7):
-        d.point((x, 10), fill=SHADOW)
-    textures["reflector"] = img
+    textures["reflector"] = Image.new("RGBA", (16, 16), STEEL)
 
     # Each 6x8 pane has a pale edge seal, and one short glint away from the
     # specimen. This transmits the real background through all four sides.
@@ -137,19 +74,21 @@ def neutral_parts():
 def terminals(signal=None):
     """Paint the three orientations of a clamped, insulated bus contact."""
     if signal is None:
-        img, d = canvas(IRON)
-        crown = ("8777778", "5066605", "7000007")
-        foot = ("8778", "5065", "5665")
-        crown_side = ("8777778", "7006007", "5066605")
-        foot_side = ("8778", "5665", "7007", "5665")
-        colors = (IRON, IRON, IRON, IRON, IRON, STEEL, DARK, SEAM, LIT)
+        img, _ = canvas(PORCELAIN)
+        # The outermost row of the top tile meets the first row on its flank.
+        # Identical graphite runs on both sides of the fold form one socket.
+        crown = ("0000000", "0011100", "0011100")
+        foot = ("0000", "0110", "0110")
+        crown_side = ("0011100", "0011100", "0000000")
+        foot_side = ("0110", "0110", "0000", "0000")
+        colors = (PORCELAIN, GRAPHITE)
     else:
-        img, d = canvas((0, 0, 0, 0))
-        crown = (".......", "..343..", "...5...")
-        foot = ("....", ".34.", ".25.")
-        crown_side = ("...4...", "...3...", "...2...")
-        foot_side = (".43.", ".42.", ".32.", "....")
-        colors = signal
+        img, _ = canvas((0, 0, 0, 0))
+        crown = (".......", ".......", "...0...")
+        foot = ("....", "....", ".0..")
+        crown_side = ("...0...", ".......", ".......")
+        foot_side = (".0..", "....", "....", "....")
+        colors = (signal,)
 
     def tile(rows):
         result = Image.new("RGBA", (len(rows[0]), len(rows)))
@@ -176,17 +115,17 @@ def field_parts(palette):
     for state, colors in palette.items():
         suffix = "_on" if state == "on" else ""
         img, d = canvas((0, 0, 0, 0))
-        # Facing sides and front lips share the same central field contact.
-        for x, z, s in ((1, 0, 2), (2, 0, 4), (3, 0, 2),
-                        (1, 1, 4), (3, 1, 4), (1, 2, 2), (3, 2, 2)):
-            d.point((x, z), fill=colors[s])
-            d.point((8 + x, 4 - z), fill=colors[s])
-        for x, s in ((1, 2), (2, 4), (3, 2)):
-            d.point((x, 8), fill=colors[s])
-        for x, s in enumerate((2, 4, 5)):
-            d.point((x, 12), fill=colors[s])
+        electrode, status, lip, surface, contact, hot = colors
+        # One uninterrupted emitting edge at each tip. The brightest pixel
+        # lies on the inward-facing surface, close to the suspended sample.
+        for x, z, color in ((1, 0, surface), (2, 0, surface), (3, 0, surface),
+                            (2, 1, contact), (2, 2, hot)):
+            d.point((x, z), fill=color)
+            d.point((8 + x, 4 - z), fill=color)
+        d.line((1, 8, 3, 8), fill=lip)
+        d.point((1, 12), fill=status)
         textures["field_marks" + suffix] = img
-        textures["electrode_signal" + suffix] = terminals(colors)
+        textures["electrode_signal" + suffix] = terminals(electrode)
     return textures
 
 

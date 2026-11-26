@@ -1,3 +1,9 @@
 {
-  "parent": "mio_icif:block/producer/block_molecular_transformer"
+  "parent": "mio_icif:block/producer/block_molecular_transformer",
+  "display": {
+    "gui": {
+      "rotation": [12, 162, 0],
+      "scale": [0.8, 0.8, 0.8]
+    }
+  }
 }
