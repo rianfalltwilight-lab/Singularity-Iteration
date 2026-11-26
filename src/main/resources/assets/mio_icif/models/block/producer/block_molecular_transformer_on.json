@@ -10,9 +10,10 @@
       "render_type": "minecraft:solid",
       "textures": {
         "chamber": "mio_icif:block/producer/molecular_transformer/chamber",
-        "crystal_on": "mio_icif:block/producer/molecular_transformer/crystal_on",
         "deck": "mio_icif:block/producer/molecular_transformer/deck",
         "hardware": "mio_icif:block/producer/molecular_transformer/hardware",
+        "reflector": "mio_icif:block/producer/molecular_transformer/reflector",
+        "return_housing": "mio_icif:block/producer/molecular_transformer/return_housing",
         "service_hatch": "mio_icif:block/producer/molecular_transformer/service_hatch",
         "shell": "mio_icif:block/producer/molecular_transformer/shell"
       },
@@ -154,67 +155,71 @@
         {
           "name": "upper_casting",
           "from": [
-            1,
+            0,
             13,
-            1
+            0
           ],
           "to": [
+            16,
             15,
-            15,
-            15
+            16
           ],
           "faces": {
             "north": {
               "uv": [
                 0,
                 5,
-                14,
+                16,
                 7
               ],
-              "texture": "#shell"
+              "texture": "#shell",
+              "cullface": "north"
             },
             "east": {
               "uv": [
                 0,
                 5,
-                14,
+                16,
                 7
               ],
-              "texture": "#shell"
+              "texture": "#shell",
+              "cullface": "east"
             },
             "south": {
               "uv": [
                 0,
                 5,
-                14,
+                16,
                 7
               ],
-              "texture": "#shell"
+              "texture": "#shell",
+              "cullface": "south"
             },
             "west": {
               "uv": [
                 0,
                 5,
-                14,
+                16,
                 7
               ],
-              "texture": "#shell"
+              "texture": "#shell",
+              "cullface": "west"
             },
             "up": {
               "uv": [
-                1,
-                1,
-                15,
-                15
+                0,
+                0,
+                16,
+                16
               ],
               "texture": "#deck"
             },
             "down": {
               "uv": [
-                1,
-                1,
-                15,
-                15
+                0,
+                0,
+                16,
+                16
               ],
               "texture": "#deck"
             }
@@ -223,21 +228,21 @@
         {
           "name": "service_hatch",
           "from": [
-            3,
+            1,
             15,
-            3
+            1
           ],
           "to": [
-            13,
+            15,
             16,
-            13
+            15
           ],
           "faces": {
             "north": {
               "uv": [
                 0,
                 3,
-                10,
+                14,
                 4
               ],
               "texture": "#shell"
@@ -246,7 +251,7 @@
               "uv": [
                 0,
                 3,
-                10,
+                14,
                 4
               ],
               "texture": "#shell"
@@ -255,7 +260,7 @@
               "uv": [
                 0,
                 3,
-                10,
+                14,
                 4
               ],
               "texture": "#shell"
@@ -264,17 +269,17 @@
               "uv": [
                 0,
                 3,
-                10,
+                14,
                 4
               ],
               "texture": "#shell"
             },
             "up": {
               "uv": [
-                3,
-                3,
-                13,
-                13
+                1,
+                1,
+                15,
+                15
               ],
               "texture": "#service_hatch",
               "cullface": "up"
@@ -282,155 +287,97 @@
           }
         },
         {
-          "name": "left_lower_return",
+          "name": "west_return_housing",
           "from": [
             0,
             3,
-            5
+            8
           ],
           "to": [
-            2,
-            5,
-            13
-          ],
-          "faces": {
-            "north": {
-              "uv": [
-                0,
-                0,
-                2,
-                2
-              ],
-              "texture": "#hardware"
-            },
-            "south": {
-              "uv": [
-                0,
-                0,
-                2,
-                2
-              ],
-              "texture": "#hardware"
-            },
-            "west": {
-              "uv": [
-                0,
-                12,
-                8,
-                14
-              ],
-              "texture": "#shell",
-              "cullface": "west"
-            },
-            "east": {
-              "uv": [
-                0,
-                12,
-                8,
-                14
-              ],
-              "texture": "#shell"
-            },
-            "up": {
-              "uv": [
-                0,
-                3,
-                2,
-                11
-              ],
-              "texture": "#hardware"
-            }
-          }
-        },
-        {
-          "name": "left_upper_return",
-          "from": [
-            0,
-            11,
-            5
-          ],
-          "to": [
-            2,
+            3,
             13,
-            13
+            16
           ],
           "faces": {
             "north": {
               "uv": [
                 0,
-                0,
                 2,
-                2
+                3,
+                12
               ],
               "texture": "#hardware"
             },
             "south": {
               "uv": [
-                0,
-                0,
-                2,
-                2
-              ],
-              "texture": "#hardware"
-            },
-            "west": {
-              "uv": [
-                0,
-                12,
-                8,
-                14
-              ],
-              "texture": "#shell",
-              "cullface": "west"
-            },
-            "east": {
-              "uv": [
-                0,
-                12,
-                8,
-                14
-              ],
-              "texture": "#shell"
-            },
-            "down": {
-              "uv": [
-                0,
+                1,
                 3,
-                2,
-                11
-              ],
-              "texture": "#hardware"
-            },
-            "up": {
-              "uv": [
-                0,
-                5,
-                2,
+                4,
                 13
               ],
-              "texture": "#shell"
+              "texture": "#service_hatch",
+              "cullface": "south"
+            },
+            "west": {
+              "uv": [
+                0,
+                0,
+                8,
+                10
+              ],
+              "texture": "#return_housing",
+              "cullface": "west"
+            },
+            "east": {
+              "uv": [
+                0,
+                0,
+                8,
+                10
+              ],
+              "texture": "#chamber"
             }
           }
         },
         {
-          "name": "left_return_spine",
+          "name": "west_front_post",
           "from": [
             0,
-            5,
-            10
+            4,
+            0
           ],
           "to": [
             2,
-            11,
-            13
+            12,
+            1
           ],
           "faces": {
             "north": {
               "uv": [
+                1,
+                2,
+                3,
+                10
+              ],
+              "texture": "#service_hatch",
+              "cullface": "north"
+            },
+            "west": {
+              "uv": [
+                1,
+                2,
+                2,
+                10
+              ],
+              "texture": "#service_hatch",
+              "cullface": "west"
+            },
+            "south": {
+              "uv": [
                 0,
                 4,
                 2,
-                10
+                12
               ],
               "texture": "#hardware"
             },
@@ -438,193 +385,203 @@
               "uv": [
                 0,
                 4,
-                3,
-                10
+                1,
+                12
               ],
               "texture": "#hardware"
-            },
-            "south": {
-              "uv": [
-                0,
-                4,
-                2,
-                10
-              ],
-              "texture": "#hardware"
-            },
-            "west": {
-              "uv": [
-                0,
-                4,
-                3,
-                10
-              ],
-              "texture": "#hardware",
-              "cullface": "west"
             }
           }
         },
         {
-          "name": "right_lower_return",
+          "name": "west_lower_shoulder",
           "from": [
-            14,
+            0,
             3,
-            5
+            0
           ],
           "to": [
-            16,
-            5,
-            13
+            3,
+            4,
+            8
           ],
           "faces": {
             "north": {
               "uv": [
                 0,
-                0,
-                2,
-                2
+                3,
+                3,
+                4
               ],
-              "texture": "#hardware"
+              "texture": "#shell",
+              "cullface": "north"
             },
-            "south": {
+            "east": {
               "uv": [
                 0,
-                0,
-                2,
-                2
-              ],
-              "texture": "#hardware"
-            },
-            "west": {
-              "uv": [
-                0,
-                12,
+                3,
                 8,
-                14
+                4
               ],
               "texture": "#shell"
             },
-            "east": {
-              "uv": [
-                0,
-                12,
-                8,
-                14
-              ],
-              "texture": "#shell",
-              "cullface": "east"
-            },
-            "up": {
+            "west": {
               "uv": [
                 0,
                 3,
-                2,
-                11
+                8,
+                4
               ],
-              "texture": "#hardware"
+              "texture": "#shell",
+              "cullface": "west"
+            },
+            "up": {
+              "uv": [
+                2,
+                2,
+                5,
+                10
+              ],
+              "texture": "#service_hatch"
             }
           }
         },
         {
-          "name": "right_upper_return",
+          "name": "west_upper_shoulder",
           "from": [
-            14,
-            11,
-            5
+            0,
+            12,
+            0
+          ],
+          "to": [
+            3,
+            13,
+            8
+          ],
+          "faces": {
+            "north": {
+              "uv": [
+                0,
+                3,
+                3,
+                4
+              ],
+              "texture": "#shell",
+              "cullface": "north"
+            },
+            "east": {
+              "uv": [
+                0,
+                3,
+                8,
+                4
+              ],
+              "texture": "#shell"
+            },
+            "west": {
+              "uv": [
+                0,
+                3,
+                8,
+                4
+              ],
+              "texture": "#shell",
+              "cullface": "west"
+            },
+            "down": {
+              "uv": [
+                2,
+                2,
+                5,
+                10
+              ],
+              "texture": "#service_hatch"
+            }
+          }
+        },
+        {
+          "name": "east_return_housing",
+          "from": [
+            13,
+            3,
+            8
           ],
           "to": [
             16,
             13,
-            13
+            16
           ],
           "faces": {
             "north": {
               "uv": [
                 0,
-                0,
                 2,
-                2
+                3,
+                12
               ],
               "texture": "#hardware"
             },
             "south": {
               "uv": [
-                0,
-                0,
-                2,
-                2
-              ],
-              "texture": "#hardware"
-            },
-            "west": {
-              "uv": [
-                0,
-                12,
-                8,
-                14
-              ],
-              "texture": "#shell"
-            },
-            "east": {
-              "uv": [
-                0,
-                12,
-                8,
-                14
-              ],
-              "texture": "#shell",
-              "cullface": "east"
-            },
-            "down": {
-              "uv": [
-                0,
+                1,
                 3,
-                2,
-                11
-              ],
-              "texture": "#hardware"
-            },
-            "up": {
-              "uv": [
-                0,
-                5,
-                2,
+                4,
                 13
               ],
-              "texture": "#shell"
+              "texture": "#service_hatch",
+              "cullface": "south"
+            },
+            "east": {
+              "uv": [
+                8,
+                0,
+                16,
+                10
+              ],
+              "texture": "#return_housing",
+              "cullface": "east"
+            },
+            "west": {
+              "uv": [
+                0,
+                0,
+                8,
+                10
+              ],
+              "texture": "#chamber"
             }
           }
         },
         {
-          "name": "right_return_spine",
+          "name": "east_front_post",
           "from": [
             14,
-            5,
-            10
+            4,
+            0
           ],
           "to": [
             16,
-            11,
-            13
+            12,
+            1
           ],
           "faces": {
             "north": {
               "uv": [
-                0,
-                4,
+                1,
                 2,
-                10
-              ],
-              "texture": "#hardware"
-            },
-            "east": {
-              "uv": [
-                0,
-                4,
                 3,
                 10
               ],
-              "texture": "#hardware",
+              "texture": "#service_hatch",
+              "cullface": "north"
+            },
+            "east": {
+              "uv": [
+                1,
+                2,
+                2,
+                10
+              ],
+              "texture": "#service_hatch",
               "cullface": "east"
             },
             "south": {
@@ -632,498 +589,124 @@
                 0,
                 4,
                 2,
+                12
+              ],
+              "texture": "#hardware"
+            },
+            "west": {
+              "uv": [
+                0,
+                4,
+                1,
+                12
+              ],
+              "texture": "#hardware"
+            }
+          }
+        },
+        {
+          "name": "east_lower_shoulder",
+          "from": [
+            13,
+            3,
+            0
+          ],
+          "to": [
+            16,
+            4,
+            8
+          ],
+          "faces": {
+            "north": {
+              "uv": [
+                0,
+                3,
+                3,
+                4
+              ],
+              "texture": "#shell",
+              "cullface": "north"
+            },
+            "east": {
+              "uv": [
+                0,
+                3,
+                8,
+                4
+              ],
+              "texture": "#shell",
+              "cullface": "east"
+            },
+            "west": {
+              "uv": [
+                0,
+                3,
+                8,
+                4
+              ],
+              "texture": "#shell"
+            },
+            "up": {
+              "uv": [
+                2,
+                2,
+                5,
                 10
               ],
-              "texture": "#hardware"
+              "texture": "#service_hatch"
+            }
+          }
+        },
+        {
+          "name": "east_upper_shoulder",
+          "from": [
+            13,
+            12,
+            0
+          ],
+          "to": [
+            16,
+            13,
+            8
+          ],
+          "faces": {
+            "north": {
+              "uv": [
+                0,
+                3,
+                3,
+                4
+              ],
+              "texture": "#shell",
+              "cullface": "north"
+            },
+            "east": {
+              "uv": [
+                0,
+                3,
+                8,
+                4
+              ],
+              "texture": "#shell",
+              "cullface": "east"
             },
             "west": {
               "uv": [
                 0,
-                4,
                 3,
+                8,
+                4
+              ],
+              "texture": "#shell"
+            },
+            "down": {
+              "uv": [
+                2,
+                2,
+                5,
                 10
               ],
-              "texture": "#hardware"
-            }
-          }
-        },
-        {
-          "name": "left_lower_pole_seat",
-          "from": [
-            4,
-            3,
-            5
-          ],
-          "to": [
-            7,
-            4,
-            11
-          ],
-          "faces": {
-            "north": {
-              "uv": [
-                0,
-                1,
-                3,
-                2
-              ],
-              "texture": "#hardware"
-            },
-            "east": {
-              "uv": [
-                0,
-                1,
-                6,
-                2
-              ],
-              "texture": "#hardware"
-            },
-            "south": {
-              "uv": [
-                0,
-                1,
-                3,
-                2
-              ],
-              "texture": "#hardware"
-            },
-            "west": {
-              "uv": [
-                0,
-                1,
-                6,
-                2
-              ],
-              "texture": "#hardware"
-            },
-            "up": {
-              "uv": [
-                0,
-                3,
-                3,
-                9
-              ],
-              "texture": "#hardware"
-            }
-          }
-        },
-        {
-          "name": "left_lower_pole_tip",
-          "from": [
-            4,
-            4,
-            6
-          ],
-          "to": [
-            6,
-            5,
-            10
-          ],
-          "faces": {
-            "north": {
-              "uv": [
-                2,
-                2,
-                4,
-                3
-              ],
-              "texture": "#hardware"
-            },
-            "east": {
-              "uv": [
-                2,
-                2,
-                6,
-                3
-              ],
-              "texture": "#hardware"
-            },
-            "south": {
-              "uv": [
-                2,
-                2,
-                4,
-                3
-              ],
-              "texture": "#hardware"
-            },
-            "west": {
-              "uv": [
-                2,
-                2,
-                6,
-                3
-              ],
-              "texture": "#hardware"
-            },
-            "up": {
-              "uv": [
-                3,
-                8,
-                5,
-                12
-              ],
-              "texture": "#shell"
-            }
-          }
-        },
-        {
-          "name": "left_upper_pole_seat",
-          "from": [
-            4,
-            12,
-            5
-          ],
-          "to": [
-            7,
-            13,
-            11
-          ],
-          "faces": {
-            "north": {
-              "uv": [
-                0,
-                1,
-                3,
-                2
-              ],
-              "texture": "#hardware"
-            },
-            "east": {
-              "uv": [
-                0,
-                1,
-                6,
-                2
-              ],
-              "texture": "#hardware"
-            },
-            "south": {
-              "uv": [
-                0,
-                1,
-                3,
-                2
-              ],
-              "texture": "#hardware"
-            },
-            "west": {
-              "uv": [
-                0,
-                1,
-                6,
-                2
-              ],
-              "texture": "#hardware"
-            },
-            "down": {
-              "uv": [
-                0,
-                3,
-                3,
-                9
-              ],
-              "texture": "#hardware"
-            }
-          }
-        },
-        {
-          "name": "left_upper_pole_tip",
-          "from": [
-            4,
-            11,
-            6
-          ],
-          "to": [
-            6,
-            12,
-            10
-          ],
-          "faces": {
-            "north": {
-              "uv": [
-                2,
-                2,
-                4,
-                3
-              ],
-              "texture": "#hardware"
-            },
-            "east": {
-              "uv": [
-                2,
-                2,
-                6,
-                3
-              ],
-              "texture": "#hardware"
-            },
-            "south": {
-              "uv": [
-                2,
-                2,
-                4,
-                3
-              ],
-              "texture": "#hardware"
-            },
-            "west": {
-              "uv": [
-                2,
-                2,
-                6,
-                3
-              ],
-              "texture": "#hardware"
-            },
-            "down": {
-              "uv": [
-                3,
-                8,
-                5,
-                12
-              ],
-              "texture": "#shell"
-            }
-          }
-        },
-        {
-          "name": "right_lower_pole_seat",
-          "from": [
-            9,
-            3,
-            5
-          ],
-          "to": [
-            12,
-            4,
-            11
-          ],
-          "faces": {
-            "north": {
-              "uv": [
-                0,
-                1,
-                3,
-                2
-              ],
-              "texture": "#hardware"
-            },
-            "east": {
-              "uv": [
-                0,
-                1,
-                6,
-                2
-              ],
-              "texture": "#hardware"
-            },
-            "south": {
-              "uv": [
-                0,
-                1,
-                3,
-                2
-              ],
-              "texture": "#hardware"
-            },
-            "west": {
-              "uv": [
-                0,
-                1,
-                6,
-                2
-              ],
-              "texture": "#hardware"
-            },
-            "up": {
-              "uv": [
-                0,
-                3,
-                3,
-                9
-              ],
-              "texture": "#hardware"
-            }
-          }
-        },
-        {
-          "name": "right_lower_pole_tip",
-          "from": [
-            10,
-            4,
-            6
-          ],
-          "to": [
-            12,
-            5,
-            10
-          ],
-          "faces": {
-            "north": {
-              "uv": [
-                2,
-                2,
-                4,
-                3
-              ],
-              "texture": "#hardware"
-            },
-            "east": {
-              "uv": [
-                2,
-                2,
-                6,
-                3
-              ],
-              "texture": "#hardware"
-            },
-            "south": {
-              "uv": [
-                2,
-                2,
-                4,
-                3
-              ],
-              "texture": "#hardware"
-            },
-            "west": {
-              "uv": [
-                2,
-                2,
-                6,
-                3
-              ],
-              "texture": "#hardware"
-            },
-            "up": {
-              "uv": [
-                3,
-                8,
-                5,
-                12
-              ],
-              "texture": "#shell"
-            }
-          }
-        },
-        {
-          "name": "right_upper_pole_seat",
-          "from": [
-            9,
-            12,
-            5
-          ],
-          "to": [
-            12,
-            13,
-            11
-          ],
-          "faces": {
-            "north": {
-              "uv": [
-                0,
-                1,
-                3,
-                2
-              ],
-              "texture": "#hardware"
-            },
-            "east": {
-              "uv": [
-                0,
-                1,
-                6,
-                2
-              ],
-              "texture": "#hardware"
-            },
-            "south": {
-              "uv": [
-                0,
-                1,
-                3,
-                2
-              ],
-              "texture": "#hardware"
-            },
-            "west": {
-              "uv": [
-                0,
-                1,
-                6,
-                2
-              ],
-              "texture": "#hardware"
-            },
-            "down": {
-              "uv": [
-                0,
-                3,
-                3,
-                9
-              ],
-              "texture": "#hardware"
-            }
-          }
-        },
-        {
-          "name": "right_upper_pole_tip",
-          "from": [
-            10,
-            11,
-            6
-          ],
-          "to": [
-            12,
-            12,
-            10
-          ],
-          "faces": {
-            "north": {
-              "uv": [
-                2,
-                2,
-                4,
-                3
-              ],
-              "texture": "#hardware"
-            },
-            "east": {
-              "uv": [
-                2,
-                2,
-                6,
-                3
-              ],
-              "texture": "#hardware"
-            },
-            "south": {
-              "uv": [
-                2,
-                2,
-                4,
-                3
-              ],
-              "texture": "#hardware"
-            },
-            "west": {
-              "uv": [
-                2,
-                2,
-                6,
-                3
-              ],
-              "texture": "#hardware"
-            },
-            "down": {
-              "uv": [
-                3,
-                8,
-                5,
-                12
-              ],
-              "texture": "#shell"
+              "texture": "#service_hatch"
             }
           }
         },
@@ -1132,12 +715,12 @@
           "from": [
             3,
             3,
-            12
+            9
           ],
           "to": [
             13,
             13,
-            14
+            16
           ],
           "faces": {
             "north": {
@@ -1156,30 +739,13 @@
                 13,
                 13
               ],
-              "texture": "#service_hatch"
-            },
-            "east": {
-              "uv": [
-                1,
-                3,
-                3,
-                13
-              ],
-              "texture": "#hardware"
-            },
-            "west": {
-              "uv": [
-                1,
-                3,
-                3,
-                13
-              ],
-              "texture": "#hardware"
+              "texture": "#service_hatch",
+              "cullface": "south"
             }
           }
         },
         {
-          "name": "status_console",
+          "name": "lower_window_rail",
           "from": [
             3,
             3,
@@ -1188,155 +754,299 @@
           "to": [
             13,
             4,
-            1.5
+            2
           ],
           "faces": {
             "north": {
               "uv": [
-                0,
-                13,
-                10,
-                14
+                2,
+                8,
+                12,
+                9
               ],
-              "texture": "#hardware"
-            },
-            "east": {
-              "uv": [
-                0,
-                13,
-                1.0,
-                14
-              ],
-              "texture": "#hardware"
+              "texture": "#shell"
             },
             "south": {
               "uv": [
                 0,
-                13,
+                12,
                 10,
-                14
-              ],
-              "texture": "#hardware"
-            },
-            "west": {
-              "uv": [
-                0,
-                13,
-                1.0,
-                14
+                13
               ],
               "texture": "#hardware"
             },
             "up": {
               "uv": [
-                2,
-                11,
+                0,
                 12,
-                12.0
+                10,
+                13.5
               ],
               "texture": "#hardware"
             }
           }
         },
         {
-          "name": "core_glow",
+          "name": "upper_window_rail",
           "from": [
-            6,
-            6,
-            5
+            3,
+            12,
+            0.5
           ],
           "to": [
-            10,
-            10,
+            13,
+            13,
+            2
+          ],
+          "faces": {
+            "north": {
+              "uv": [
+                2,
+                9,
+                12,
+                10
+              ],
+              "texture": "#shell"
+            },
+            "south": {
+              "uv": [
+                0,
+                12,
+                10,
+                13
+              ],
+              "texture": "#hardware"
+            },
+            "down": {
+              "uv": [
+                0,
+                12,
+                10,
+                13.5
+              ],
+              "texture": "#hardware"
+            }
+          }
+        },
+        {
+          "name": "lower_transformer_seat",
+          "from": [
+            3,
+            3,
+            3
+          ],
+          "to": [
+            13,
+            4,
             9
           ],
-          "rotation": {
-            "origin": [
-              8,
-              8,
-              7
-            ],
-            "axis": "z",
-            "angle": 45
-          },
           "faces": {
             "north": {
               "uv": [
                 0,
                 0,
-                4,
-                4
+                10,
+                1
               ],
-              "texture": "#crystal_on",
-              "neoforge_data": {
-                "block_light": 15,
-                "sky_light": 15
-              }
+              "texture": "#hardware"
             },
             "east": {
               "uv": [
-                4,
                 0,
-                8,
-                4
-              ],
-              "texture": "#crystal_on",
-              "neoforge_data": {
-                "block_light": 15,
-                "sky_light": 15
-              }
-            },
-            "south": {
-              "uv": [
-                8,
                 0,
-                12,
-                4
+                6,
+                1
               ],
-              "texture": "#crystal_on",
-              "neoforge_data": {
-                "block_light": 15,
-                "sky_light": 15
-              }
+              "texture": "#hardware"
             },
             "west": {
               "uv": [
-                12,
                 0,
-                16,
-                4
+                0,
+                6,
+                1
               ],
-              "texture": "#crystal_on",
-              "neoforge_data": {
-                "block_light": 15,
-                "sky_light": 15
-              }
+              "texture": "#hardware"
             },
             "up": {
               "uv": [
                 0,
-                4,
-                4,
-                8
+                3,
+                10,
+                9
               ],
-              "texture": "#crystal_on",
-              "neoforge_data": {
-                "block_light": 15,
-                "sky_light": 15
-              }
+              "texture": "#hardware"
+            }
+          }
+        },
+        {
+          "name": "lower_reflector",
+          "from": [
+            4,
+            4,
+            2
+          ],
+          "to": [
+            12,
+            5,
+            9
+          ],
+          "faces": {
+            "north": {
+              "uv": [
+                0,
+                10,
+                8,
+                11
+              ],
+              "texture": "#reflector"
+            },
+            "west": {
+              "uv": [
+                0,
+                10,
+                7,
+                11
+              ],
+              "texture": "#reflector"
+            },
+            "east": {
+              "uv": [
+                0,
+                10,
+                7,
+                11
+              ],
+              "texture": "#reflector"
+            },
+            "up": {
+              "uv": [
+                0,
+                0,
+                8,
+                7
+              ],
+              "texture": "#reflector"
             },
             "down": {
               "uv": [
-                4,
-                4,
+                0,
+                0,
                 8,
-                8
+                7
               ],
-              "texture": "#crystal_on",
-              "neoforge_data": {
-                "block_light": 15,
-                "sky_light": 15
-              }
+              "texture": "#reflector"
+            }
+          }
+        },
+        {
+          "name": "upper_transformer_seat",
+          "from": [
+            3,
+            12,
+            3
+          ],
+          "to": [
+            13,
+            13,
+            9
+          ],
+          "faces": {
+            "north": {
+              "uv": [
+                0,
+                0,
+                10,
+                1
+              ],
+              "texture": "#hardware"
+            },
+            "east": {
+              "uv": [
+                0,
+                0,
+                6,
+                1
+              ],
+              "texture": "#hardware"
+            },
+            "west": {
+              "uv": [
+                0,
+                0,
+                6,
+                1
+              ],
+              "texture": "#hardware"
+            },
+            "down": {
+              "uv": [
+                0,
+                3,
+                10,
+                9
+              ],
+              "texture": "#hardware"
+            }
+          }
+        },
+        {
+          "name": "upper_reflector",
+          "from": [
+            4,
+            11,
+            2
+          ],
+          "to": [
+            12,
+            12,
+            9
+          ],
+          "faces": {
+            "north": {
+              "uv": [
+                0,
+                10,
+                8,
+                11
+              ],
+              "texture": "#reflector"
+            },
+            "west": {
+              "uv": [
+                0,
+                10,
+                7,
+                11
+              ],
+              "texture": "#reflector"
+            },
+            "east": {
+              "uv": [
+                0,
+                10,
+                7,
+                11
+              ],
+              "texture": "#reflector"
+            },
+            "down": {
+              "uv": [
+                0,
+                0,
+                8,
+                7
+              ],
+              "texture": "#reflector"
+            },
+            "up": {
+              "uv": [
+                0,
+                0,
+                8,
+                7
+              ],
+              "texture": "#reflector"
             }
           }
         }
@@ -1350,24 +1060,78 @@
       },
       "elements": [
         {
-          "name": "liner_glow",
+          "name": "core_glow",
           "from": [
-            3,
-            3,
-            11.984375
+            4,
+            4.015625,
+            1.984375
           ],
           "to": [
-            13,
-            13,
-            11.984375
+            12,
+            5.015625,
+            8.984375
           ],
           "faces": {
             "north": {
               "uv": [
                 0,
+                8,
+                8,
+                9.0
+              ],
+              "texture": "#field_marks_on",
+              "neoforge_data": {
+                "block_light": 15,
+                "sky_light": 15
+              }
+            },
+            "up": {
+              "uv": [
                 0,
-                10,
-                10
+                0,
+                8,
+                7.0
+              ],
+              "texture": "#field_marks_on",
+              "neoforge_data": {
+                "block_light": 15,
+                "sky_light": 15
+              }
+            }
+          }
+        },
+        {
+          "name": "upper_reflector_glow",
+          "from": [
+            4,
+            10.984375,
+            1.984375
+          ],
+          "to": [
+            12,
+            11.984375,
+            8.984375
+          ],
+          "faces": {
+            "north": {
+              "uv": [
+                0,
+                8,
+                8,
+                9.0
+              ],
+              "texture": "#field_marks_on",
+              "neoforge_data": {
+                "block_light": 15,
+                "sky_light": 15
+              }
+            },
+            "down": {
+              "uv": [
+                8,
+                0,
+                16,
+                7.0
               ],
               "texture": "#field_marks_on",
               "neoforge_data": {
@@ -1380,12 +1144,12 @@
         {
           "name": "status_glow",
           "from": [
-            6.5,
+            4,
             3,
             0.484375
           ],
           "to": [
-            9.5,
+            7,
             4,
             0.484375
           ],
@@ -1394,7 +1158,7 @@
               "uv": [
                 0,
                 12,
-                3.0,
+                3,
                 13
               ],
               "texture": "#field_marks_on",
@@ -1415,42 +1179,57 @@
       },
       "elements": [
         {
-          "name": "observation_glass",
+          "name": "front_observation_glass",
           "from": [
-            3,
-            3,
-            2
+            2,
+            4,
+            1
           ],
           "to": [
-            13,
-            13,
-            12
+            14,
+            12,
+            1
           ],
           "faces": {
             "north": {
               "uv": [
                 0,
                 0,
-                10,
-                10
+                12,
+                8
               ],
               "texture": "#optical_glass"
-            },
+            }
+          }
+        },
+        {
+          "name": "side_observation_glass",
+          "from": [
+            1,
+            4,
+            1
+          ],
+          "to": [
+            15,
+            12,
+            8
+          ],
+          "faces": {
             "west": {
               "uv": [
                 0,
-                0,
-                10,
-                10
+                8,
+                7,
+                16
               ],
               "texture": "#optical_glass"
             },
             "east": {
               "uv": [
                 0,
-                0,
-                10,
-                10
+                8,
+                7,
+                16
               ],
               "texture": "#optical_glass"
             }

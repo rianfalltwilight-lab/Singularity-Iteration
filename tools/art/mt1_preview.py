@@ -25,6 +25,7 @@ MACHINE = "block_molecular_transformer"
 COMPRESSOR = "block_compressor_elc"
 
 ISO = (-0.57, 0.39, -1.0)
+LOADED_VIEW = (-0.39, 0.23, -1.0)
 VIEWS = ((0, 0, -1), (-1, 0, 0), (0, 1, 0), ISO)
 PAPER, WHITE, LINE = "#f2f3f0", "#fafbf8", "#d9deda"
 INK, MUTED = "#202c30", "#566365"
@@ -84,8 +85,69 @@ def faces(model_name, bank):
     return result
 
 
+def sample_ingot():
+    """Preview-only solid: a clipped casting with a top bevel and a darker foot."""
+    centre = np.array([8, 8, 6])
+    sections = []
+    for y, half_x, half_z, end_cut in (
+        (-.82, 2.27, 1.03, .36), (-.58, 2.62, 1.25, .46),
+        (.40, 2.45, 1.17, .46), (.75, 2.17, .92, .36),
+    ):
+        x, z, k = half_x, half_z, end_cut
+        outline = ((x - k, -z), (x, -z + k), (x, z - k), (x - k, z),
+                   (-x + k, z), (-x, z - k), (-x, -z + k), (-x + k, -z))
+        sections.append(np.array([(px, y, pz) for px, pz in outline]))
+
+    triangles = []
+    def pose(point):
+        # Pitch the item toward the observation window, clear of both jaws.
+        point = rot(point, "z", -12, (0, 0, 0))
+        point = rot(point, "x", -10, (0, 0, 0))
+        return rot(point, "y", -14, (0, 0, 0))
+
+    def swatch(rows, tones):
+        rgba = [(*bytes.fromhex(tone), 255) for tone in tones]
+        return np.array([[rgba[int(t)] for t in row] for row in rows], dtype=np.uint8)
+
+    top = swatch(("12211110", "12332211", "11223321", "01122211"),
+                 ("d6dfe1", "e3e8e7", "edf0ed", "ffffff"))
+    flank = swatch(("12222111", "11111221", "00111111"), ("a6b1bc", "b2bec7", "c4ced3"))
+
+    def surface(vertices, hex_color, pixels=None, axes=None):
+        normal = np.cross(vertices[1] - vertices[0], vertices[2] - vertices[0])
+        normal /= np.linalg.norm(normal)
+        if np.dot(normal, np.mean(vertices, axis=0)) < 0:
+            normal = -normal
+        points = np.array([pose(v) for v in vertices]) + centre
+        uv = np.zeros((len(vertices), 2))
+        if pixels is None:
+            pixels = np.array([[(*bytes.fromhex(hex_color), 255)]], dtype=np.uint8)
+        else:
+            plane = vertices[:, axes]
+            uv = (plane - plane.min(axis=0)) / np.ptp(plane, axis=0)
+            uv[:, 1] = 1 - uv[:, 1]
+        for i in range(1, len(points) - 1):
+            idx = [0, i, i + 1]
+            triangles.append((points[idx], uv[idx], pose(normal), pixels, False, False))
+
+    surface(sections[0], "747d89")
+    surface(sections[-1], None, top, [0, 2])
+    tones = (("858c99", "75808c"), ("b4bec7", "aab4bf"), ("e1e6e8", "d2d9de"))
+    for level, (lower, upper) in enumerate(zip(sections, sections[1:])):
+        # Distinct silver facets make the cut ends, broad side and crown readable
+        # through either tint, without emission or a painted outline.
+        for i in range(8):
+            j = (i + 1) % 8
+            vertices = np.array([lower[i], lower[j], upper[j], upper[i]])
+            if level == 1 and i in (3, 7):
+                surface(vertices, None, flank, [0, 1])
+            else:
+                surface(vertices, tones[level][i % 2])
+    return triangles
+
+
 def render(quads, eye, scale, size, background):
-    """Orthographic textured quads, opaque depth first and glass sorted per pixel."""
+    """Textured quads and triangles, opaque depth first and glass sorted per pixel."""
     sampling = 2
     w, h = (n * sampling for n in size)
     eye = np.array(eye, dtype=float)
@@ -108,7 +170,7 @@ def render(quads, eye, scale, size, background):
         x1, y1 = np.minimum([w, h], np.ceil(points[:, :2].max(axis=0)).astype(int))
         if x1 <= x0 or y1 <= y0:
             continue
-        a, b = points[1] - points[0], points[3] - points[0]
+        a, b = points[1] - points[0], points[-1] - points[0]
         det = a[0] * b[1] - a[1] * b[0]
         if abs(det) < 1e-8:
             continue
@@ -116,8 +178,10 @@ def render(quads, eye, scale, size, background):
         dx, dy = xx + .5 - points[0, 0], yy + .5 - points[0, 1]
         s, t = (dx * b[1] - dy * b[0]) / det, (dy * a[0] - dx * a[1]) / det
         inside = (s >= 0) & (s < 1) & (t >= 0) & (t < 1)
+        if len(points) == 3:
+            inside &= s + t <= 1
         z = points[0, 2] + s * a[2] + t * b[2]
-        texel = uv[0] + s[..., None] * (uv[1] - uv[0]) + t[..., None] * (uv[3] - uv[0])
+        texel = uv[0] + s[..., None] * (uv[1] - uv[0]) + t[..., None] * (uv[-1] - uv[0])
         th, tw = pixels.shape[:2]
         indices = np.clip((texel * [tw, th]).astype(int), 0, [tw - 1, th - 1])
         rgba = pixels[indices[:, :, 1], indices[:, :, 0]]
@@ -199,10 +263,12 @@ def make_sheet(font_path=None):
         draw.text((x, y), string, font=font(size, bold), fill=color, anchor=anchor)
 
     label(42, 50, "分子重组仪", 43, bold=True)
+    label(300, 56, "铁锭装料示意 · 客户端接入效果", 22, MUTED)
     label(1396, 56, "奇点迭代   /   机器美术", 20, MUTED, anchor="rm")
 
     width, hero_y = 669, 98
     variants = []
+    ingot = sample_ingot()
     for version, bank in enumerate(VARIANTS):
         idle, active = (faces(name, bank) for name in (MACHINE, MACHINE + "_on"))
         variants.append((idle, active))
@@ -210,8 +276,8 @@ def make_sheet(font_path=None):
         draw.rounded_rectangle((left, hero_y, left + width, 478), 10, fill=STAGE)
         draw.rectangle((left + 23, 120, left + 27, 149), fill=ACCENTS[version])
         label(left + 39, 134, LABELS[version], 26, "#fbfcf9", True)
-        label(left + width - 24, 135, "工作态", 18, PALE, anchor="rm")
-        sheet.paste(render(active, ISO, 13.8, (415, 311), STAGE), (left + 9, 161))
+        label(left + width - 24, 135, "工作态 · 铁锭装料", 18, PALE, anchor="rm")
+        sheet.paste(render(active + ingot, LOADED_VIEW, 15.0, (415, 311), STAGE), (left + 9, 161))
         draw.line((left + 427, 178, left + 427, 443), fill="#455157")
         label(left + 473, 188, "物品栏图标", 20, "#ecf1f0", True)
         with Image.open(bank / ICON) as source:
@@ -221,8 +287,8 @@ def make_sheet(font_path=None):
         inventory_slot(sheet, icon, (left + 473, 415), 1)
         label(left + 506, 423, "1×   原尺寸", 15, PALE)
 
-    label(42, 524, "待机与工作", 27, bold=True)
-    label(1397, 527, "正面朝北", 17, MUTED, anchor="rm")
+    label(42, 524, "方块模型四视图", 27, bold=True)
+    label(1397, 527, "空腔  /  正面朝北", 17, MUTED, anchor="rm")
     for state, state_text in enumerate(("待机", "工作")):
         for version, states in enumerate(variants):
             left, top = 42 + version * 686, 559 + state * 178
