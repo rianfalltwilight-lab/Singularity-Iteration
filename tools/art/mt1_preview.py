@@ -57,8 +57,8 @@ def texture(path):
 
 
 @lru_cache(maxsize=None)
-def faces(model_name, bank, *, item=False):
-    model = json.loads((MODELS / (model_name + ".json")).read_text(encoding="utf8"))
+def faces(model_name, bank, *, item=False, models=MODELS):
+    model = json.loads((models / (model_name + ".json")).read_text(encoding="utf8"))
     result = []
     children = model.get("children", {})
     order = model.get("item_render_order", children) if item else children
@@ -92,9 +92,9 @@ def faces(model_name, bank, *, item=False):
     return result
 
 
-def sample_ingot():
+def sample_ingot(centre=(8, 8, 8)):
     """Preview-only solid: a clipped casting with a top bevel and a darker foot."""
-    centre = np.array([8, 8, 8])
+    centre = np.asarray(centre)
     sections = []
     for y, half_x, half_z, end_cut in (
         (-.82, 2.27, 1.03, .36), (-.58, 2.62, 1.25, .46),
@@ -154,7 +154,7 @@ def sample_ingot():
     return triangles
 
 
-def render(quads, eye, scale, size, background, *, item_gui=False):
+def render(quads, eye, scale, size, background, *, item_gui=False, centre=(8, 8, 8)):
     """Textured quads and triangles, opaque depth first and glass sorted per pixel."""
     sampling = 1 if item_gui else 2
     w, h = (n * sampling for n in size)
@@ -171,7 +171,7 @@ def render(quads, eye, scale, size, background, *, item_gui=False):
     for corners, uv, normal, pixels, transparent, unlit in quads:
         if np.dot(normal, eye) < 1e-7:
             continue
-        points = (corners - 8) @ camera
+        points = (corners - centre) @ camera
         points[:, :2] *= scale * sampling
         points[:, :2] += [w / 2, h / 2]
         x0, y0 = np.maximum(0, np.floor(points[:, :2].min(axis=0)).astype(int))
@@ -252,20 +252,21 @@ def find_font(override, bold):
     raise SystemExit("Install a Chinese font or pass --font /path/to/font.otf")
 
 
-def inventory_model():
-    item = json.loads(ITEM_MODEL.read_text(encoding="utf8"))
+def inventory_model(assets=ASSETS):
+    item_path = assets / ITEM_MODEL.relative_to(ASSETS)
+    item = json.loads(item_path.read_text(encoding="utf8"))
     namespace, ref = item["parent"].split(":")
-    model_path = ASSETS / "models" / (ref + ".json")
+    model_path = assets / "models" / (ref + ".json")
     model = json.loads(model_path.read_text(encoding="utf8"))
-    if namespace != "mio_icif" or model_path.parent != MODELS or model["parent"] != "minecraft:block/block":
+    if namespace != "mio_icif" or model_path.parent != assets / "models/block/producer" or model["parent"] != "minecraft:block/block":
         raise ValueError(f"Unexpected machine item parent chain: {item['parent']} / {model['parent']}")
     gui = item.get("display", {}).get("gui", model.get("display", {}).get("gui", BLOCK_GUI))
     return model_path.stem, gui
 
 
-def inventory_projection(bank, density=1, *, pose=None):
+def inventory_projection(bank, density=1, *, pose=None, assets=ASSETS):
     """Render the item parent directly at the selected Minecraft GUI pixel density."""
-    model_name, selected_gui = inventory_model()
+    model_name, selected_gui = inventory_model(assets)
     gui = pose or selected_gui
     rx, ry, rz = gui.get("rotation", (0, 0, 0))
     scale = np.array(gui.get("scale", (1, 1, 1)))
@@ -278,7 +279,7 @@ def inventory_projection(bank, density=1, *, pose=None):
         basis.append(unit)
     rotation = np.array(basis)
     projected = []
-    for corners, uv, normal, pixels, translucent, light in faces(model_name, bank, item=True):
+    for corners, uv, normal, pixels, translucent, light in faces(model_name, bank, item=True, models=assets / "models/block/producer"):
         vertices = ((corners - 8) * scale) @ rotation + translation + 8
         norm = (normal / scale) @ rotation
         projected.append((vertices, uv, norm / np.linalg.norm(norm), pixels, translucent, light))

@@ -89,7 +89,8 @@ def outer(face, e):
     return (e["to"][axis] == 16) if side else (e["from"][axis] == 0)
 
 
-def check_model(path, listing):
+def check_model(path, listing, *, texture_dir=TEX_DIR, texture_prefix=TEX_PREFIX,
+                max_elements=MAX_ELEMENTS, max_faces=MAX_FACES):
     name = os.path.basename(path)
     problems, notes = [], []
     if not os.path.exists(path):
@@ -115,17 +116,17 @@ def check_model(path, listing):
             if outer(face, e) and "cullface" not in data:
                 problems.append(f"{label}: outer face {face} has no cullface")
         notes.append(f"    {e.get('name', '?'):24} {e['from']}..{e['to']} faces={len(e.get('faces', {}))}")
-    if len(found) > MAX_ELEMENTS:
-        problems.append(f"{name}: {len(found)} elements, at most {MAX_ELEMENTS}")
-    if faces > MAX_FACES:
-        problems.append(f"{name}: {faces} faces, at most {MAX_FACES}")
+    if len(found) > max_elements:
+        problems.append(f"{name}: {len(found)} elements, at most {max_elements}")
+    if faces > max_faces:
+        problems.append(f"{name}: {faces} faces, at most {max_faces}")
     for key, ref in textures(model).items():
         if ref.startswith("#"):
             continue
-        if not ref.startswith(TEX_PREFIX):
-            problems.append(f"{name}: texture '{key}' = {ref}, expected under {TEX_PREFIX}")
+        if not ref.startswith(texture_prefix):
+            problems.append(f"{name}: texture '{key}' = {ref}, expected under {texture_prefix}")
             continue
-        if not os.path.exists(os.path.join(TEX_DIR, ref[len(TEX_PREFIX):] + ".png")):
+        if not os.path.exists(os.path.join(texture_dir, ref[len(texture_prefix):] + ".png")):
             problems.append(f"{name}: texture '{key}' = {ref} does not exist")
     print(f"{name:42} elements {len(found):>3}  faces {faces:>4}")
     if listing:
